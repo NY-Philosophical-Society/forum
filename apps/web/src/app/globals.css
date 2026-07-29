@@ -1756,3 +1756,274 @@ mark {
   color: var(--accent);
   background: var(--accent-bg);
 }
+
+/* ---------------------------------------------------------------------------
+   Brief 06 — admin & moderation
+   Internal tooling: dense, plain, unambiguous. Destructive affordances use
+   --danger (redder than the terracotta accent on purpose, so destructive
+   never reads as decorative) and reuse the existing .danger-button. No new
+   colors, no fills on cards, no shadows.
+--------------------------------------------------------------------------- */
+
+.admin-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-4);
+}
+
+.admin-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  font-family: var(--font-display), Georgia, serif;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  margin-bottom: -1px;
+}
+
+.admin-tab:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.admin-tab-active,
+.admin-tab-active:hover {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+/* Open-report count on the queue tab — a small terracotta tick, not a fill. */
+.admin-count {
+  border: 1px solid var(--badge-supporter-border);
+  border-radius: var(--radius-full);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  padding: 0 var(--space-2);
+}
+
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.admin-field select,
+.admin-field input {
+  margin: 0;
+  min-width: 9rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.admin-filter-count {
+  margin: 0 0 var(--space-1) auto;
+}
+
+/* One row per report / member / thread. Tighter than a feed card: this is a
+   worklist, not reading matter. */
+.admin-row,
+.admin-report {
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+.admin-row-name {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: var(--text-md);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.admin-row-name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+
+.admin-report-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--ink);
+  font-style: italic;
+}
+
+/* The reported content, inlined. Indented behind a hairline so it reads as a
+   quotation of someone else's words rather than the app's own copy. */
+.admin-target {
+  margin-top: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border);
+}
+
+.admin-target-title {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+
+.admin-target-body {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--ink);
+  /* Raw markdown, deliberately unrendered: an admin should see exactly what
+     was written, not a rendering of it. Clamped so one long post can't push
+     the next report off the screen. */
+  white-space: pre-wrap;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline);
+}
+
+.admin-resolution {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline);
+}
+
+/* Two-step destructive action: the panel states what will happen and takes the
+   reason that goes into the log. Takes the full row so it can't be mistaken
+   for another button. */
+.confirm-panel {
+  flex: 1 1 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+}
+
+.confirm-panel-danger {
+  border-color: var(--danger-border);
+}
+
+.confirm-panel label {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.confirm-panel textarea {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.confirm-title {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+
+.confirm-panel-danger .confirm-title {
+  color: var(--danger);
+}
+
+/* Moderation log — a table, because scanning columns is the whole job. */
+.log-table {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+
+.log-entry {
+  display: grid;
+  grid-template-columns: 11rem 11rem 10rem minmax(10rem, 1fr) minmax(10rem, 1.4fr);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--text-xs);
+  align-items: baseline;
+  min-width: 54rem;
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+}
+
+.log-when,
+.log-reason {
+  color: var(--muted);
+}
+
+.log-action {
+  font-family: var(--font-display), Georgia, serif;
+  color: var(--ink);
+}
+
+.log-action-danger {
+  color: var(--danger);
+}
+
+.log-who,
+.log-target {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* Pin marker. A small terracotta glyph — precious accent, not a fill. */
+.pin-mark {
+  color: var(--accent);
+  margin-right: var(--space-2);
+  font-size: 0.8em;
+}
+
+.pinned-card {
+  border-color: var(--badge-supporter-border);
+}
+
+.pinned-label {
+  color: var(--accent);
+  font-family: var(--font-display), Georgia, serif;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* A moderation warning in the notification list reads as a warning, not as
+   another like. */
+.notif-warning {
+  border-left: 2px solid var(--danger);
+  padding-left: var(--space-3);
+}
+
+@media (max-width: 640px) {
+  .admin-filters {
+    gap: var(--space-2);
+  }
+
+  .admin-field select,
+  .admin-field input {
+    min-width: 7rem;
+  }
+}
