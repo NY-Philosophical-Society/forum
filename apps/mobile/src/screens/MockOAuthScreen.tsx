@@ -1,10 +1,11 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { AuthResponse } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { colors } from "../lib/theme";
+import { useSettings } from "../lib/settings-context";
+import type { ThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "MockOAuth">;
@@ -16,9 +17,11 @@ type Props = NativeStackScreenProps<RootStackParamList, "MockOAuth">;
  * the sign-up/sign-in UX can be tried without real OAuth credentials (see
  * apps/api/src/lib/oauth.ts).
  */
-export function MockOAuthScreen({ route, navigation }: Props) {
+export function MockOAuthScreen({ route }: Props) {
   const { provider } = route.params;
   const { setSession } = useAuth();
+  const { colors } = useSettings();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -35,8 +38,9 @@ export function MockOAuthScreen({ route, navigation }: Props) {
         email,
         displayName,
       });
+      // No further navigation needed — the root navigator swaps to the app
+      // stack automatically once the session is set.
       setSession(res.token, res.user);
-      navigation.navigate("Home");
     } catch (err: any) {
       setError(err.message ?? "Could not sign in");
     } finally {
@@ -71,32 +75,35 @@ export function MockOAuthScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-  h1: { fontSize: 20, fontWeight: "700", color: colors.ink, marginBottom: 8 },
-  notice: {
-    backgroundColor: colors.pendingBg,
-    color: colors.pendingText,
-    padding: 10,
-    borderRadius: 6,
-    marginBottom: 12,
-    fontSize: 13,
-  },
-  label: { fontWeight: "700", color: colors.ink, marginTop: 8, marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    padding: 10,
-    backgroundColor: "white",
-  },
-  error: { color: colors.danger, marginTop: 8 },
-  button: {
-    backgroundColor: colors.ink,
-    paddingVertical: 12,
-    borderRadius: 6,
-    alignItems: "center",
-    marginTop: 16,
-  },
-  buttonText: { color: "white", fontWeight: "700" },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
+    h1: { fontSize: 20, fontWeight: "700", color: colors.ink, marginBottom: 8 },
+    notice: {
+      backgroundColor: colors.pendingBg,
+      color: colors.pendingText,
+      padding: 10,
+      borderRadius: 6,
+      marginBottom: 12,
+      fontSize: 13,
+    },
+    label: { fontWeight: "700", color: colors.ink, marginTop: 8, marginBottom: 4 },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      padding: 10,
+      backgroundColor: colors.surface,
+      color: colors.ink,
+    },
+    error: { color: colors.danger, marginTop: 8 },
+    button: {
+      backgroundColor: colors.solid,
+      paddingVertical: 12,
+      borderRadius: 6,
+      alignItems: "center",
+      marginTop: 16,
+    },
+    buttonText: { color: colors.solidText, fontWeight: "700" },
+  });
+}

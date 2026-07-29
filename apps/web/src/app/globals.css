@@ -1,10 +1,41 @@
 :root {
   --ink: #1d2b33;
   --paper: #fbfaf6;
+  --surface: #ffffff;
   --accent: #7a5c2e;
   --border: #ddd6c5;
   --danger: #a3342a;
   --muted: #6b675e;
+  --solid: #1d2b33;
+  --solid-text: #ffffff;
+  --badge-verified-bg: #e7f1e6;
+  --badge-verified-border: #a9c9a4;
+  --badge-verified-text: #2f5c2a;
+  --badge-pending-bg: #fbf1de;
+  --badge-pending-border: #e0c48f;
+  --badge-pending-text: #8a5f10;
+  --badge-rejected-bg: #f6e6e4;
+  --badge-rejected-border: #e0a89f;
+}
+
+:root[data-theme="dark"] {
+  --ink: #e9e6dd;
+  --paper: #1b1f22;
+  --surface: #262b2f;
+  --accent: #dcb877;
+  --border: #3a3f44;
+  --danger: #e0796b;
+  --muted: #9b988e;
+  --solid: #e9e6dd;
+  --solid-text: #1b1f22;
+  --badge-verified-bg: #1e2f1c;
+  --badge-verified-border: #3d5c38;
+  --badge-verified-text: #8fce86;
+  --badge-pending-bg: #33290f;
+  --badge-pending-border: #6b5323;
+  --badge-pending-text: #e0b96a;
+  --badge-rejected-bg: #33201d;
+  --badge-rejected-border: #6b3b34;
 }
 
 * {
@@ -69,21 +100,21 @@ a {
 }
 
 .badge-verified {
-  background: #e7f1e6;
-  border-color: #a9c9a4;
-  color: #2f5c2a;
+  background: var(--badge-verified-bg);
+  border-color: var(--badge-verified-border);
+  color: var(--badge-verified-text);
 }
 
 .badge-pending {
-  background: #fbf1de;
-  border-color: #e0c48f;
-  color: #8a5f10;
+  background: var(--badge-pending-bg);
+  border-color: var(--badge-pending-border);
+  color: var(--badge-pending-text);
 }
 
 .badge-unverified,
 .badge-rejected {
-  background: #f6e6e4;
-  border-color: #e0a89f;
+  background: var(--badge-rejected-bg);
+  border-color: var(--badge-rejected-border);
   color: var(--danger);
 }
 
@@ -92,7 +123,7 @@ a {
   border-radius: 8px;
   padding: 1rem 1.25rem;
   margin-bottom: 1rem;
-  background: white;
+  background: var(--surface);
 }
 
 .card a.title {
@@ -128,6 +159,8 @@ select {
   padding: 0.5rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 textarea {
@@ -140,9 +173,9 @@ button {
   font-size: 0.95rem;
   padding: 0.55rem 1rem;
   border-radius: 6px;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: white;
+  border: 1px solid var(--solid);
+  background: var(--solid);
+  color: var(--solid-text);
   cursor: pointer;
   width: fit-content;
 }
@@ -150,6 +183,7 @@ button {
 button.secondary {
   background: transparent;
   color: var(--ink);
+  border-color: var(--border);
 }
 
 button:disabled {
@@ -164,7 +198,7 @@ button:disabled {
 
 .notice {
   border: 1px solid var(--border);
-  background: #fbf1de;
+  background: var(--badge-pending-bg);
   padding: 0.75rem 1rem;
   border-radius: 6px;
   font-size: 0.9rem;
@@ -205,7 +239,7 @@ button:disabled {
 
 .tag-chip {
   border: 1px solid var(--border);
-  background: white;
+  background: var(--surface);
   color: var(--ink);
   border-radius: 999px;
   padding: 0.25rem 0.7rem;
@@ -215,9 +249,9 @@ button:disabled {
 }
 
 .tag-chip-active {
-  background: var(--ink);
-  color: white;
-  border-color: var(--ink);
+  background: var(--solid);
+  color: var(--solid-text);
+  border-color: var(--solid);
 }
 
 .like-row {
@@ -228,7 +262,7 @@ button:disabled {
 }
 
 .like-button {
-  background: white;
+  background: var(--surface);
   color: var(--ink);
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -239,8 +273,8 @@ button:disabled {
 }
 
 .like-button-active {
-  background: #f6e6e4;
-  border-color: #e0a89f;
+  background: var(--badge-rejected-bg);
+  border-color: var(--badge-rejected-border);
   color: var(--danger);
 }
 
@@ -252,7 +286,7 @@ button:disabled {
 
 .unread-count {
   background: var(--danger);
-  color: white;
+  color: var(--paper);
   border-radius: 999px;
   padding: 0.05rem 0.5rem;
   font-size: 0.75rem;
@@ -266,12 +300,64 @@ button:disabled {
 }
 
 .message-mine {
-  background: var(--ink);
-  color: white;
+  background: var(--solid);
+  color: var(--solid-text);
   margin-left: auto;
 }
 
 .message-theirs {
-  background: white;
+  background: var(--surface);
   border: 1px solid var(--border);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.segmented button {
+  border: none;
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.segmented button.segmented-active {
+  background: var(--solid);
+  color: var(--solid-text);
+}
+
+.wall-card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.wall-title {
+  font-weight: bold;
+  font-size: 1.05rem;
+  margin: 0 0 0.35rem;
+}
+
+.wall-card .meta {
+  max-width: 32rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.wall-card > div {
+  justify-content: center;
 }

@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { TagWithCount, ThreadSummary } from "@nyps-forum/shared";
+import { formatDate, type TagWithCount, type ThreadSummary } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
+import { useSettings } from "~/lib/settings-context";
 
 export default function HomePage() {
   const { user, token } = useAuth();
+  const { dateFormat } = useSettings();
   const router = useRouter();
   const searchParams = useSearchParams();
   const sort = searchParams.get("sort") === "new" ? "new" : "hot";
@@ -17,6 +19,9 @@ export default function HomePage() {
   const [tags, setTags] = useState<TagWithCount[] | null>(null);
   const [threads, setThreads] = useState<ThreadSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAllTags, setShowAllTags] = useState(false);
+
+  const VISIBLE_TAG_COUNT = 6;
 
   useEffect(() => {
     api
@@ -85,7 +90,7 @@ export default function HomePage() {
         >
           All
         </button>
-        {tags?.map((t) => (
+        {(showAllTags ? tags : tags?.slice(0, VISIBLE_TAG_COUNT))?.map((t) => (
           <button
             key={t.id}
             className={`tag-chip ${activeTag === t.slug ? "tag-chip-active" : ""}`}
@@ -95,6 +100,11 @@ export default function HomePage() {
             {t.name} ({t.threadCount})
           </button>
         ))}
+        {tags && tags.length > VISIBLE_TAG_COUNT && (
+          <button className="tag-chip" onClick={() => setShowAllTags((v) => !v)}>
+            {showAllTags ? "Show less" : `Show more (+${tags.length - VISIBLE_TAG_COUNT})`}
+          </button>
+        )}
       </div>
 
       {error && <p className="error">{error}</p>}
@@ -107,7 +117,7 @@ export default function HomePage() {
             {t.title}
           </Link>
           <p className="meta">
-            by {t.author.displayName} · {new Date(t.createdAt).toLocaleDateString()}
+            by {t.author.displayName} · {formatDate(t.createdAt, dateFormat)}
           </p>
           {t.tags.length > 0 && (
             <div className="tag-row" style={{ marginTop: "0.4rem" }}>

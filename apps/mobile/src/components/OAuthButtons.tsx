@@ -1,12 +1,13 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { AuthResponse, OAuthConfig } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { colors } from "../lib/theme";
+import { useSettings } from "../lib/settings-context";
+import type { ThemeColors } from "../lib/theme";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation";
 
@@ -34,6 +35,8 @@ export function OAuthButtons<RouteName extends keyof RootStackParamList>({
   navigation: NativeStackNavigationProp<RootStackParamList, RouteName>;
 }) {
   const { setSession } = useAuth();
+  const { colors } = useSettings();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [config, setConfig] = useState<OAuthConfig | null>(null);
   const [appleAvailable, setAppleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,12 +64,13 @@ export function OAuthButtons<RouteName extends keyof RootStackParamList>({
       api
         .post<AuthResponse>("/api/auth/oauth/google", { idToken: response.params.id_token })
         .then((res) => {
+          // No further navigation needed — once the session is set, the root
+          // navigator swaps from the auth stack to the app stack automatically.
           setSession(res.token, res.user);
-          navigation.navigate("Home");
         })
         .catch((e) => setError(e.message ?? "Google sign-in failed"));
     }
-  }, [response, setSession, navigation]);
+  }, [response, setSession]);
 
   async function handleGoogle() {
     if (config?.google.enabled) {
@@ -92,8 +96,9 @@ export function OAuthButtons<RouteName extends keyof RootStackParamList>({
           identityToken: credential.identityToken,
           displayName: displayName || undefined,
         });
+        // No further navigation needed — the root navigator swaps to the app
+        // stack automatically once the session is set.
         setSession(res.token, res.user);
-        navigation.navigate("Home");
       } catch (e: any) {
         if (e.code !== "ERR_REQUEST_CANCELED") {
           setError(e.message ?? "Apple sign-in failed");
@@ -130,17 +135,19 @@ export function OAuthButtons<RouteName extends keyof RootStackParamList>({
   );
 }
 
-const styles = StyleSheet.create({
-  button: {
-    borderWidth: 1,
-    borderColor: colors.ink,
-    borderRadius: 6,
-    paddingVertical: 10,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  buttonText: { color: colors.ink, fontWeight: "700" },
-  error: { color: colors.danger, marginBottom: 8 },
-  meta: { color: colors.muted, fontSize: 12, marginBottom: 8 },
-  divider: { textAlign: "center", color: colors.muted, fontSize: 12, marginVertical: 8 },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    button: {
+      borderWidth: 1,
+      borderColor: colors.ink,
+      borderRadius: 6,
+      paddingVertical: 10,
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    buttonText: { color: colors.ink, fontWeight: "700" },
+    error: { color: colors.danger, marginBottom: 8 },
+    meta: { color: colors.muted, fontSize: 12, marginBottom: 8 },
+    divider: { textAlign: "center", color: colors.muted, fontSize: 12, marginVertical: 8 },
+  });
+}

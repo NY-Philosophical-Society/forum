@@ -1,11 +1,12 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { Post, ThreadDetail } from "@nyps-forum/shared";
+import { flattenPostTree, formatDate, type PostWithDepth, type ThreadDetail } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { colors } from "../lib/theme";
+import { useSettings } from "../lib/settings-context";
+import type { ThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Thread">;
@@ -13,6 +14,8 @@ type Props = NativeStackScreenProps<RootStackParamList, "Thread">;
 export function ThreadScreen({ route }: Props) {
   const { threadId } = route.params;
   const { user, token } = useAuth();
+  const { colors, dateFormat } = useSettings();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [thread, setThread] = useState<ThreadDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
@@ -59,17 +62,18 @@ export function ThreadScreen({ route }: Props) {
   if (!thread) return <Text style={styles.meta}>Loading...</Text>;
 
   const canPost = user?.verificationStatus === "VERIFIED";
+  const orderedPosts = flattenPostTree(thread.posts);
 
   return (
     <FlatList
       style={styles.container}
-      data={thread.posts}
+      data={orderedPosts}
       keyExtractor={(p) => p.id}
       ListHeaderComponent={
         <View>
           <Text style={styles.h1}>{thread.title}</Text>
           <Text style={styles.meta}>
-            by {thread.author.displayName} · {new Date(thread.createdAt).toLocaleDateString()}
+            by {thread.author.displayName} · {formatDate(thread.createdAt, dateFormat)}
           </Text>
           {thread.tags.length > 0 && (
             <View style={styles.tagRow}>
@@ -81,7 +85,7 @@ export function ThreadScreen({ route }: Props) {
             </View>
           )}
           <View style={styles.card}>
-            <Text>{thread.body}</Text>
+            <Text style={{ color: colors.ink }}>{thread.body}</Text>
             <Pressable
               style={[styles.likeButton, thread.myLiked && styles.likeButtonActive]}
               disabled={!canPost}
@@ -129,15 +133,18 @@ function PostItem({
   canLike,
   onLike,
 }: {
-  post: Post;
+  post: PostWithDepth;
   canLike: boolean;
   onLike: (postId: string) => void;
 }) {
+  const { colors, dateFormat } = useSettings();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   return (
-    <View style={styles.post}>
-      <Text>{post.body}</Text>
+    <View style={[styles.post, { marginLeft: post.depth * 16 }]}>
+      <Text style={{ color: colors.ink }}>{post.body}</Text>
       <Text style={styles.meta}>
-        {post.author.displayName} · {new Date(post.createdAt).toLocaleDateString()}
+        {post.author.displayName} · {formatDate(post.createdAt, dateFormat)}
       </Text>
       <Pressable
         style={[styles.likeButton, post.myLiked && styles.likeButtonActive]}
@@ -152,71 +159,74 @@ function PostItem({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-  h1: { fontSize: 20, fontWeight: "700", color: colors.ink },
-  h2: { fontSize: 16, fontWeight: "700", color: colors.ink, marginTop: 16, marginBottom: 4 },
-  meta: { color: colors.muted, fontSize: 12, marginTop: 4 },
-  error: { color: colors.danger, padding: 16 },
-  tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
-  tagPill: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  tagPillText: { fontSize: 11, color: colors.ink },
-  card: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 8,
-    backgroundColor: "white",
-  },
-  post: {
-    borderLeftWidth: 3,
-    borderLeftColor: colors.border,
-    paddingLeft: 12,
-    marginTop: 12,
-  },
-  likeButton: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 999,
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    marginTop: 8,
-    alignSelf: "flex-start",
-  },
-  likeButtonActive: { backgroundColor: "#f6e6e4", borderColor: "#e0a89f" },
-  likeText: { color: colors.ink, fontSize: 13 },
-  likeTextActive: { color: colors.danger, fontSize: 13, fontWeight: "700" },
-  notice: {
-    backgroundColor: colors.pendingBg,
-    color: colors.pendingText,
-    padding: 10,
-    borderRadius: 6,
-  },
-  label: { fontWeight: "700", color: colors.ink, marginBottom: 4 },
-  textarea: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    padding: 10,
-    minHeight: 80,
-    backgroundColor: "white",
-    textAlignVertical: "top",
-  },
-  button: {
-    backgroundColor: colors.ink,
-    paddingVertical: 10,
-    borderRadius: 6,
-    alignItems: "center",
-    marginTop: 8,
-    alignSelf: "flex-start",
-    paddingHorizontal: 16,
-  },
-  buttonText: { color: "white", fontWeight: "700" },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
+    h1: { fontSize: 20, fontWeight: "700", color: colors.ink },
+    h2: { fontSize: 16, fontWeight: "700", color: colors.ink, marginTop: 16, marginBottom: 4 },
+    meta: { color: colors.muted, fontSize: 12, marginTop: 4 },
+    error: { color: colors.danger, padding: 16 },
+    tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
+    tagPill: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 999,
+      paddingVertical: 2,
+      paddingHorizontal: 8,
+    },
+    tagPillText: { fontSize: 11, color: colors.ink },
+    card: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      marginTop: 8,
+      backgroundColor: colors.surface,
+    },
+    post: {
+      borderLeftWidth: 3,
+      borderLeftColor: colors.border,
+      paddingLeft: 12,
+      marginTop: 12,
+    },
+    likeButton: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 999,
+      paddingVertical: 3,
+      paddingHorizontal: 10,
+      marginTop: 8,
+      alignSelf: "flex-start",
+    },
+    likeButtonActive: { backgroundColor: colors.rejectedBg, borderColor: colors.rejectedBorder },
+    likeText: { color: colors.ink, fontSize: 13 },
+    likeTextActive: { color: colors.danger, fontSize: 13, fontWeight: "700" },
+    notice: {
+      backgroundColor: colors.pendingBg,
+      color: colors.pendingText,
+      padding: 10,
+      borderRadius: 6,
+    },
+    label: { fontWeight: "700", color: colors.ink, marginBottom: 4 },
+    textarea: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      padding: 10,
+      minHeight: 80,
+      backgroundColor: colors.surface,
+      color: colors.ink,
+      textAlignVertical: "top",
+    },
+    button: {
+      backgroundColor: colors.solid,
+      paddingVertical: 10,
+      borderRadius: 6,
+      alignItems: "center",
+      marginTop: 8,
+      alignSelf: "flex-start",
+      paddingHorizontal: 16,
+    },
+    buttonText: { color: colors.solidText, fontWeight: "700" },
+  });
+}

@@ -9,4 +9,5 @@ export type RootStackParamList = {
   Messages: undefined;
   Conversation: { userId: string; displayName: string };
   MockOAuth: { provider: "google" | "apple" };
+  Settings: undefined;
 };

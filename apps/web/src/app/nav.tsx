@@ -40,6 +40,7 @@ export function Nav() {
           NYPS Forum
         </Link>
         <div className="nav-links">
+          <Link href="/settings">Settings</Link>
           {!loading && user && (
             <>
               <span className={statusBadgeClass[user.verificationStatus]}>

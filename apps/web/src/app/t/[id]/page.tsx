@@ -2,13 +2,15 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { ThreadDetail } from "@nyps-forum/shared";
+import { flattenPostTree, formatDateTime, type ThreadDetail } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
+import { useSettings } from "~/lib/settings-context";
 
 export default function ThreadPage() {
   const { id } = useParams<{ id: string }>();
   const { user, token } = useAuth();
+  const { dateFormat } = useSettings();
   const [thread, setThread] = useState<ThreadDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
@@ -63,12 +65,13 @@ export default function ThreadPage() {
   if (!thread) return <p>Loading...</p>;
 
   const canPost = user?.verificationStatus === "VERIFIED";
+  const orderedPosts = flattenPostTree(thread.posts);
 
   return (
     <div>
       <h1>{thread.title}</h1>
       <p className="meta">
-        by {thread.author.displayName} &middot; {new Date(thread.createdAt).toLocaleString()}
+        by {thread.author.displayName} &middot; {formatDateTime(thread.createdAt, dateFormat)}
       </p>
       {thread.tags.length > 0 && (
         <div className="tag-row" style={{ marginTop: "0.4rem" }}>
@@ -92,66 +95,82 @@ export default function ThreadPage() {
         </div>
       </div>
 
-      <h3>{thread.posts.length} Replies</h3>
-      {thread.posts.map((p) => (
-        <div className="post" key={p.id}>
-          <p>{p.body}</p>
-          <p className="meta">
-            {p.author.displayName} &middot; {new Date(p.createdAt).toLocaleString()}
+      {thread.previewOnly ? (
+        <div className="wall-card">
+          <p className="wall-title">
+            {thread.postCount > 0
+              ? `${thread.postCount} ${thread.postCount === 1 ? "reply" : "replies"} — sign up to keep reading`
+              : "Sign up to join this discussion"}
           </p>
-          <div className="like-row">
-            <button
-              className={`like-button ${p.myLiked ? "like-button-active" : ""}`}
-              disabled={!canPost}
-              onClick={() => togglePostLike(p.id)}
-            >
-              ♥ {p.likeCount}
-            </button>
-            {canPost && (
-              <button className="secondary" onClick={() => setReplyTo(p.id)}>
-                Reply
-              </button>
-            )}
+          <p className="meta">
+            NYPS Forum is free to join — read the full discussion, like posts, and reply once
+            you've verified your identity.
+          </p>
+          <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}>
+            <a href="/signup">
+              <button>Sign up free</button>
+            </a>
+            <a href="/login">
+              <button className="secondary">Log in</button>
+            </a>
           </div>
         </div>
-      ))}
-
-      {canPost ? (
-        <form onSubmit={submitReply} style={{ marginTop: "1.5rem" }}>
-          <label>
-            {replyTo ? "Replying to a comment" : "Add a reply"}
-            {replyTo && (
-              <button
-                type="button"
-                className="secondary"
-                style={{ marginLeft: "0.5rem", padding: "0.1rem 0.5rem" }}
-                onClick={() => setReplyTo(null)}
-              >
-                cancel
-              </button>
-            )}
-          </label>
-          <textarea
-            value={replyBody}
-            onChange={(e) => setReplyBody(e.target.value)}
-            required
-          />
-          <button type="submit" disabled={submitting}>
-            {submitting ? "Posting..." : "Post reply"}
-          </button>
-        </form>
       ) : (
-        <p className="notice">
-          {user ? (
-            <>
-              <a href="/verify">Verify your identity</a> to reply and like.
-            </>
+        <>
+          <h3>{thread.postCount} Replies</h3>
+          {orderedPosts.map((p) => (
+            <div className="post" key={p.id} style={{ marginLeft: `${p.depth * 1.75}rem` }}>
+              <p>{p.body}</p>
+              <p className="meta">
+                {p.author.displayName} &middot; {formatDateTime(p.createdAt, dateFormat)}
+              </p>
+              <div className="like-row">
+                <button
+                  className={`like-button ${p.myLiked ? "like-button-active" : ""}`}
+                  disabled={!canPost}
+                  onClick={() => togglePostLike(p.id)}
+                >
+                  ♥ {p.likeCount}
+                </button>
+                {canPost && (
+                  <button className="secondary" onClick={() => setReplyTo(p.id)}>
+                    Reply
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {canPost ? (
+            <form onSubmit={submitReply} style={{ marginTop: "1.5rem" }}>
+              <label>
+                {replyTo ? "Replying to a comment" : "Add a reply"}
+                {replyTo && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ marginLeft: "0.5rem", padding: "0.1rem 0.5rem" }}
+                    onClick={() => setReplyTo(null)}
+                  >
+                    cancel
+                  </button>
+                )}
+              </label>
+              <textarea
+                value={replyBody}
+                onChange={(e) => setReplyBody(e.target.value)}
+                required
+              />
+              <button type="submit" disabled={submitting}>
+                {submitting ? "Posting..." : "Post reply"}
+              </button>
+            </form>
           ) : (
-            <>
-              <a href="/login">Log in</a> to reply and like.
-            </>
+            <p className="notice">
+              <a href="/verify">Verify your identity</a> to reply and like.
+            </p>
           )}
-        </p>
+        </>
       )}
     </div>
   );

@@ -1,9 +1,10 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { colors } from "../lib/theme";
+import { useSettings } from "../lib/settings-context";
+import type { ThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "VerifyMock">;
@@ -16,6 +17,8 @@ type Props = NativeStackScreenProps<RootStackParamList, "VerifyMock">;
 export function VerifyMockScreen({ route, navigation }: Props) {
   const { sessionId } = route.params;
   const { refreshUser } = useAuth();
+  const { colors } = useSettings();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [submitting, setSubmitting] = useState(false);
 
   async function resolve(approve: boolean) {
@@ -38,7 +41,9 @@ export function VerifyMockScreen({ route, navigation }: Props) {
         hosted flow instead.
       </Text>
       <Text style={styles.meta}>Session: {sessionId}</Text>
-      <Text style={{ marginBottom: 12 }}>Simulate the outcome a real ID + selfie check would produce:</Text>
+      <Text style={[styles.body, { marginBottom: 12 }]}>
+        Simulate the outcome a real ID + selfie check would produce:
+      </Text>
       <View style={{ flexDirection: "row", gap: 12 }}>
         <Pressable style={styles.button} onPress={() => resolve(true)} disabled={submitting}>
           <Text style={styles.buttonText}>Approved</Text>
@@ -51,26 +56,29 @@ export function VerifyMockScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-  h1: { fontSize: 20, fontWeight: "700", color: colors.ink, marginBottom: 8 },
-  meta: { color: colors.muted, fontSize: 13, marginBottom: 8 },
-  notice: {
-    backgroundColor: colors.pendingBg,
-    color: colors.pendingText,
-    padding: 10,
-    borderRadius: 6,
-    marginBottom: 12,
-    fontSize: 13,
-  },
-  button: { backgroundColor: colors.ink, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6 },
-  buttonText: { color: "white", fontWeight: "700" },
-  buttonSecondary: {
-    borderWidth: 1,
-    borderColor: colors.ink,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-  },
-  buttonSecondaryText: { color: colors.ink, fontWeight: "700" },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
+    h1: { fontSize: 20, fontWeight: "700", color: colors.ink, marginBottom: 8 },
+    body: { color: colors.ink },
+    meta: { color: colors.muted, fontSize: 13, marginBottom: 8 },
+    notice: {
+      backgroundColor: colors.pendingBg,
+      color: colors.pendingText,
+      padding: 10,
+      borderRadius: 6,
+      marginBottom: 12,
+      fontSize: 13,
+    },
+    button: { backgroundColor: colors.solid, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6 },
+    buttonText: { color: colors.solidText, fontWeight: "700" },
+    buttonSecondary: {
+      borderWidth: 1,
+      borderColor: colors.ink,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: 6,
+    },
+    buttonSecondaryText: { color: colors.ink, fontWeight: "700" },
+  });
+}

@@ -1,17 +1,20 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { ConversationSummary, PublicUser } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { colors } from "../lib/theme";
+import { useSettings } from "../lib/settings-context";
+import type { ThemeColors } from "../lib/theme";
 import type { RootStackParamList } from "../navigation";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Messages">;
 
 export function MessagesScreen({ navigation }: Props) {
   const { token } = useAuth();
+  const { colors } = useSettings();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [conversations, setConversations] = useState<ConversationSummary[] | null>(null);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<PublicUser[]>([]);
@@ -47,6 +50,7 @@ export function MessagesScreen({ navigation }: Props) {
         value={search}
         onChangeText={setSearch}
         placeholder="Search by name"
+        placeholderTextColor={colors.muted}
       />
 
       {results.map((u) => (
@@ -92,28 +96,31 @@ export function MessagesScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-  label: { fontWeight: "700", color: colors.ink, marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    padding: 10,
-    backgroundColor: "white",
-  },
-  h2: { fontSize: 16, fontWeight: "700", color: colors.ink, marginTop: 16, marginBottom: 4 },
-  meta: { color: colors.muted, fontSize: 13 },
-  card: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 8,
-    backgroundColor: "white",
-  },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: colors.ink },
-  rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  unreadBadge: { backgroundColor: colors.danger, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
-  unreadText: { color: "white", fontSize: 12, fontWeight: "700" },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
+    label: { fontWeight: "700", color: colors.ink, marginBottom: 4 },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 6,
+      padding: 10,
+      backgroundColor: colors.surface,
+      color: colors.ink,
+    },
+    h2: { fontSize: 16, fontWeight: "700", color: colors.ink, marginTop: 16, marginBottom: 4 },
+    meta: { color: colors.muted, fontSize: 13 },
+    card: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      marginTop: 8,
+      backgroundColor: colors.surface,
+    },
+    cardTitle: { fontSize: 15, fontWeight: "700", color: colors.ink },
+    rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    unreadBadge: { backgroundColor: colors.danger, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+    unreadText: { color: colors.paper, fontSize: 12, fontWeight: "700" },
+  });
+}

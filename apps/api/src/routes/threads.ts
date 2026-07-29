@@ -64,12 +64,22 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
   if (!thread) return res.status(404).json({ error: "Thread not found" });
 
   const viewerId = req.user?.id;
+  // Anyone with an account (even unverified) reads in full — only truly
+  // anonymous visitors, who by construction only exist on the web (the
+  // mobile app requires an account before it lets you in at all), get a
+  // truncated preview instead of the real content.
+  const isAnonymous = !viewerId;
+  const PREVIEW_LENGTH = 220;
+  const body = isAnonymous && thread.body.length > PREVIEW_LENGTH
+    ? `${thread.body.slice(0, PREVIEW_LENGTH)}…`
+    : thread.body;
 
   res.json({
     thread: {
       id: thread.id,
       title: thread.title,
-      body: thread.body,
+      body,
+      previewOnly: isAnonymous,
       author: toPublicUser(thread.author),
       createdAt: thread.createdAt.toISOString(),
       tags: thread.tags.map((tag) => ({
@@ -81,16 +91,18 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
       likeCount: thread._count.likes,
       myLiked: viewerId ? thread.likes.some((l) => l.userId === viewerId) : false,
       postCount: thread.posts.length,
-      posts: thread.posts.map((p) => ({
-        id: p.id,
-        threadId: p.threadId,
-        parentId: p.parentId,
-        body: p.body,
-        author: toPublicUser(p.author),
-        createdAt: p.createdAt.toISOString(),
-        likeCount: p._count.likes,
-        myLiked: viewerId ? p.likes.some((l) => l.userId === viewerId) : false,
-      })),
+      posts: isAnonymous
+        ? []
+        : thread.posts.map((p) => ({
+            id: p.id,
+            threadId: p.threadId,
+            parentId: p.parentId,
+            body: p.body,
+            author: toPublicUser(p.author),
+            createdAt: p.createdAt.toISOString(),
+            likeCount: p._count.likes,
+            myLiked: viewerId ? p.likes.some((l) => l.userId === viewerId) : false,
+          })),
     },
   });
 });

@@ -1,15 +1,20 @@
 import { StyleSheet, Text, View } from "react-native";
-import { colors } from "../lib/theme";
+import { useSettings } from "../lib/settings-context";
+import type { ThemeColors } from "../lib/theme";
 
-const styleFor: Record<string, { bg: string; fg: string }> = {
-  VERIFIED: { bg: colors.verifiedBg, fg: colors.verifiedText },
-  PENDING: { bg: colors.pendingBg, fg: colors.pendingText },
-  UNVERIFIED: { bg: colors.rejectedBg, fg: colors.danger },
-  REJECTED: { bg: colors.rejectedBg, fg: colors.danger },
-};
+function styleFor(colors: ThemeColors, status: string): { bg: string; fg: string } {
+  const map: Record<string, { bg: string; fg: string }> = {
+    VERIFIED: { bg: colors.verifiedBg, fg: colors.verifiedText },
+    PENDING: { bg: colors.pendingBg, fg: colors.pendingText },
+    UNVERIFIED: { bg: colors.rejectedBg, fg: colors.danger },
+    REJECTED: { bg: colors.rejectedBg, fg: colors.danger },
+  };
+  return map[status] ?? map.UNVERIFIED;
+}
 
 export function VerificationBadge({ status }: { status: string }) {
-  const s = styleFor[status] ?? styleFor.UNVERIFIED;
+  const { colors } = useSettings();
+  const s = styleFor(colors, status);
   return (
     <View style={[badgeStyles.badge, { backgroundColor: s.bg }]}>
       <Text style={[badgeStyles.text, { color: s.fg }]}>{status.toLowerCase()}</Text>

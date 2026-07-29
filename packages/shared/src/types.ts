@@ -48,6 +48,8 @@ export interface Post {
 export interface ThreadDetail extends ThreadSummary {
   body: string;
   posts: Post[];
+  /** True when this response is a truncated preview for an anonymous (not-logged-in) visitor. */
+  previewOnly: boolean;
 }
 
 export interface VerificationSessionResponse {

@@ -33,15 +33,23 @@ missing before launch" below before you show this to real users.
   runs against a stub provider so the whole product can be built and tested without a live vendor
   account. See "Going to production" below for wiring up a real provider (Stripe Identity /
   Persona / Veriff).
-- **Sign up is deliberately easy; verification is deliberately separate.** Anyone can create an
-  account (email/password, Google, or Apple) and read/browse immediately — no wall. Only posting,
-  replying, liking, and DMing require the identity check. This is enforced server-side
-  (`requireVerified` in `apps/api/src/middleware/auth.ts`), not just in the UI.
+- **Sign up is deliberately easy; verification is deliberately separate.** Creating an account
+  (email/password, Google, or Apple) never requires ID verification — that's only needed to post,
+  reply, like, or DM. This is enforced server-side (`requireVerified` in
+  `apps/api/src/middleware/auth.ts`), not just in the UI. See "Read access" below for how *reading*
+  is gated differently — that's a distinct question from verification.
 - **Google / Apple sign-in verify a provider-issued identity token server-side** (same trust model
   as the identity-verification piece: verify a signed assertion, never touch a password). See
   `apps/api/src/lib/oauth.ts`. Neither works without real credentials from Google Cloud Console /
   Apple Developer, which only you can create — see "Going to production" below. Until then, both
   buttons fall back to a local mock sign-in screen so the UX can be built and demoed today.
+- **Per-user display settings** (date format MM/DD/YYYY vs. DD/MM/YYYY, light/dark mode) live
+  entirely client-side — `apps/web/src/lib/settings-context.tsx` (localStorage) and
+  `apps/mobile/src/lib/settings-context.tsx` (AsyncStorage). Dates are formatted with
+  `formatDate`/`formatDateTime` in `packages/shared/src/format-date.ts`, which never renders
+  seconds. Dark mode on web is CSS custom-property overrides (`[data-theme="dark"]` in
+  `globals.css`); on mobile every screen's styles are built from a `ThemeColors` object supplied by
+  context, since `StyleSheet.create` can't react to theme changes on its own.
 
 ## Layout
 
@@ -68,7 +76,7 @@ npm install
 cd apps/api
 cp .env.example .env
 npm run db:migrate   # creates apps/api/prisma/dev.db (SQLite)
-npm run db:seed       # seeds 4 sample tags
+npm run db:seed       # seeds 12 tags + 5 demo threads with nested replies
 cd ../..
 npm run dev:api        # http://localhost:4000
 ```
@@ -90,12 +98,34 @@ npm run dev:mobile     # opens Expo dev tools; press i for iOS simulator
 On a physical device, `localhost` refers to the device itself — set `EXPO_PUBLIC_API_URL` in
 `apps/mobile/.env` to your machine's LAN IP instead (e.g. `http://192.168.1.23:4000`).
 
+## Read access
+
+Reading and having an account are two independent gates, deliberately not tied together the same
+way on every platform:
+
+- **Web**: anonymous visitors can browse the full feed (titles, tags, sort, like counts) — that's
+  the "little bit" they see for free. Opening a thread's full text and replies requires an
+  account: `GET /api/threads/:id` returns a truncated body (first ~220 characters) and no replies
+  at all when the request is unauthenticated (`previewOnly: true` in the response — see
+  `apps/api/src/routes/threads.ts`), and the web app renders a "sign up to keep reading" wall card
+  instead of the reply list (`apps/web/src/app/t/[id]/page.tsx`). This is enforced by the API, not
+  just hidden in the UI — hitting the endpoint directly without a token gets the same truncated
+  response.
+- **Mobile**: there's no anonymous mode at all. `App.tsx` renders one of two entirely separate
+  navigator stacks based on auth state — an `AuthStack` (Login/Signup/Settings only) when logged
+  out, or the full `AppStack` once a session exists — so the feed, threads, etc. are simply
+  unreachable without an account first.
+- **Either way, any account (even unverified) reads in full.** The preview wall and the mobile
+  login gate are both about *having an account at all*, not about identity verification — an
+  unverified user reads exactly like a verified one. Verification only gates the write actions
+  below.
+
 ## The verification flow, end to end
 
 1. Sign up with your real name, email, password. Account starts `UNVERIFIED`.
-2. Any unverified/pending user can **read** everything, but posting a thread, replying, liking, or
-   sending a DM returns 403 until verification completes (`requireVerified` middleware,
-   `apps/api/src/middleware/auth.ts`).
+2. Any signed-up user, verified or not, can **read** everything (see "Read access" above), but
+   posting a thread, replying, liking, or sending a DM returns 403 until verification completes
+   (`requireVerified` middleware, `apps/api/src/middleware/auth.ts`).
 3. `/verify` calls `POST /api/verification/start`, which asks the configured
    `VerificationProvider` for a session and hosted verification URL, and flips the user to
    `PENDING`.
@@ -169,6 +199,8 @@ Four things need real decisions before this goes live — flagged here rather th
 - No account-linking UI — if you sign up with a password then later use "Continue with Google"
   using the same email, the accounts merge automatically server-side, but there's no in-app
   indication that happened.
+- The web preview wall truncates by character count only (`apps/api/src/routes/threads.ts`) — it
+  doesn't try to cut at a sentence/word boundary, so the teaser can end mid-word.
 - No moderation tools (reporting, banning, thread locking) — notably absent given DMs exist; a
   block/report path for messages should land before real users touch this.
 - No password reset flow.

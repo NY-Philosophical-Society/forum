@@ -18,13 +18,19 @@ export default function NewThreadPage() {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showAllTags, setShowAllTags] = useState(false);
+
+  const VISIBLE_TAG_COUNT = 6;
 
   useEffect(() => {
     api.get<{ tags: TagWithCount[] }>("/api/tags").then((res) => {
       setTags(res.tags);
       if (preselectedTagSlug) {
         const match = res.tags.find((t) => t.slug === preselectedTagSlug);
-        if (match) setSelectedTagIds([match.id]);
+        if (match) {
+          setSelectedTagIds([match.id]);
+          setShowAllTags(true);
+        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,7 +85,7 @@ export default function NewThreadPage() {
         <label>
           Tags (optional)
           <div className="tag-row">
-            {tags?.map((t) => (
+            {(showAllTags ? tags : tags?.slice(0, VISIBLE_TAG_COUNT))?.map((t) => (
               <button
                 type="button"
                 key={t.id}
@@ -89,6 +95,15 @@ export default function NewThreadPage() {
                 {t.name}
               </button>
             ))}
+            {tags && tags.length > VISIBLE_TAG_COUNT && (
+              <button
+                type="button"
+                className="tag-chip"
+                onClick={() => setShowAllTags((v) => !v)}
+              >
+                {showAllTags ? "Show less" : `Show more (+${tags.length - VISIBLE_TAG_COUNT})`}
+              </button>
+            )}
           </div>
         </label>
         {error && <p className="error">{error}</p>}
