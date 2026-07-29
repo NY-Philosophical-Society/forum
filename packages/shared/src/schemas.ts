@@ -43,12 +43,24 @@ export const createThreadSchema = z.object({
 });
 export type CreateThreadInput = z.infer<typeof createThreadSchema>;
 
+export const updateThreadSchema = z.object({
+  title: z.string().min(4).max(200).optional(),
+  body: z.string().min(1).max(20000).optional(),
+  tagIds: z.array(z.string()).max(5).optional(),
+});
+export type UpdateThreadInput = z.infer<typeof updateThreadSchema>;
+
 export const createPostSchema = z.object({
   threadId: z.string(),
   body: z.string().min(1).max(20000),
   parentId: z.string().nullable().optional(),
 });
 export type CreatePostInput = z.infer<typeof createPostSchema>;
+
+export const updatePostSchema = z.object({
+  body: z.string().min(1).max(20000),
+});
+export type UpdatePostInput = z.infer<typeof updatePostSchema>;
 
 export const sendMessageSchema = z.object({
   recipientId: z.string(),
@@ -100,7 +112,7 @@ export type RedeemCodeInput = z.infer<typeof redeemCodeSchema>;
 export const BIO_MAX_LENGTH = 500;
 
 export const updateProfileSchema = z.object({
-  // Plain text only — markdown in bios lands in brief 03.
+  // Rendered as markdown (same renderer as posts) since brief 03.
   bio: z.string().max(BIO_MAX_LENGTH, `Bio must be ${BIO_MAX_LENGTH} characters or fewer`).nullable().optional(),
   // The display name is the legal name tied to ID verification; the API
   // rejects this field for VERIFIED users (see routes/users.ts).

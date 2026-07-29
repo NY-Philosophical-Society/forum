@@ -28,7 +28,7 @@ export async function recomputeThreadHotScore(threadId: string): Promise<void> {
     where: { id: threadId },
     select: {
       createdAt: true,
-      _count: { select: { likes: true, posts: true } },
+      _count: { select: { likes: true, posts: { where: { deletedAt: null } } } },
     },
   });
   if (!thread) return;

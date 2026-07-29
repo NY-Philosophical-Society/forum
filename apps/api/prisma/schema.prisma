@@ -50,6 +50,8 @@ model User {
   blocking             Block[]                @relation("Blocker")
   blockedBy            Block[]                @relation("Blocked")
   passwordResetTokens  PasswordResetToken[]
+  mentionsReceived     Mention[]              @relation("MentionsReceived")
+  mentionsAuthored     Mention[]              @relation("MentionsAuthored")
 }
 
 model VerificationSession {
@@ -88,11 +90,18 @@ model Thread {
   hotScore   Float    @default(0)
   locked     Boolean  @default(false)
   createdAt  DateTime @default(now())
+  // Set on every successful author/admin edit; clients show "edited <time>".
+  editedAt   DateTime?
+  // Soft delete: the row (and its replies) survive so the discussion under it
+  // stays whole; serializers tombstone the title/body/author. Deleted threads
+  // are excluded from the feed and profile listings.
+  deletedAt  DateTime?
 
-  author User         @relation(fields: [authorId], references: [id])
-  tags   Tag[]
-  posts  Post[]
-  likes  ThreadLike[]
+  author   User         @relation(fields: [authorId], references: [id])
+  tags     Tag[]
+  posts    Post[]
+  likes    ThreadLike[]
+  mentions Mention[]
 }
 
 model ThreadLike {
@@ -114,10 +123,17 @@ model Post {
   parentId  String?
   body      String
   createdAt DateTime @default(now())
+  editedAt  DateTime?
+  // Soft delete keeps the reply tree intact: a deleted post with surviving
+  // descendants serializes as a "[deleted]" tombstone instead of vanishing
+  // and orphaning them. The body stays in the row as an audit trail but is
+  // never sent to clients once deletedAt is set.
+  deletedAt DateTime?
 
-  thread Thread     @relation(fields: [threadId], references: [id])
-  author User       @relation(fields: [authorId], references: [id])
-  likes  PostLike[]
+  thread   Thread     @relation(fields: [threadId], references: [id])
+  author   User       @relation(fields: [authorId], references: [id])
+  likes    PostLike[]
+  mentions Mention[]
 }
 
 model PostLike {
@@ -174,6 +190,33 @@ model Block {
   blocked User @relation("Blocked", fields: [blockedId], references: [id])
 
   @@unique([blockerId, blockedId])
+}
+
+// A structural record of "@Display Name" mentions, parsed from thread/post
+// bodies on create and edit (see lib/mentions.ts) — brief 05 turns these
+// into notifications, and re-parsing prose later would be fragile. Exactly
+// one of threadId/postId is set: where the mention appears (a thread row
+// means the opening post). Rows are re-synced on edit and removed when the
+// containing content is deleted, so a row here is always a live mention.
+model Mention {
+  id        String   @id @default(cuid())
+  // The mentioned user.
+  userId    String
+  // Who wrote the mention. Never equal to userId (self-mentions are skipped).
+  authorId  String
+  threadId  String?
+  postId    String?
+  createdAt DateTime @default(now())
+
+  user   User    @relation("MentionsReceived", fields: [userId], references: [id])
+  author User    @relation("MentionsAuthored", fields: [authorId], references: [id])
+  thread Thread? @relation(fields: [threadId], references: [id])
+  post   Post?   @relation(fields: [postId], references: [id])
+
+  // One row per (user, place) no matter how many times the name appears.
+  @@unique([userId, threadId])
+  @@unique([userId, postId])
+  @@index([userId, createdAt])
 }
 
 // No email service is configured (see routes/auth.ts), so the reset link is

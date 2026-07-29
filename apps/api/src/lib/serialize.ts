@@ -11,6 +11,22 @@ interface UserLike {
   createdAt: Date;
 }
 
+/**
+ * Stand-in author for soft-deleted content. The empty id is deliberate:
+ * exposing the real author of deleted content would undo the deletion, and
+ * clients treat an empty id as "don't link to a profile".
+ */
+export const DELETED_AUTHOR: PublicUser = {
+  id: "",
+  displayName: "[deleted]",
+  avatarUrl: null,
+  bio: null,
+  verificationStatus: "UNVERIFIED",
+  role: "user",
+  isSupporter: false,
+  createdAt: new Date(0).toISOString(),
+};
+
 export function toPublicUser(user: UserLike): PublicUser {
   return {
     id: user.id,

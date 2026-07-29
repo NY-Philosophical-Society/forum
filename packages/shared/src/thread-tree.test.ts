@@ -23,6 +23,8 @@ function post(id: string, parentId: string | null): Post {
     body: `body of ${id}`,
     author,
     createdAt: `2026-01-01T00:00:${String(counter).padStart(2, "0")}.000Z`,
+    editedAt: null,
+    deleted: false,
     likeCount: 0,
     myLiked: false,
   };

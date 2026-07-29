@@ -16,6 +16,7 @@ import { prisma } from "../db";
 // Each test file starts from an empty database. Deletion order respects
 // foreign keys (children before parents).
 beforeAll(async () => {
+  await prisma.mention.deleteMany();
   await prisma.passwordResetToken.deleteMany();
   await prisma.block.deleteMany();
   await prisma.report.deleteMany();

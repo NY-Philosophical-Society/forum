@@ -97,12 +97,19 @@ export interface Post {
   body: string;
   author: PublicUser;
   createdAt: string;
+  /** Set on every author/admin edit; clients show an "edited" note. */
+  editedAt: string | null;
+  /** Soft-deleted tombstone: body is empty and author is anonymized, kept so replies below it don't orphan. */
+  deleted: boolean;
   likeCount: number;
   myLiked: boolean;
 }
 
 export interface ThreadDetail extends ThreadSummary {
   body: string;
+  editedAt: string | null;
+  /** Soft-deleted: title/body/author are tombstoned but surviving replies still render. */
+  deleted: boolean;
   posts: Post[];
   /** True when this response is a truncated preview for an anonymous (not-logged-in) visitor. */
   previewOnly: boolean;
@@ -110,6 +117,13 @@ export interface ThreadDetail extends ThreadSummary {
   repliesLimit: number;
   repliesOffset: number;
   hasMoreReplies: boolean;
+}
+
+export interface ImageUploadResponse {
+  /** Public URL from the storage provider; final (re-encoded) pixel size follows in width/height. */
+  url: string;
+  width: number;
+  height: number;
 }
 
 export interface VerificationSessionResponse {

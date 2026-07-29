@@ -32,26 +32,27 @@ usersRouter.get("/:id/profile", optionalAuth, async (req, res) => {
   const repliesLimit = Math.min(Number(req.query.repliesLimit) || PROFILE_PAGE_LIMIT, 50);
   const repliesOffset = Math.max(Number(req.query.repliesOffset) || 0, 0);
 
+  // Soft-deleted content is gone from its author's public record too.
   const [threadCount, replyCount, threads, replies] = await Promise.all([
-    prisma.thread.count({ where: { authorId: profileUser.id } }),
-    prisma.post.count({ where: { authorId: profileUser.id } }),
+    prisma.thread.count({ where: { authorId: profileUser.id, deletedAt: null } }),
+    prisma.post.count({ where: { authorId: profileUser.id, deletedAt: null } }),
     previewOnly
       ? []
       : prisma.thread.findMany({
-          where: { authorId: profileUser.id },
+          where: { authorId: profileUser.id, deletedAt: null },
           orderBy: { createdAt: "desc" },
           skip: threadsOffset,
           take: threadsLimit,
           include: {
             tags: true,
             likes: { where: { userId: viewerId } },
-            _count: { select: { posts: true, likes: true } },
+            _count: { select: { posts: { where: { deletedAt: null } }, likes: true } },
           },
         }),
     previewOnly
       ? []
       : prisma.post.findMany({
-          where: { authorId: profileUser.id },
+          where: { authorId: profileUser.id, deletedAt: null },
           orderBy: { createdAt: "desc" },
           skip: repliesOffset,
           take: repliesLimit,
@@ -198,7 +199,13 @@ usersRouter.delete("/me/avatar", requireAuth, writeLimiter, async (req, res) => 
   res.json({ user: toPublicUser(user) });
 });
 
-/** Search users by display name, to start a new DM. Excludes the caller. */
+/**
+ * Search users by display name — used to start a new DM and by the
+ * composer's @mention autocomplete. Excludes the caller and anyone with a
+ * block in either direction: a blocked pair can't DM anyway, and offering
+ * them as a mention target would create a link/notification the block is
+ * supposed to prevent.
+ */
 usersRouter.get("/", requireAuth, async (req, res) => {
   const search = (req.query.search as string | undefined)?.trim();
   if (!search) {
@@ -210,6 +217,8 @@ usersRouter.get("/", requireAuth, async (req, res) => {
       displayName: { contains: search },
       id: { not: req.user!.id },
       deletedAt: null,
+      blocking: { none: { blockedId: req.user!.id } },
+      blockedBy: { none: { blockerId: req.user!.id } },
     },
     take: 20,
   });
