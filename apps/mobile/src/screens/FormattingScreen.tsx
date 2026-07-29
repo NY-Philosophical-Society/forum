@@ -69,6 +69,22 @@ export function FormattingScreen() {
         </View>
       ))}
 
+      <View style={styles.example}>
+        <Text style={styles.exampleTitle}>Mentions</Text>
+        <Text style={styles.notice}>
+          Type @ followed by a member's name in the composer and pick them from the list — the
+          mention becomes a link to their profile.
+        </Text>
+      </View>
+
+      <View style={styles.example}>
+        <Text style={styles.exampleTitle}>Images</Text>
+        <Text style={styles.notice}>
+          Use the 🖼 toolbar button to add a photo from your camera or library (up to 8MB). Only
+          images uploaded here render inline; a link to an image elsewhere stays a link.
+        </Text>
+      </View>
+
       <Text style={styles.notice}>
         Raw HTML is deliberately not rendered — it appears as plain text.
       </Text>

@@ -71,6 +71,21 @@ export default function FormattingPage() {
       <h3>Horizontal rule</h3>
       <Example source={"Above the line.\n\n---\n\nBelow the line."} />
 
+      <h3>Mentions</h3>
+      <p className="meta" style={{ marginBottom: "var(--space-3)" }}>
+        Type <code>@</code> followed by a member&apos;s name in the composer and pick them from the
+        list — the mention becomes a link to their profile. (Under the hood it&apos;s an ordinary
+        markdown link to <code>/u/&lt;their id&gt;</code>.)
+      </p>
+
+      <h3>Images</h3>
+      <p className="meta" style={{ marginBottom: "var(--space-3)" }}>
+        Use the 🖼 toolbar button to upload a picture (JPEG, PNG, or WebP, up to 8MB) — it is
+        inserted as <code>![image](url)</code> where your cursor is. Only images uploaded here
+        render inline; a link to an image elsewhere on the web stays a link, so nobody can use a
+        post to track its readers.
+      </p>
+
       <p className="notice" style={{ marginTop: "var(--space-6)" }}>
         Raw HTML is not rendered — it will appear as plain text. That is deliberate.
       </p>

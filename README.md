@@ -52,6 +52,19 @@ missing before launch" below before you show this to real users.
   (`apps/api/src/lib/storage-provider.ts`): a zero-credential local-disk stub in dev, S3/R2 gated
   behind env vars for production. Account management (change/set password, change email, JSON data
   export, anonymizing account deletion) lives in Settings on both platforms.
+- **Writing is markdown, with an audit trail.** Threads, replies, and bios render markdown
+  (bold, italic, links, blockquotes, lists, code, headings) through safe-by-default renderers —
+  `react-markdown` without `rehype-raw` on web, `react-native-markdown-display` on mobile — so
+  member text can never inject HTML. Both composers have a formatting toolbar, a live preview
+  toggle, image insert, and an `@mention` autocomplete (mentions are stored structurally in a
+  `Mention` table for the notifications work to come, and are suppressed across blocks in either
+  direction). Authors can edit (with a visible "edited" timestamp) and delete their own posts;
+  deletion is a soft delete, so a deleted reply with surviving children renders as a `[deleted]`
+  tombstone instead of orphaning the conversation under it. Post images go through the same
+  storage provider as avatars (`POST /api/uploads/image`, EXIF-stripped, ≤1600px), with their
+  final dimensions baked into the URL so clients reserve space with no layout shift — and only
+  images from our own storage render inline, so an external image URL can't be used to log
+  readers' IPs.
 - **Per-user display settings** (date format MM/DD/YYYY vs. DD/MM/YYYY, light/dark mode) live
   entirely client-side — `apps/web/src/lib/settings-context.tsx` (localStorage) and
   `apps/mobile/src/lib/settings-context.tsx` (AsyncStorage). Dates are formatted with
@@ -188,7 +201,7 @@ Five things need real decisions before this goes live — flagged here rather th
    Services ID (with your web domain + redirect URL registered) for web, and enable the "Sign In
    with Apple" capability on the app's Bundle ID for mobile. Set `APPLE_SERVICES_ID` /
    `APPLE_BUNDLE_ID` in `apps/api/.env`. Full detail in `apps/api/src/lib/oauth.ts`.
-3. **Image storage bucket.** Avatars (and post images, once brief 03 lands) are stored via the
+3. **Image storage bucket.** Avatars and post-image embeds are stored via the
    provider in `apps/api/src/lib/storage-provider.ts`. Locally they sit on disk under
    `apps/api/uploads/` and are served by the API itself — fine for one dev machine, not for
    production. Create an S3 or Cloudflare R2 bucket, set `STORAGE_PROVIDER=s3` plus the
@@ -234,16 +247,18 @@ Five things need real decisions before this goes live — flagged here rather th
 - **Mobile is behind web.** Reporting, blocking, pagination, password reset, thread locking,
   supporter redemption, and the admin report list exist on web only. Closed by
   `docs/prompts/01-foundation.md`.
-- **User-uploaded avatar photos have no moderation path.** Uploads are validated (type, size,
-  dimensions) and EXIF-stripped, but nothing reviews what the picture *shows* — an offensive
-  avatar stays up until an admin hears about it via a user report. Decide on a review policy (and
-  ideally an automated screen) before launch; post-image embeds in brief 03 widen this surface.
+- **User-uploaded images (avatars AND post embeds) have no moderation path.** Uploads are
+  validated (type, size, dimensions) and EXIF-stripped, but nothing reviews what the picture
+  *shows* — an offensive image stays up until an admin hears about it via a user report. Post
+  embeds make this surface much larger than avatars alone: any verified member can now put an
+  arbitrary picture in front of every reader. Decide on a review policy (and ideally an
+  automated screen) before launch.
 - Avatar files uploaded via the local storage stub live in `apps/api/uploads/` and die with the
   machine — see "Image storage bucket" above before pointing real users at this.
 - Account deletion anonymizes to "[deleted]" rather than erasing content. A deleted author's
   threads/replies/messages remain readable; whether that satisfies a legal erasure request is a
   question for the compliance review above.
-- No post editing or deletion, no notifications, no search.
+- No notifications (mentions are already stored for it — see the `Mention` model), no search.
 - iOS app has not been run in a Simulator in this environment (Xcode is installed but not selected
   as the active developer directory — run
   `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`) — it typechecks cleanly and
