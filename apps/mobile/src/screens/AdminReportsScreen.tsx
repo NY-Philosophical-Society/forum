@@ -1,7 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlatList, StyleSheet, Text, View } from "react-native";
-import { formatDateTime, type ReportSummary } from "@nyps-forum/shared";
+import {
+  formatDateTime,
+  REPORT_CATEGORY_LABELS,
+  type ReportSummary,
+} from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
@@ -51,9 +55,13 @@ export function AdminReportsScreen() {
               <View style={styles.pill}>
                 <Text style={styles.pillText}>{item.targetType.toUpperCase()}</Text>
               </View>
-              <Text style={styles.meta}>{item.targetId}</Text>
+              <View style={styles.pill}>
+                <Text style={styles.pillText}>
+                  {REPORT_CATEGORY_LABELS[item.category].toUpperCase()}
+                </Text>
+              </View>
             </View>
-            <Text style={styles.body}>{item.reason}</Text>
+            {item.note ? <Text style={styles.body}>{item.note}</Text> : null}
             <Text style={styles.meta}>{formatDateTime(item.createdAt, dateFormat)}</Text>
           </View>
         )}

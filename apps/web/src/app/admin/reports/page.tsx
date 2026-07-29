@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type ReportSummary, formatDateTime } from "@nyps-forum/shared";
+import { REPORT_CATEGORY_LABELS, type ReportSummary, formatDateTime } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
@@ -51,11 +51,14 @@ export default function AdminReportsPage() {
           <div className="card" key={r.id}>
             <div className="row wrap" style={{ marginBottom: "0.5rem" }}>
               <span className="tag-static">{r.targetType}</span>
+              <span className="tag-static">{REPORT_CATEGORY_LABELS[r.category]}</span>
               <span className="meta">{r.targetId}</span>
             </div>
-            <p className="prose" style={{ fontSize: "var(--text-base)" }}>
-              {r.reason}
-            </p>
+            {r.note && (
+              <p className="prose" style={{ fontSize: "var(--text-base)" }}>
+                {r.note}
+              </p>
+            )}
             <p className="meta" style={{ marginTop: "0.5rem" }}>
               {formatDateTime(r.createdAt, dateFormat)}
             </p>
