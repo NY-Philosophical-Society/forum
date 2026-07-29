@@ -3,6 +3,8 @@ import { randomBytes } from "crypto";
 import { Router } from "express";
 import {
   appleAuthSchema,
+  changeEmailSchema,
+  changePasswordSchema,
   confirmPasswordResetSchema,
   googleAuthSchema,
   loginSchema,
@@ -80,6 +82,68 @@ authRouter.post("/login", authLimiter, async (req, res) => {
 
 authRouter.get("/me", requireAuth, async (req, res) => {
   res.json({ user: toPublicUser(req.user!) });
+});
+
+/**
+ * Private account details for the settings screen — email is deliberately
+ * not part of PublicUser, and hasPassword distinguishes "change password"
+ * from "set a password" for accounts created via Google/Apple.
+ */
+authRouter.get("/account", requireAuth, async (req, res) => {
+  res.json({ email: req.user!.email, hasPassword: req.user!.passwordHash !== null });
+});
+
+authRouter.post("/change-password", requireAuth, authLimiter, async (req, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  const { currentPassword, newPassword } = parsed.data;
+
+  // OAuth-created accounts (passwordHash === null) are setting a first
+  // password; everyone else must prove they know the current one.
+  if (req.user!.passwordHash) {
+    if (!currentPassword) {
+      return res.status(400).json({ error: "Enter your current password" });
+    }
+    const ok = await bcrypt.compare(currentPassword, req.user!.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ error: "Current password is incorrect" });
+    }
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({ where: { id: req.user!.id }, data: { passwordHash } });
+  res.json({ ok: true });
+});
+
+authRouter.post("/change-email", requireAuth, authLimiter, async (req, res) => {
+  const parsed = changeEmailSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  const { email, password } = parsed.data;
+
+  if (req.user!.passwordHash) {
+    if (!password) {
+      return res.status(400).json({ error: "Enter your password to change your email" });
+    }
+    const ok = await bcrypt.compare(password, req.user!.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ error: "Password is incorrect" });
+    }
+  }
+
+  if (email === req.user!.email) {
+    return res.json({ ok: true, email });
+  }
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    return res.status(409).json({ error: "An account with this email already exists" });
+  }
+
+  await prisma.user.update({ where: { id: req.user!.id }, data: { email } });
+  res.json({ ok: true, email });
 });
 
 /**

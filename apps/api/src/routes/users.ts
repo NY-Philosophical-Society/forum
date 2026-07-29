@@ -1,12 +1,13 @@
 import { randomUUID } from "crypto";
+import bcrypt from "bcryptjs";
 import express, { Router } from "express";
 import sharp from "sharp";
-import { updateProfileSchema } from "@nyps-forum/shared";
+import { deleteAccountSchema, updateProfileSchema } from "@nyps-forum/shared";
 import { prisma } from "../db";
 import { optionalAuth, requireAdmin, requireAuth } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
 import { storageProvider } from "../lib/storage-provider";
-import { writeLimiter } from "../lib/rate-limit";
+import { authLimiter, writeLimiter } from "../lib/rate-limit";
 
 export const usersRouter = Router();
 
@@ -214,6 +215,105 @@ usersRouter.get("/", requireAuth, async (req, res) => {
   });
 
   res.json({ users: users.map(toPublicUser) });
+});
+
+/**
+ * Delete your own account. Content is anonymized, not cascade-deleted:
+ * threads, replies, and messages survive under "[deleted]" so nobody else's
+ * conversations get holes blown in them. The row itself stays (deletedAt
+ * set) but can never sign in again; the email is tombstoned so it's free
+ * for a future signup.
+ */
+usersRouter.delete("/me", requireAuth, authLimiter, async (req, res) => {
+  const parsed = deleteAccountSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
+  if (req.user!.passwordHash) {
+    if (!parsed.data.password) {
+      return res.status(400).json({ error: "Enter your password to delete your account" });
+    }
+    const ok = await bcrypt.compare(parsed.data.password, req.user!.passwordHash);
+    if (!ok) {
+      return res.status(401).json({ error: "Password is incorrect" });
+    }
+  }
+
+  const avatarKey = req.user!.avatarUrl ? storageProvider.keyForUrl(req.user!.avatarUrl) : null;
+  await prisma.user.update({
+    where: { id: req.user!.id },
+    data: {
+      displayName: "[deleted]",
+      email: `deleted-${req.user!.id}@deleted.invalid`,
+      passwordHash: null,
+      googleId: null,
+      appleId: null,
+      avatarUrl: null,
+      bio: null,
+      verificationStatus: "UNVERIFIED",
+      isSupporter: false,
+      role: "user",
+      deletedAt: new Date(),
+    },
+  });
+  if (avatarKey) await storageProvider.remove(avatarKey);
+
+  res.json({ deleted: true });
+});
+
+/**
+ * Everything we hold about the caller, as JSON. This forum stores real
+ * names, verification status, and private messages — people are entitled to
+ * a copy of their own record.
+ */
+usersRouter.get("/me/export", requireAuth, async (req, res) => {
+  const myId = req.user!.id;
+  const [threads, posts, messagesSent, messagesReceived] = await Promise.all([
+    prisma.thread.findMany({ where: { authorId: myId }, orderBy: { createdAt: "asc" } }),
+    prisma.post.findMany({ where: { authorId: myId }, orderBy: { createdAt: "asc" } }),
+    prisma.message.findMany({ where: { senderId: myId }, orderBy: { createdAt: "asc" } }),
+    prisma.message.findMany({ where: { recipientId: myId }, orderBy: { createdAt: "asc" } }),
+  ]);
+
+  res.setHeader("Content-Disposition", 'attachment; filename="nyps-forum-export.json"');
+  res.json({
+    exportedAt: new Date().toISOString(),
+    account: {
+      id: myId,
+      email: req.user!.email,
+      displayName: req.user!.displayName,
+      bio: req.user!.bio,
+      avatarUrl: req.user!.avatarUrl,
+      verificationStatus: req.user!.verificationStatus,
+      isSupporter: req.user!.isSupporter,
+      createdAt: req.user!.createdAt.toISOString(),
+    },
+    threads: threads.map((t) => ({
+      id: t.id,
+      title: t.title,
+      body: t.body,
+      createdAt: t.createdAt.toISOString(),
+    })),
+    posts: posts.map((p) => ({
+      id: p.id,
+      threadId: p.threadId,
+      body: p.body,
+      createdAt: p.createdAt.toISOString(),
+    })),
+    messagesSent: messagesSent.map((m) => ({
+      id: m.id,
+      recipientId: m.recipientId,
+      body: m.body,
+      createdAt: m.createdAt.toISOString(),
+    })),
+    messagesReceived: messagesReceived.map((m) => ({
+      id: m.id,
+      senderId: m.senderId,
+      body: m.body,
+      createdAt: m.createdAt.toISOString(),
+    })),
+  });
 });
 
 /** Blocking prevents new DMs in either direction; it doesn't hide existing history or forum posts. */

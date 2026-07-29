@@ -126,7 +126,11 @@ messagesRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req,
   }
 
   const recipient = await prisma.user.findUnique({ where: { id: recipientId } });
-  if (!recipient) return res.status(404).json({ error: "Recipient not found" });
+  // A deleted account can still be *read* in old conversations, but new
+  // messages to it would land in a void.
+  if (!recipient || recipient.deletedAt) {
+    return res.status(404).json({ error: "Recipient not found" });
+  }
 
   const block = await prisma.block.findFirst({
     where: {
