@@ -8,6 +8,7 @@ import { postsRouter } from "./routes/posts";
 import { reportsRouter } from "./routes/reports";
 import { tagsRouter } from "./routes/tags";
 import { threadsRouter } from "./routes/threads";
+import { uploadsRouter } from "./routes/uploads";
 import { usersRouter } from "./routes/users";
 import { verificationRouter } from "./routes/verification";
 
@@ -36,5 +37,6 @@ app.use("/api/tags", tagsRouter);
 app.use("/api/threads", threadsRouter);
 app.use("/api/posts", postsRouter);
 app.use("/api/messages", messagesRouter);
+app.use("/api/uploads", uploadsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/reports", reportsRouter);
