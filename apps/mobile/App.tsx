@@ -200,7 +200,7 @@ function ProfileStack() {
       <ProfileStackNav.Screen
         name="AdminReports"
         component={AdminReportsScreen}
-        options={{ title: "Reports" }}
+        options={{ title: "Report queue" }}
       />
     </ProfileStackNav.Navigator>
   );

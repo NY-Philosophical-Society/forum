@@ -187,7 +187,8 @@ export function HomeScreen({ navigation }: Props) {
         data={threads ?? []}
         keyExtractor={(t) => t.id}
         renderItem={({ item }) => (
-          <View style={styles.card}>
+          <View style={[styles.card, item.pinnedAt ? styles.cardPinned : null]}>
+            {item.pinnedAt ? <Text style={styles.pinnedLabel}>❖ PINNED</Text> : null}
             <Pressable onPress={() => navigation.navigate("Thread", { threadId: item.id })}>
               <Text style={styles.cardTitle}>
                 {item.title}
@@ -298,6 +299,15 @@ function makeStyles(colors: ThemeColors) {
       borderRadius: radius.md,
       padding: spacing.lg,
       marginBottom: spacing.md,
+    },
+    // An admin pin: a terracotta kicker and a warmer border, never a fill.
+    cardPinned: { borderColor: colors.supporterBorder },
+    pinnedLabel: {
+      color: colors.accent,
+      fontFamily: fonts.displaySemi,
+      fontSize: type.xs,
+      letterSpacing: 1,
+      marginBottom: spacing.xs,
     },
     cardTitle: {
       fontFamily: fonts.serifBold,
