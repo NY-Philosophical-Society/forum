@@ -1,4 +1,12 @@
-import type { NotificationType, VerificationStatus } from "./schemas";
+import type {
+  ModerationAction,
+  NotificationType,
+  ReportAction,
+  ReportCategory,
+  ReportStatus,
+  ReportTargetType,
+  VerificationStatus,
+} from "./schemas";
 
 export interface PublicUser {
   id: string;
@@ -80,6 +88,11 @@ export interface ThreadSummary {
   myLiked: boolean;
   postCount: number;
   locked: boolean;
+  /**
+   * Set by an admin pin. Pinned threads sort above everything in both hot and
+   * new; the value is separate from hotScore so pinning never distorts ranking.
+   */
+  pinnedAt: string | null;
   /** Present on feed/detail/bookmark responses; absent where no viewer exists. */
   myBookmarked?: boolean;
 }
@@ -231,12 +244,122 @@ export interface SearchResponse {
   offset: number;
 }
 
+/**
+ * The reported content, inlined into the admin queue so a report can be judged
+ * without navigating away. `missing` covers a target that has since been hard-
+ * deleted or never existed (reports carry a bare id, not a foreign key).
+ */
+export interface ReportTargetPreview {
+  kind: ReportTargetType;
+  /** Deep-link coordinates: both null for a user report. */
+  threadId: string | null;
+  postId: string | null;
+  title: string | null;
+  /** Markdown for thread/post/message targets; the bio for a user target. */
+  body: string | null;
+  author: PublicUser | null;
+  createdAt: string | null;
+  /** Already soft-deleted — an admin may still want the record of it. */
+  deleted: boolean;
+  locked: boolean;
+  missing: boolean;
+}
+
 export interface ReportSummary {
   id: string;
-  reporterId: string;
+  /** Null only if the reporter's account has since been deleted. */
+  reporter: PublicUser | null;
+  targetType: ReportTargetType;
+  targetId: string;
+  category: ReportCategory;
+  /** The reporter's optional free-text note. */
+  note: string | null;
+  status: ReportStatus;
+  createdAt: string;
+  resolvedBy: PublicUser | null;
+  resolvedAt: string | null;
+  /** The action taken at resolution; null while the report is still open. */
+  resolutionAction: ReportAction | null;
+  resolutionNote: string | null;
+  target: ReportTargetPreview;
+}
+
+export interface ReportsResponse {
+  reports: ReportSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  /** Open reports overall, regardless of the current filter — drives the nav count. */
+  openCount: number;
+}
+
+export interface AdminUserSummary {
+  id: string;
+  displayName: string;
+  email: string;
+  avatarUrl: string | null;
+  verificationStatus: VerificationStatus;
+  role: "user" | "admin";
+  isSupporter: boolean;
+  bannedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  threadCount: number;
+  replyCount: number;
+  /** Open reports filed against this member or their content. */
+  openReportCount: number;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUserSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  /** Live admin count, so the UI can grey out the demote that would empty the role. */
+  adminCount: number;
+}
+
+export interface AdminThreadSummary {
+  id: string;
+  title: string;
+  author: PublicUser;
+  createdAt: string;
+  locked: boolean;
+  pinnedAt: string | null;
+  deleted: boolean;
+  likeCount: number;
+  postCount: number;
+}
+
+export interface AdminThreadsResponse {
+  threads: AdminThreadSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  pinnedCount: number;
+  pinLimit: number;
+}
+
+export interface ModerationLogEntry {
+  id: string;
+  /** Null only if the acting admin's account has since been deleted. */
+  actor: PublicUser | null;
+  action: ModerationAction;
   targetType: string;
   targetId: string;
-  reason: string;
-  status: string;
+  /** Label captured when the action ran, so the entry still reads after a delete. */
+  targetLabel: string | null;
+  reason: string | null;
   createdAt: string;
+}
+
+export interface ModerationLogResponse {
+  entries: ModerationLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
 }
