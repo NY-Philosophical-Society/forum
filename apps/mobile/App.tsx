@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, useNavigation, type NavigationProp } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
@@ -15,15 +15,19 @@ import {
   Newsreader_600SemiBold,
 } from "@expo-google-fonts/newsreader";
 import { ActivityIndicator, Image, Text, View } from "react-native";
+import { useEffect } from "react";
 import { AuthProvider, useAuth } from "./src/lib/auth-context";
 import { SettingsProvider, useSettings } from "./src/lib/settings-context";
-import { useUnreadCount } from "./src/lib/use-unread";
+import { useNotificationUnreadCount, useUnreadCount } from "./src/lib/use-unread";
+import { onPushOpened } from "./src/lib/push";
 import { fonts, type as typeScale } from "./src/lib/theme";
 import type {
+  AlertsStackParamList,
   AuthStackParamList,
   FeedStackParamList,
   MessagesStackParamList,
   ProfileStackParamList,
+  RootTabParamList,
 } from "./src/navigation";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { ThreadScreen } from "./src/screens/ThreadScreen";
@@ -44,9 +48,13 @@ import { AccountScreen } from "./src/screens/AccountScreen";
 import { FormattingScreen } from "./src/screens/FormattingScreen";
 import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
 import { AdminReportsScreen } from "./src/screens/AdminReportsScreen";
+import { NotificationsScreen } from "./src/screens/NotificationsScreen";
+import { SearchScreen } from "./src/screens/SearchScreen";
+import { SavedScreen } from "./src/screens/SavedScreen";
 
 const FeedStackNav = createNativeStackNavigator<FeedStackParamList>();
 const MessagesStackNav = createNativeStackNavigator<MessagesStackParamList>();
+const AlertsStackNav = createNativeStackNavigator<AlertsStackParamList>();
 const ProfileStackNav = createNativeStackNavigator<ProfileStackParamList>();
 const AuthStackNav = createNativeStackNavigator<AuthStackParamList>();
 const Tabs = createBottomTabNavigator();
@@ -104,7 +112,21 @@ function FeedStack() {
         component={UserProfileScreen}
         options={{ title: "Profile" }}
       />
+      <FeedStackNav.Screen name="Search" component={SearchScreen} options={{ title: "Search" }} />
     </FeedStackNav.Navigator>
+  );
+}
+
+function AlertsStack() {
+  const options = useHeaderOptions();
+  return (
+    <AlertsStackNav.Navigator screenOptions={options}>
+      <AlertsStackNav.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: "Notifications" }}
+      />
+    </AlertsStackNav.Navigator>
   );
 }
 

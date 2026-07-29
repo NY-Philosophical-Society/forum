@@ -1,10 +1,13 @@
 export type FeedStackParamList = {
   Home: undefined;
-  Thread: { threadId: string };
+  // highlightPostId: a notification/search deep link to one specific reply —
+  // the screen scrolls to it and marks it with an accent hairline.
+  Thread: { threadId: string; highlightPostId?: string };
   NewThread: { tagId?: string };
   // Initial values ride along so the edit screen never shows a loading state.
   EditThread: { threadId: string; title: string; body: string; tagIds: string[] };
   UserProfile: { userId: string };
+  Search: undefined;
 };
 
 export type MessagesStackParamList = {
@@ -13,8 +16,13 @@ export type MessagesStackParamList = {
   UserProfile: { userId: string };
 };
 
+export type AlertsStackParamList = {
+  Notifications: undefined;
+};
+
 export type ProfileStackParamList = {
   Profile: undefined;
+  Saved: undefined;
   UserProfile: { userId: string };
   EditProfile: undefined;
   Account: undefined;
@@ -37,5 +45,6 @@ export type AuthStackParamList = {
 export type RootTabParamList = {
   FeedTab: { screen: keyof FeedStackParamList; params?: object } | undefined;
   MessagesTab: { screen: keyof MessagesStackParamList; params?: object } | undefined;
+  AlertsTab: { screen: keyof AlertsStackParamList; params?: object } | undefined;
   ProfileTab: { screen: keyof ProfileStackParamList; params?: object } | undefined;
 };
