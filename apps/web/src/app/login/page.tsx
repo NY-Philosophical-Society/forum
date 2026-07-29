@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "~/lib/auth-context";
@@ -28,35 +29,45 @@ export default function LoginPage() {
   }
 
   return (
-    <div>
-      <h1>Log in</h1>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-icon">Φ</div>
+        <h1 className="auth-title">Log in to NYPS Forum</h1>
+        <p className="auth-subtitle">
+          First time here? <Link href="/signup">Create an account</Link>
+        </p>
 
-      <OAuthButtons />
+        <OAuthButtons />
 
-      <form onSubmit={onSubmit}>
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Logging in..." : "Log in"}
-        </button>
-      </form>
+        <form onSubmit={onSubmit}>
+          <label>
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </label>
+          {error && <p className="error">{error}</p>}
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Logging in..." : "Log in"}
+          </button>
+        </form>
+
+        <p className="auth-footer">
+          <Link href="/forgot-password">Forgot your password?</Link>
+        </p>
+      </div>
     </div>
   );
 }

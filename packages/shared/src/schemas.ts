@@ -76,3 +76,34 @@ export const oauthDevMockSchema = z.object({
   displayName: z.string().min(2).max(80),
 });
 export type OAuthDevMockInput = z.infer<typeof oauthDevMockSchema>;
+
+export const ReportTargetType = {
+  THREAD: "thread",
+  POST: "post",
+  MESSAGE: "message",
+  USER: "user",
+} as const;
+export type ReportTargetType = (typeof ReportTargetType)[keyof typeof ReportTargetType];
+
+export const createReportSchema = z.object({
+  targetType: z.enum(["thread", "post", "message", "user"]),
+  targetId: z.string(),
+  reason: z.string().min(3).max(1000),
+});
+export type CreateReportInput = z.infer<typeof createReportSchema>;
+
+export const redeemCodeSchema = z.object({
+  code: z.string().min(1),
+});
+export type RedeemCodeInput = z.infer<typeof redeemCodeSchema>;
+
+export const requestPasswordResetSchema = z.object({
+  email: z.string().email(),
+});
+export type RequestPasswordResetInput = z.infer<typeof requestPasswordResetSchema>;
+
+export const confirmPasswordResetSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+export type ConfirmPasswordResetInput = z.infer<typeof confirmPasswordResetSchema>;

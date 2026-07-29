@@ -10,16 +10,25 @@ datasource db {
 }
 
 model User {
-  id                  String   @id @default(cuid())
-  email               String   @unique
+  id                  String    @id @default(cuid())
+  email               String    @unique
   // Null for accounts created via Google/Apple sign-in, which have no password.
   passwordHash        String?
   // Set only for accounts created via that provider's sign-in.
-  googleId            String?  @unique
-  appleId             String?  @unique
+  googleId            String?   @unique
+  appleId             String?   @unique
   displayName         String
-  verificationStatus  String   @default("UNVERIFIED")
-  createdAt           DateTime @default(now())
+  verificationStatus  String    @default("UNVERIFIED")
+  // "user" | "admin". No bootstrap admin UI yet — promote via direct DB
+  // access (see README) until one exists.
+  role                String    @default("user")
+  bannedAt            DateTime?
+  // Set by redeeming an access code (see routes/auth.ts redeem-code) — a
+  // placeholder for the real donation/subscription API check planned once
+  // this forum is gated as a member perk.
+  isSupporter         Boolean   @default(false)
+  supporterSince      DateTime?
+  createdAt           DateTime  @default(now())
 
   verificationSessions VerificationSession[]
   threads              Thread[]
@@ -28,6 +37,10 @@ model User {
   postLikes            PostLike[]
   sentMessages         Message[] @relation("SentMessages")
   receivedMessages     Message[] @relation("ReceivedMessages")
+  reports              Report[]
+  blocking             Block[]                @relation("Blocker")
+  blockedBy            Block[]                @relation("Blocked")
+  passwordResetTokens  PasswordResetToken[]
 }
 
 model VerificationSession {
@@ -60,6 +73,11 @@ model Thread {
   authorId   String
   title      String
   body       String
+  // Recomputed and stored whenever a like/reply changes it (see
+  // lib/ranking.ts) so the feed can ORDER BY this column directly instead of
+  // fetching every thread and sorting in JS.
+  hotScore   Float    @default(0)
+  locked     Boolean  @default(false)
   createdAt  DateTime @default(now())
 
   author User         @relation(fields: [authorId], references: [id])
@@ -119,4 +137,46 @@ model Message {
 
   sender    User @relation("SentMessages", fields: [senderId], references: [id])
   recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id])
+}
+
+// A user reporting a thread, a post, a message, or another user. No admin UI
+// to review these yet — GET /api/reports (admin-only) lists them for now.
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  targetType String
+  targetId   String
+  reason     String
+  status     String   @default("open")
+  createdAt  DateTime @default(now())
+
+  reporter User @relation(fields: [reporterId], references: [id])
+}
+
+// Blocking prevents new messages in either direction; it does not hide
+// existing history or forum posts/threads (that's what Report is for).
+model Block {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id])
+  blocked User @relation("Blocked", fields: [blockedId], references: [id])
+
+  @@unique([blockerId, blockedId])
+}
+
+// No email service is configured (see routes/auth.ts), so the reset link is
+// surfaced directly in the API response / server logs in dev instead of
+// being emailed — never do that in production.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 }

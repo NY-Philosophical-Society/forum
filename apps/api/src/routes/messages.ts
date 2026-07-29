@@ -3,8 +3,11 @@ import { sendMessageSchema } from "@nyps-forum/shared";
 import { prisma } from "../db";
 import { requireAuth, requireVerified } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
+import { writeLimiter } from "../lib/rate-limit";
 
 export const messagesRouter = Router();
+
+const DEFAULT_MESSAGES_LIMIT = 30;
 
 function serializeMessage(m: {
   id: string;
@@ -64,10 +67,16 @@ messagesRouter.get("/conversations", requireAuth, async (req, res) => {
   });
 });
 
-/** Full message thread with one other user; marks their messages to you as read. */
+/**
+ * Message thread with one other user, most recent page first; marks their
+ * messages to you as read. `offset` pages further back into history —
+ * `offset=0` (the default) is the most recent `limit` messages.
+ */
 messagesRouter.get("/:userId", requireAuth, async (req, res) => {
   const myId = req.user!.id;
   const otherId = req.params.userId;
+  const limit = Math.min(Number(req.query.limit) || DEFAULT_MESSAGES_LIMIT, 100);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
 
   const otherUser = await prisma.user.findUnique({ where: { id: otherId } });
   if (!otherUser) return res.status(404).json({ error: "User not found" });
@@ -77,23 +86,35 @@ messagesRouter.get("/:userId", requireAuth, async (req, res) => {
     data: { readAt: new Date() },
   });
 
-  const messages = await prisma.message.findMany({
-    where: {
-      OR: [
-        { senderId: myId, recipientId: otherId },
-        { senderId: otherId, recipientId: myId },
-      ],
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  const where = {
+    OR: [
+      { senderId: myId, recipientId: otherId },
+      { senderId: otherId, recipientId: myId },
+    ],
+  };
+
+  const [messages, total] = await Promise.all([
+    prisma.message.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: offset,
+      take: limit,
+    }),
+    prisma.message.count({ where }),
+  ]);
+  messages.reverse(); // oldest-first for display, having fetched newest-first for pagination
 
   res.json({
     otherUser: toPublicUser(otherUser),
     messages: messages.map(serializeMessage),
+    total,
+    limit,
+    offset,
+    hasMore: offset + messages.length < total,
   });
 });
 
-messagesRouter.post("/", requireAuth, requireVerified, async (req, res) => {
+messagesRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, res) => {
   const parsed = sendMessageSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -106,6 +127,18 @@ messagesRouter.post("/", requireAuth, requireVerified, async (req, res) => {
 
   const recipient = await prisma.user.findUnique({ where: { id: recipientId } });
   if (!recipient) return res.status(404).json({ error: "Recipient not found" });
+
+  const block = await prisma.block.findFirst({
+    where: {
+      OR: [
+        { blockerId: req.user!.id, blockedId: recipientId },
+        { blockerId: recipientId, blockedId: req.user!.id },
+      ],
+    },
+  });
+  if (block) {
+    return res.status(403).json({ error: "You can't message this user" });
+  }
 
   const message = await prisma.message.create({
     data: { senderId: req.user!.id, recipientId, body },

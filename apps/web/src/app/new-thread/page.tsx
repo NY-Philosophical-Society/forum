@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import type { TagWithCount } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 
-export default function NewThreadPage() {
+function NewThreadForm() {
   const { user, token, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -112,5 +112,15 @@ export default function NewThreadPage() {
         </button>
       </form>
     </div>
+  );
+}
+
+// useSearchParams() forces client-side rendering, which `next build` rejects
+// during static prerender unless it sits inside a Suspense boundary.
+export default function NewThreadPage() {
+  return (
+    <Suspense fallback={<p className="meta">Loading...</p>}>
+      <NewThreadForm />
+    </Suspense>
   );
 }

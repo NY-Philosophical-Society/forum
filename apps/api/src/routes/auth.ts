@@ -1,10 +1,14 @@
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 import { Router } from "express";
 import {
   appleAuthSchema,
+  confirmPasswordResetSchema,
   googleAuthSchema,
   loginSchema,
   oauthDevMockSchema,
+  redeemCodeSchema,
+  requestPasswordResetSchema,
   signupSchema,
 } from "@nyps-forum/shared";
 import { signToken } from "../auth";
@@ -19,10 +23,11 @@ import {
   verifyGoogleIdToken,
 } from "../lib/oauth";
 import { findOrCreateAppleUser, findOrCreateGoogleUser } from "../lib/oauth-user";
+import { authLimiter } from "../lib/rate-limit";
 
 export const authRouter = Router();
 
-authRouter.post("/signup", async (req, res) => {
+authRouter.post("/signup", authLimiter, async (req, res) => {
   const parsed = signupSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -43,7 +48,7 @@ authRouter.post("/signup", async (req, res) => {
   res.status(201).json({ token, user: toPublicUser(user) });
 });
 
-authRouter.post("/login", async (req, res) => {
+authRouter.post("/login", authLimiter, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -53,6 +58,9 @@ authRouter.post("/login", async (req, res) => {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     return res.status(401).json({ error: "Invalid email or password" });
+  }
+  if (user.bannedAt) {
+    return res.status(403).json({ error: "This account has been suspended." });
   }
 
   if (!user.passwordHash) {
@@ -74,6 +82,32 @@ authRouter.get("/me", requireAuth, async (req, res) => {
   res.json({ user: toPublicUser(req.user!) });
 });
 
+/**
+ * Supporter access is meant to eventually come from a real donation/journal
+ * subscription check via an API connection to that system. Until that
+ * integration exists, WISDOMKEY is a standing (never-expiring, unlimited-use)
+ * code anyone can redeem — a deliberate placeholder, not a real access
+ * control. Swap this out for the real check before treating supporter status
+ * as gating anything meaningful.
+ */
+authRouter.post("/redeem-code", requireAuth, async (req, res) => {
+  const parsed = redeemCodeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
+  if (parsed.data.code.trim().toUpperCase() !== "WISDOMKEY") {
+    return res.status(400).json({ error: "That code isn't valid." });
+  }
+
+  const user = await prisma.user.update({
+    where: { id: req.user!.id },
+    data: { isSupporter: true, supporterSince: req.user!.isSupporter ? undefined : new Date() },
+  });
+
+  res.json({ user: toPublicUser(user) });
+});
+
 authRouter.get("/oauth/config", (_req, res) => {
   res.json(oauthConfig());
 });
@@ -89,9 +123,10 @@ authRouter.post("/oauth/google", async (req, res) => {
 
   try {
     const identity = await verifyGoogleIdToken(parsed.data.idToken);
-    const user = await findOrCreateGoogleUser(identity.providerId, identity.email, identity.name);
+    const { user, linked } = await findOrCreateGoogleUser(identity.providerId, identity.email, identity.name);
+    if (user.bannedAt) return res.status(403).json({ error: "This account has been suspended." });
     const token = signToken({ userId: user.id });
-    res.json({ token, user: toPublicUser(user) });
+    res.json({ token, user: toPublicUser(user), linked });
   } catch {
     res.status(401).json({ error: "Could not verify Google sign-in" });
   }
@@ -108,13 +143,14 @@ authRouter.post("/oauth/apple", async (req, res) => {
 
   try {
     const identity = await verifyAppleIdToken(parsed.data.identityToken);
-    const user = await findOrCreateAppleUser(
+    const { user, linked } = await findOrCreateAppleUser(
       identity.providerId,
       identity.email,
       parsed.data.displayName,
     );
+    if (user.bannedAt) return res.status(403).json({ error: "This account has been suspended." });
     const token = signToken({ userId: user.id });
-    res.json({ token, user: toPublicUser(user) });
+    res.json({ token, user: toPublicUser(user), linked });
   } catch {
     res.status(401).json({ error: "Could not verify Apple sign-in" });
   }
@@ -138,15 +174,79 @@ authRouter.post("/oauth/dev-mock", async (req, res) => {
     if (isGoogleConfigured()) {
       return res.status(403).json({ error: "Google sign-in is configured — use the real flow" });
     }
-    const user = await findOrCreateGoogleUser(`mock-google:${email}`, email, displayName);
+    const { user, linked } = await findOrCreateGoogleUser(`mock-google:${email}`, email, displayName);
+    if (user.bannedAt) return res.status(403).json({ error: "This account has been suspended." });
     const token = signToken({ userId: user.id });
-    return res.json({ token, user: toPublicUser(user) });
+    return res.json({ token, user: toPublicUser(user), linked });
   }
 
   if (isAppleConfigured()) {
     return res.status(403).json({ error: "Apple sign-in is configured — use the real flow" });
   }
-  const user = await findOrCreateAppleUser(`mock-apple:${email}`, email, displayName);
+  const { user, linked } = await findOrCreateAppleUser(`mock-apple:${email}`, email, displayName);
+  if (user.bannedAt) return res.status(403).json({ error: "This account has been suspended." });
   const token = signToken({ userId: user.id });
-  res.json({ token, user: toPublicUser(user) });
+  res.json({ token, user: toPublicUser(user), linked });
+});
+
+/**
+ * No email service is configured (see the module comment on
+ * PasswordResetToken in schema.prisma) — the reset link is logged to the
+ * server console always, and also returned directly in the response outside
+ * production so the flow can be built and demoed end-to-end. Wire up a real
+ * mailer (SES, Postmark, Resend, ...) before launch and stop returning
+ * `devResetUrl`.
+ */
+authRouter.post("/password-reset/request", authLimiter, async (req, res) => {
+  const parsed = requestPasswordResetSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  const { email } = parsed.data;
+
+  const genericResponse = {
+    message: "If that email has a password-based account, we've sent reset instructions.",
+  };
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.passwordHash) {
+    // Same response whether the account doesn't exist or is OAuth-only, so
+    // this endpoint can't be used to enumerate registered emails.
+    return res.json(genericResponse);
+  }
+
+  const token = randomBytes(32).toString("hex");
+  await prisma.passwordResetToken.create({
+    data: { userId: user.id, token, expiresAt: new Date(Date.now() + 60 * 60 * 1000) },
+  });
+
+  const webUrl = process.env.WEB_APP_URL ?? "http://localhost:3000";
+  const resetUrl = `${webUrl}/reset-password?token=${token}`;
+  console.log(`[password-reset] link for ${email}: ${resetUrl}`);
+
+  res.json({
+    ...genericResponse,
+    ...(process.env.NODE_ENV !== "production" ? { devResetUrl: resetUrl, devToken: token } : {}),
+  });
+});
+
+authRouter.post("/password-reset/confirm", authLimiter, async (req, res) => {
+  const parsed = confirmPasswordResetSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  const { token, password } = parsed.data;
+
+  const resetToken = await prisma.passwordResetToken.findUnique({ where: { token } });
+  if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+    return res.status(400).json({ error: "This reset link is invalid or has expired." });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash } }),
+    prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { usedAt: new Date() } }),
+  ]);
+
+  res.json({ ok: true });
 });

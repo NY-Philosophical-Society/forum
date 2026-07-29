@@ -40,6 +40,10 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
+function afterAuth(res: AuthResponse, router: ReturnType<typeof useRouter>) {
+  router.push(res.linked ? "/?linked=1" : "/");
+}
+
 /**
  * Real Google Identity Services / Sign in with Apple JS integration when the
  * server has real credentials configured; otherwise falls back to a local
@@ -71,7 +75,7 @@ export function OAuthButtons() {
               idToken: response.credential,
             });
             setSession(res.token, res.user);
-            router.push("/");
+            afterAuth(res, router);
           } catch (err: any) {
             setError(err.message ?? "Google sign-in failed");
           }
@@ -109,7 +113,7 @@ export function OAuthButtons() {
         displayName: name || undefined,
       });
       setSession(res.token, res.user);
-      router.push("/");
+      afterAuth(res, router);
     } catch (err: any) {
       setError(err.message ?? "Apple sign-in failed");
     }
@@ -118,57 +122,35 @@ export function OAuthButtons() {
   if (!config) return null;
 
   return (
-    <div style={{ marginBottom: "1rem" }}>
+    <div>
       {error && <p className="error">{error}</p>}
 
       {config.google.enabled ? (
         <div ref={googleButtonRef} style={{ marginBottom: "0.5rem" }} />
       ) : (
-        <button
-          type="button"
-          className="secondary"
-          style={{ width: "100%", marginBottom: "0.5rem" }}
-          onClick={() => router.push("/oauth/mock/google")}
-        >
-          Continue with Google (demo mode)
+        <button type="button" className="oauth-button" onClick={() => router.push("/oauth/mock/google")}>
+          Continue with Google <span className="meta">(demo mode)</span>
         </button>
       )}
 
       {config.apple.enabled ? (
-        <button type="button" className="secondary" style={{ width: "100%" }} onClick={signInWithApple}>
+        <button type="button" className="oauth-button" onClick={signInWithApple}>
           Continue with Apple
         </button>
       ) : (
-        <button
-          type="button"
-          className="secondary"
-          style={{ width: "100%" }}
-          onClick={() => router.push("/oauth/mock/apple")}
-        >
-          Continue with Apple (demo mode)
+        <button type="button" className="oauth-button" onClick={() => router.push("/oauth/mock/apple")}>
+          Continue with Apple <span className="meta">(demo mode)</span>
         </button>
       )}
 
-      <p className="meta" style={{ marginTop: "0.5rem" }}>
-        {config.google.enabled && config.apple.enabled
-          ? ""
-          : "Real Google/Apple sign-in isn't configured on this server yet — the buttons above use a local demo flow instead."}
-      </p>
+      {(!config.google.enabled || !config.apple.enabled) && (
+        <p className="meta" style={{ marginTop: "0.25rem" }}>
+          Real Google/Apple sign-in isn&apos;t configured on this server yet — using a local demo
+          flow instead.
+        </p>
+      )}
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          margin: "1rem 0",
-          color: "var(--muted)",
-          fontSize: "0.85rem",
-        }}
-      >
-        <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-        or continue with email
-        <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-      </div>
+      <div className="auth-divider">or continue with email</div>
     </div>
   );
 }

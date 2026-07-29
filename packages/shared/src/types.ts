@@ -4,12 +4,16 @@ export interface PublicUser {
   id: string;
   displayName: string;
   verificationStatus: VerificationStatus;
+  role: "user" | "admin";
+  isSupporter: boolean;
   createdAt: string;
 }
 
 export interface AuthResponse {
   token: string;
   user: PublicUser;
+  /** True when this sign-in attached a new provider (Google/Apple) to an existing password account. */
+  linked?: boolean;
 }
 
 export interface Tag {
@@ -32,6 +36,15 @@ export interface ThreadSummary {
   likeCount: number;
   myLiked: boolean;
   postCount: number;
+  locked: boolean;
+}
+
+export interface ThreadFeedResponse {
+  threads: ThreadSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
 }
 
 export interface Post {
@@ -50,6 +63,10 @@ export interface ThreadDetail extends ThreadSummary {
   posts: Post[];
   /** True when this response is a truncated preview for an anonymous (not-logged-in) visitor. */
   previewOnly: boolean;
+  repliesTotal: number;
+  repliesLimit: number;
+  repliesOffset: number;
+  hasMoreReplies: boolean;
 }
 
 export interface VerificationSessionResponse {
@@ -74,7 +91,26 @@ export interface ConversationSummary {
   unreadCount: number;
 }
 
+export interface ConversationResponse {
+  otherUser: PublicUser;
+  messages: DirectMessage[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 export interface OAuthConfig {
   google: { enabled: boolean; webClientId: string | null; iosClientId: string | null };
   apple: { enabled: boolean; servicesId: string | null };
+}
+
+export interface ReportSummary {
+  id: string;
+  reporterId: string;
+  targetType: string;
+  targetId: string;
+  reason: string;
+  status: string;
+  createdAt: string;
 }

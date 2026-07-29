@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { hotScore, recomputeThreadHotScore } from "../src/lib/ranking";
 
 const prisma = new PrismaClient();
 
@@ -366,6 +367,7 @@ async function seedThread(spec: ThreadSeed, tagsBySlug: Record<string, { id: str
       body: spec.body,
       authorId: author.id,
       createdAt,
+      hotScore: hotScore(0, 0, createdAt),
       tags: { connect: [{ id: tagsBySlug[spec.tagSlug].id }] },
     },
   });
@@ -385,6 +387,7 @@ async function seedThread(spec: ThreadSeed, tagsBySlug: Record<string, { id: str
     });
     createdPosts.push(post);
   }
+  await recomputeThreadHotScore(thread.id);
 
   console.log(`Seeded thread "${spec.title}" with ${spec.replies.length} replies.`);
 }
@@ -393,6 +396,29 @@ async function main() {
   const tagsBySlug = await seedTags();
   for (const spec of THREADS) {
     await seedThread(spec, tagsBySlug);
+  }
+
+  // Demo moderator account — there's no bootstrap admin UI, so this is the
+  // one way to get an admin account locally. Promote a real account the same
+  // way (`role: "admin"`) via direct DB access until an admin UI exists.
+  await prisma.user.upsert({
+    where: { email: "admin@demo.nyphilosophy.org" },
+    update: { role: "admin" },
+    create: {
+      email: "admin@demo.nyphilosophy.org",
+      displayName: "Society Admin",
+      passwordHash: await bcrypt.hash(DEMO_PASSWORD, 10),
+      verificationStatus: "VERIFIED",
+      role: "admin",
+    },
+  });
+  console.log("Seeded demo admin account (admin@demo.nyphilosophy.org / demo-password-123).");
+
+  // Backfill hotScore for any thread that predates this field (e.g. created
+  // via the API directly during earlier manual testing).
+  const allThreads = await prisma.thread.findMany({ select: { id: true } });
+  for (const t of allThreads) {
+    await recomputeThreadHotScore(t.id);
   }
 }
 

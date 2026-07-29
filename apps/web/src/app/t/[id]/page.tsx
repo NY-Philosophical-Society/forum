@@ -6,6 +6,9 @@ import { flattenPostTree, formatDateTime, type ThreadDetail } from "@nyps-forum/
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
+import { ReportButton } from "../../report-button";
+
+const REPLIES_PAGE = 20;
 
 export default function ThreadPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,10 +19,16 @@ export default function ThreadPage() {
   const [replyBody, setReplyBody] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [repliesWindow, setRepliesWindow] = useState(REPLIES_PAGE);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [locking, setLocking] = useState(false);
 
-  async function load() {
+  async function load(window: number) {
     try {
-      const { thread } = await api.get<{ thread: ThreadDetail }>(`/api/threads/${id}`, token);
+      const { thread } = await api.get<{ thread: ThreadDetail }>(
+        `/api/threads/${id}?repliesLimit=${window}&repliesOffset=0`,
+        token,
+      );
       setThread(thread);
     } catch (e: any) {
       setError(e.message);
@@ -27,20 +36,39 @@ export default function ThreadPage() {
   }
 
   useEffect(() => {
-    load();
+    load(repliesWindow);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, token]);
+
+  async function loadMoreReplies() {
+    setLoadingMore(true);
+    const nextWindow = repliesWindow + REPLIES_PAGE;
+    await load(nextWindow);
+    setRepliesWindow(nextWindow);
+    setLoadingMore(false);
+  }
 
   async function toggleThreadLike() {
     if (!token) return;
     await api.post(`/api/threads/${id}/like`, {}, token);
-    load();
+    load(repliesWindow);
   }
 
   async function togglePostLike(postId: string) {
     if (!token) return;
     await api.post(`/api/posts/${postId}/like`, {}, token);
-    load();
+    load(repliesWindow);
+  }
+
+  async function toggleLock() {
+    if (!token) return;
+    setLocking(true);
+    try {
+      await api.post(`/api/threads/${id}/lock`, {}, token);
+      await load(repliesWindow);
+    } finally {
+      setLocking(false);
+    }
   }
 
   async function submitReply(e: React.FormEvent) {
@@ -55,7 +83,11 @@ export default function ThreadPage() {
       );
       setReplyBody("");
       setReplyTo(null);
-      load();
+      // Grow the window by one so the just-posted reply is visible even if
+      // it landed past what was previously loaded.
+      const nextWindow = repliesWindow + 1;
+      await load(nextWindow);
+      setRepliesWindow(nextWindow);
     } finally {
       setSubmitting(false);
     }
@@ -64,12 +96,22 @@ export default function ThreadPage() {
   if (error) return <p className="error">{error}</p>;
   if (!thread) return <p>Loading...</p>;
 
-  const canPost = user?.verificationStatus === "VERIFIED";
+  const canPost = user?.verificationStatus === "VERIFIED" && !thread.locked;
   const orderedPosts = flattenPostTree(thread.posts);
 
   return (
     <div>
-      <h1>{thread.title}</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
+        <h1 style={{ margin: 0 }}>
+          {thread.title}
+          {thread.locked && " 🔒"}
+        </h1>
+        {user?.role === "admin" && (
+          <button className="secondary" onClick={toggleLock} disabled={locking}>
+            {thread.locked ? "Unlock" : "Lock"} thread
+          </button>
+        )}
+      </div>
       <p className="meta">
         by {thread.author.displayName} &middot; {formatDateTime(thread.createdAt, dateFormat)}
       </p>
@@ -87,11 +129,12 @@ export default function ThreadPage() {
         <div className="like-row">
           <button
             className={`like-button ${thread.myLiked ? "like-button-active" : ""}`}
-            disabled={!canPost}
+            disabled={user?.verificationStatus !== "VERIFIED"}
             onClick={toggleThreadLike}
           >
             ♥ {thread.likeCount}
           </button>
+          <ReportButton targetType="thread" targetId={thread.id} />
         </div>
       </div>
 
@@ -127,7 +170,7 @@ export default function ThreadPage() {
               <div className="like-row">
                 <button
                   className={`like-button ${p.myLiked ? "like-button-active" : ""}`}
-                  disabled={!canPost}
+                  disabled={user?.verificationStatus !== "VERIFIED"}
                   onClick={() => togglePostLike(p.id)}
                 >
                   ♥ {p.likeCount}
@@ -137,11 +180,20 @@ export default function ThreadPage() {
                     Reply
                   </button>
                 )}
+                <ReportButton targetType="post" targetId={p.id} />
               </div>
             </div>
           ))}
 
-          {canPost ? (
+          {thread.hasMoreReplies && (
+            <button className="load-more" onClick={loadMoreReplies} disabled={loadingMore}>
+              {loadingMore ? "Loading..." : "Load more replies"}
+            </button>
+          )}
+
+          {thread.locked ? (
+            <p className="notice">This thread is locked — no new replies.</p>
+          ) : canPost ? (
             <form onSubmit={submitReply} style={{ marginTop: "1.5rem" }}>
               <label>
                 {replyTo ? "Replying to a comment" : "Add a reply"}

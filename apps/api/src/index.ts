@@ -4,6 +4,7 @@ import express from "express";
 import { authRouter } from "./routes/auth";
 import { messagesRouter } from "./routes/messages";
 import { postsRouter } from "./routes/posts";
+import { reportsRouter } from "./routes/reports";
 import { tagsRouter } from "./routes/tags";
 import { threadsRouter } from "./routes/threads";
 import { usersRouter } from "./routes/users";
@@ -23,6 +24,7 @@ app.use("/api/threads", threadsRouter);
 app.use("/api/posts", postsRouter);
 app.use("/api/messages", messagesRouter);
 app.use("/api/users", usersRouter);
+app.use("/api/reports", reportsRouter);
 
 const port = Number(process.env.PORT ?? 4000);
 app.listen(port, () => {

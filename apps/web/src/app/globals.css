@@ -16,6 +16,9 @@
   --badge-pending-text: #8a5f10;
   --badge-rejected-bg: #f6e6e4;
   --badge-rejected-border: #e0a89f;
+  --badge-supporter-bg: #f3e6d0;
+  --badge-supporter-border: #d9b979;
+  --badge-supporter-text: #7a5c14;
 }
 
 :root[data-theme="dark"] {
@@ -36,6 +39,9 @@
   --badge-pending-text: #e0b96a;
   --badge-rejected-bg: #33201d;
   --badge-rejected-border: #6b3b34;
+  --badge-supporter-bg: #332a14;
+  --badge-supporter-border: #6b5424;
+  --badge-supporter-text: #e0c078;
 }
 
 * {
@@ -360,4 +366,228 @@ button:disabled {
 
 .wall-card > div {
   justify-content: center;
+}
+
+.badge-supporter {
+  background: var(--badge-supporter-bg);
+  border-color: var(--badge-supporter-border);
+  color: var(--badge-supporter-text);
+}
+
+/* --- Auth pages (Substack-style centered card) --- */
+
+.auth-page {
+  min-height: calc(100vh - 200px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 10px 30px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.auth-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--solid);
+  color: var(--solid-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Libre Baskerville", serif;
+  font-weight: bold;
+  font-size: 1.3rem;
+  margin: 0 auto 1.25rem;
+}
+
+.auth-title {
+  font-size: 1.4rem;
+  font-weight: bold;
+  margin: 0 0 0.4rem;
+}
+
+.auth-subtitle {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem;
+}
+
+.auth-card form {
+  max-width: none;
+  text-align: left;
+}
+
+.auth-card button[type="submit"] {
+  width: 100%;
+  justify-content: center;
+  padding: 0.7rem 1rem;
+  font-size: 1rem;
+  margin-top: 0.25rem;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.oauth-button {
+  width: 100%;
+  justify-content: center;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  padding: 0.65rem 1rem;
+  margin-bottom: 0.6rem;
+  font-weight: 600;
+}
+
+.auth-footer {
+  margin-top: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* --- Profile dropdown --- */
+
+.profile-menu {
+  position: relative;
+}
+
+.profile-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  border: none;
+  padding: 0.2rem;
+  cursor: pointer;
+  color: var(--ink);
+  width: fit-content;
+}
+
+.profile-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--solid);
+  color: var(--solid-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+  font-family: system-ui, sans-serif;
+  flex-shrink: 0;
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 220px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  z-index: 20;
+}
+
+.profile-dropdown-header {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-dropdown-name {
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+
+.profile-dropdown-email {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.profile-dropdown a,
+.profile-dropdown button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.65rem 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.profile-dropdown a:hover,
+.profile-dropdown button:hover {
+  background: var(--paper);
+}
+
+.profile-dropdown .danger {
+  color: var(--danger);
+  border-top: 1px solid var(--border);
+}
+
+/* --- Misc --- */
+
+.load-more {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.75rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px dashed var(--border);
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  width: fit-content;
+}
+
+.toast {
+  border: 1px solid var(--badge-verified-border);
+  background: var(--badge-verified-bg);
+  color: var(--badge-verified-text);
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
 }

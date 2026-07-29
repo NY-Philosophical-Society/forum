@@ -2,37 +2,68 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { DirectMessage, PublicUser } from "@nyps-forum/shared";
+import type { ConversationResponse, DirectMessage, PublicUser } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
+import { ReportButton } from "../../report-button";
+
+const MESSAGES_PAGE = 30;
 
 export default function ConversationPage() {
   const { userId } = useParams<{ userId: string }>();
   const { user, token } = useAuth();
   const [otherUser, setOtherUser] = useState<PublicUser | null>(null);
   const [messages, setMessages] = useState<DirectMessage[] | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [messagesWindow, setMessagesWindow] = useState(MESSAGES_PAGE);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
-  async function load() {
+  async function load(window: number) {
     if (!token) return;
     try {
-      const res = await api.get<{ otherUser: PublicUser; messages: DirectMessage[] }>(
-        `/api/messages/${userId}`,
+      const res = await api.get<ConversationResponse>(
+        `/api/messages/${userId}?limit=${window}&offset=0`,
         token,
       );
       setOtherUser(res.otherUser);
       setMessages(res.messages);
+      setHasMore(res.hasMore);
     } catch (e: any) {
       setError(e.message);
     }
   }
 
   useEffect(() => {
-    load();
+    load(messagesWindow);
+    api
+      .get<{ blocked: boolean }>(`/api/users/${userId}/block`, token)
+      .then((res) => setBlocked(res.blocked))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, token]);
+
+  async function loadOlder() {
+    setLoadingMore(true);
+    const nextWindow = messagesWindow + MESSAGES_PAGE;
+    await load(nextWindow);
+    setMessagesWindow(nextWindow);
+    setLoadingMore(false);
+  }
+
+  async function toggleBlock() {
+    if (!token) return;
+    if (blocked) {
+      await api.delete(`/api/users/${userId}/block`, token);
+      setBlocked(false);
+    } else {
+      await api.post(`/api/users/${userId}/block`, {}, token);
+      setBlocked(true);
+    }
+  }
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -42,7 +73,7 @@ export default function ConversationPage() {
     try {
       await api.post("/api/messages", { recipientId: userId, body }, token);
       setBody("");
-      load();
+      load(messagesWindow);
     } catch (err: any) {
       setError(err.message ?? "Could not send message");
     } finally {
@@ -53,11 +84,32 @@ export default function ConversationPage() {
   if (error && !otherUser) return <p className="error">{error}</p>;
   if (!otherUser || !messages) return <p>Loading...</p>;
 
-  const canSend = user?.verificationStatus === "VERIFIED";
+  const canSend = user?.verificationStatus === "VERIFIED" && !blocked;
 
   return (
     <div>
-      <h1>{otherUser.displayName}</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h1 style={{ margin: 0 }}>{otherUser.displayName}</h1>
+        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+          <ReportButton targetType="user" targetId={otherUser.id} />
+          <button className="link-button" onClick={toggleBlock}>
+            {blocked ? "Unblock" : "Block"}
+          </button>
+        </div>
+      </div>
+
+      {blocked && (
+        <p className="notice">
+          You&apos;ve blocked this user — you can&apos;t send or receive new messages until you
+          unblock them.
+        </p>
+      )}
+
+      {hasMore && (
+        <button className="load-more" onClick={loadOlder} disabled={loadingMore}>
+          {loadingMore ? "Loading..." : "Load older messages"}
+        </button>
+      )}
 
       <div style={{ margin: "1rem 0" }}>
         {messages.length === 0 && <p className="meta">No messages yet — say hello.</p>}
@@ -83,17 +135,19 @@ export default function ConversationPage() {
           </button>
         </form>
       ) : (
-        <p className="notice">
-          {user ? (
-            <>
-              <a href="/verify">Verify your identity</a> to send messages.
-            </>
-          ) : (
-            <>
-              <a href="/login">Log in</a> to send messages.
-            </>
-          )}
-        </p>
+        !blocked && (
+          <p className="notice">
+            {user ? (
+              <>
+                <a href="/verify">Verify your identity</a> to send messages.
+              </>
+            ) : (
+              <>
+                <a href="/login">Log in</a> to send messages.
+              </>
+            )}
+          </p>
+        )
       )}
     </div>
   );

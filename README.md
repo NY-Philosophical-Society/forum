@@ -182,8 +182,18 @@ Four things need real decisions before this goes live — flagged here rather th
 3. **Real database + hosting.** Swap `apps/api/prisma/schema.prisma`'s datasource from `sqlite`
    to `postgresql`, point `DATABASE_URL` at a real Postgres instance, and host the API somewhere
    that runs a long-lived Node process (Railway, Render, Fly.io — not Vercel serverless, which
-   doesn't suit a stateful Express app well). Deploy `apps/web` to Vercel/Netlify pointed at that
-   API. Ship `apps/mobile` via EAS Build once the API has a stable public URL.
+   doesn't suit a stateful Express app well). Ship `apps/mobile` via EAS Build once the API has a
+   stable public URL.
+
+   **Deploying `apps/web` to Vercel — two gotchas, both already hit:**
+   - Set **Root Directory** to `apps/web` in Settings → General. This is a workspaces monorepo;
+     the repo root has no `next` dependency, so a root-level build fails with
+     *"No Next.js version detected."*
+   - Set `NEXT_PUBLIC_API_URL` to the deployed API's URL. Without it the build succeeds but every
+     page talks to `http://localhost:4000` and shows nothing.
+   - Any page using `useSearchParams()` must sit inside a `<Suspense>` boundary or `next build`
+     fails at static prerender (`next dev` won't catch this). Run `npx next build` locally before
+     pushing.
 4. **Legal/compliance review.** Storing real names + verification status (even without raw ID
    images, which the vendor should hold) still means handling PII under state/international
    privacy law. Get a privacy policy and ToS reviewed before launch, and decide who is the legal
@@ -196,21 +206,26 @@ Four things need real decisions before this goes live — flagged here rather th
 - Google/Apple sign-in is also a local mock until you add real credentials — the "Continue with
   Google/Apple" buttons currently create an account from whatever name/email you type in, no
   actual Google/Apple involved.
-- No account-linking UI — if you sign up with a password then later use "Continue with Google"
-  using the same email, the accounts merge automatically server-side, but there's no in-app
-  indication that happened.
 - The web preview wall truncates by character count only (`apps/api/src/routes/threads.ts`) — it
   doesn't try to cut at a sentence/word boundary, so the teaser can end mid-word.
-- No moderation tools (reporting, banning, thread locking) — notably absent given DMs exist; a
-  block/report path for messages should land before real users touch this.
-- No password reset flow.
-- No rate limiting on signup/login/posting/messaging.
-- No pagination (feed, reply lists, and conversation history all load in full — fine for a demo,
-  not for scale).
-- "Hot" is computed by fetching every thread and sorting in JS (`apps/api/src/routes/threads.ts`)
-  — fine at prototype scale, but will need to move to a DB-computed/cached score before the feed
-  has more than a few hundred threads.
-- iOS app has not been run in a Simulator in this environment (Xcode's command-line tools are
-  installed but not the full Xcode app, which the Simulator needs) — it typechecks cleanly and
+- **Moderation has a backend but almost no interface.** Reporting, blocking, banning, and thread
+  locking all work as endpoints, and admins get a read-only report list — but there's no
+  dashboard to act on a report, and report reasons are freeform text rather than categories. See
+  `docs/prompts/06-admin-moderation.md`.
+- **No admin bootstrap.** Promote an account by setting `role: "admin"` directly in the database.
+  The seed script creates one demo admin (`admin@demo.nyphilosophy.org` / `demo-password-123`).
+- **Supporter status unlocks nothing yet.** `WISDOMKEY` marks an account as a supporter, but no
+  content is gated on it. `docs/prompts/04-access-chapters.md` is where that becomes real.
+- **Mobile is behind web.** Reporting, blocking, pagination, password reset, thread locking,
+  supporter redemption, and the admin report list exist on web only. Closed by
+  `docs/prompts/01-foundation.md`.
+- No user profile pages, no avatars — the "real name **and a photo**" requirement is only half
+  built. See `docs/prompts/02-profiles-accounts.md`.
+- No post editing or deletion, no markdown, no notifications, no search.
+- Uploaded images (once briefs 02/03 land) will have **no moderation path** — decide on a policy
+  before enabling them.
+- iOS app has not been run in a Simulator in this environment (Xcode is installed but not selected
+  as the active developer directory — run
+  `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`) — it typechecks cleanly and
   its screens mirror the web app's already-verified flow, but treat it as unverified visually
   until you run `npm run dev:mobile` yourself.

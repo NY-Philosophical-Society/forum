@@ -2,26 +2,41 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import { formatDate, type TagWithCount, type ThreadSummary } from "@nyps-forum/shared";
+import { Suspense, useEffect, useState } from "react";
+import { formatDate, type TagWithCount, type ThreadFeedResponse, type ThreadSummary } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
 
-export default function HomePage() {
+const PAGE_SIZE = 20;
+
+function HomeFeed() {
   const { user, token } = useAuth();
   const { dateFormat } = useSettings();
   const router = useRouter();
   const searchParams = useSearchParams();
   const sort = searchParams.get("sort") === "new" ? "new" : "hot";
   const activeTag = searchParams.get("tag") ?? "";
+  const justLinked = searchParams.get("linked") === "1";
 
   const [tags, setTags] = useState<TagWithCount[] | null>(null);
-  const [threads, setThreads] = useState<ThreadSummary[] | null>(null);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAllTags, setShowAllTags] = useState(false);
+  const [showLinkedToast, setShowLinkedToast] = useState(justLinked);
 
   const VISIBLE_TAG_COUNT = 6;
+
+  useEffect(() => {
+    if (!justLinked) return;
+    const qs = new URLSearchParams(searchParams.toString());
+    qs.delete("linked");
+    router.replace(qs.toString() ? `/?${qs.toString()}` : "/");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     api
@@ -31,13 +46,31 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    const qs = new URLSearchParams({ sort });
+    const qs = new URLSearchParams({ sort, limit: String(PAGE_SIZE), offset: "0" });
     if (activeTag) qs.set("tag", activeTag);
     api
-      .get<{ threads: ThreadSummary[] }>(`/api/threads?${qs.toString()}`, token)
-      .then((res) => setThreads(res.threads))
+      .get<ThreadFeedResponse>(`/api/threads?${qs.toString()}`, token)
+      .then((res) => {
+        setThreads(res.threads);
+        setHasMore(res.hasMore);
+        setOffset(res.threads.length);
+      })
       .catch((e) => setError(e.message));
   }, [sort, activeTag, token]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const qs = new URLSearchParams({ sort, limit: String(PAGE_SIZE), offset: String(offset) });
+      if (activeTag) qs.set("tag", activeTag);
+      const res = await api.get<ThreadFeedResponse>(`/api/threads?${qs.toString()}`, token);
+      setThreads((prev) => [...prev, ...res.threads]);
+      setHasMore(res.hasMore);
+      setOffset(offset + res.threads.length);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   function setSort(next: "hot" | "new") {
     const qs = new URLSearchParams(searchParams.toString());
@@ -54,15 +87,27 @@ export default function HomePage() {
 
   async function toggleLike(threadId: string) {
     if (!token) return;
-    await api.post(`/api/threads/${threadId}/like`, {}, token);
-    const qs = new URLSearchParams({ sort });
-    if (activeTag) qs.set("tag", activeTag);
-    const res = await api.get<{ threads: ThreadSummary[] }>(`/api/threads?${qs.toString()}`, token);
-    setThreads(res.threads);
+    const res = await api.post<{ liked: boolean }>(`/api/threads/${threadId}/like`, {}, token);
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId
+          ? { ...t, myLiked: res.liked, likeCount: t.likeCount + (res.liked ? 1 : -1) }
+          : t,
+      ),
+    );
   }
 
   return (
     <div>
+      {showLinkedToast && (
+        <div className="toast">
+          Signed in — this provider was linked to your existing account.{" "}
+          <button className="link-button" onClick={() => setShowLinkedToast(false)}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <h1>Discussion Feed</h1>
       <p className="meta">
         A real-name, ID-verified space for philosophical discussion. Anyone can read; posting,
@@ -108,13 +153,13 @@ export default function HomePage() {
       </div>
 
       {error && <p className="error">{error}</p>}
-      {!threads && !error && <p>Loading...</p>}
-      {threads?.length === 0 && <p className="meta">No threads yet — be the first.</p>}
+      {threads.length === 0 && !error && <p className="meta">No threads yet — be the first.</p>}
 
-      {threads?.map((t) => (
+      {threads.map((t) => (
         <div className="card" key={t.id}>
           <Link className="title" href={`/t/${t.id}`}>
             {t.title}
+            {t.locked && " 🔒"}
           </Link>
           <p className="meta">
             by {t.author.displayName} · {formatDate(t.createdAt, dateFormat)}
@@ -140,6 +185,22 @@ export default function HomePage() {
           </div>
         </div>
       ))}
+
+      {hasMore && (
+        <button className="load-more" onClick={loadMore} disabled={loadingMore}>
+          {loadingMore ? "Loading..." : "Load more"}
+        </button>
+      )}
     </div>
+  );
+}
+
+// useSearchParams() forces client-side rendering, which `next build` rejects
+// during static prerender unless it sits inside a Suspense boundary.
+export default function HomePage() {
+  return (
+    <Suspense fallback={<p className="meta">Loading feed...</p>}>
+      <HomeFeed />
+    </Suspense>
   );
 }

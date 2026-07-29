@@ -11,6 +11,8 @@ declare global {
         email: string;
         displayName: string;
         verificationStatus: string;
+        role: string;
+        isSupporter: boolean;
         createdAt: Date;
       };
     }
@@ -37,18 +39,28 @@ export async function requireAuth(
   if (!user) {
     return res.status(401).json({ error: "User no longer exists" });
   }
+  if (user.bannedAt) {
+    return res.status(403).json({ error: "This account has been suspended." });
+  }
 
   req.user = {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
     verificationStatus: user.verificationStatus,
+    role: user.role,
+    isSupporter: user.isSupporter,
     createdAt: user.createdAt,
   };
   next();
 }
 
-/** Optional auth: attaches req.user if a valid token is present, but never rejects. */
+/**
+ * Optional auth: attaches req.user if a valid, non-banned token is present,
+ * but never rejects — a banned or missing/invalid token is treated the same
+ * as being logged out (e.g. falls back to the anonymous read-preview), not
+ * as an error.
+ */
 export async function optionalAuth(
   req: Request,
   _res: Response,
@@ -62,12 +74,14 @@ export async function optionalAuth(
   if (!payload) return next();
 
   const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user) {
+  if (user && !user.bannedAt) {
     req.user = {
       id: user.id,
       email: user.email,
       displayName: user.displayName,
       verificationStatus: user.verificationStatus,
+      role: user.role,
+      isSupporter: user.isSupporter,
       createdAt: user.createdAt,
     };
   }
@@ -84,6 +98,14 @@ export function requireVerified(req: Request, res: Response, next: NextFunction)
       error:
         "Identity verification required before you can post. Complete verification from your account settings.",
     });
+  }
+  next();
+}
+
+/** Moderation actions (ban, thread lock, viewing reports). Must run after requireAuth. */
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
   }
   next();
 }
