@@ -38,7 +38,7 @@ export default function FormattingPage() {
       </p>
       <Example
         source={
-          "> The unexamined life is not worth living for a human being.\n>\n> — Socrates, *Apology* 38a"
+          "> Custom is the great guide of human life.\n>\n> — David Hume, *An Enquiry Concerning Human Understanding* V.i"
         }
       />
 
@@ -48,7 +48,7 @@ export default function FormattingPage() {
       </p>
       <Example
         source={
-          "> You cited Hume approvingly here:\n>\n>> Reason is, and ought only to be the slave of the passions.\n>\n> But that is precisely the claim I want to resist."
+          "> You cited Mill approvingly here:\n>\n>> The only freedom which deserves the name is that of pursuing our own good in our own way.\n>\n> But that is precisely the claim I want to resist."
         }
       />
 
@@ -56,20 +56,16 @@ export default function FormattingPage() {
       <Example source={"[Stanford Encyclopedia of Philosophy](https://plato.stanford.edu)"} />
 
       <h3>Lists</h3>
-      <Example source={"- First premise\n- Second premise\n- Conclusion"} />
-      <Example source={"1. First premise\n2. Second premise\n3. Conclusion"} />
-
-      <h3>Headings</h3>
-      <Example source={"## A section\n\n### A subsection"} />
+      <Example source={"- Free will\n- Moral luck\n- Personal identity"} />
+      <Example
+        source={"1. State the claim\n2. Give the argument\n3. Answer the strongest objection"}
+      />
 
       <h3>Code</h3>
       <p className="meta" style={{ marginBottom: "var(--space-3)" }}>
         Backticks for inline notation, three backticks for a block — handy for logical formulae.
       </p>
       <Example source={"Inline: `P → Q`\n\n```\n(P → Q) ∧ P\n∴ Q\n```"} />
-
-      <h3>Horizontal rule</h3>
-      <Example source={"Above the line.\n\n---\n\nBelow the line."} />
 
       <h3>Mentions</h3>
       <p className="meta" style={{ marginBottom: "var(--space-3)" }}>

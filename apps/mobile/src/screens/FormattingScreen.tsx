@@ -13,12 +13,12 @@ const EXAMPLES: { title: string; source: string }[] = [
   {
     title: "Quoting a text",
     source:
-      "> The unexamined life is not worth living.\n>\n> — Socrates, *Apology* 38a",
+      "> Custom is the great guide of human life.\n>\n> — David Hume, *An Enquiry Concerning Human Understanding* V.i",
   },
   {
     title: "Quoting another member",
     source:
-      "> > Custom is the great guide of human life.\n>\n> This is right about how we *do* reason, and silent on how we *ought* to.",
+      "> > The only freedom which deserves the name is that of pursuing our own good in our own way.\n>\n> This is right about how we *do* reason, and silent on how we *ought* to.",
   },
   {
     title: "Links",
@@ -26,23 +26,15 @@ const EXAMPLES: { title: string; source: string }[] = [
   },
   {
     title: "Bulleted list",
-    source: "- Intensity\n- Honesty\n- Benefit",
+    source: "- Free will\n- Moral luck\n- Personal identity",
   },
   {
     title: "Numbered list",
     source: "1. State the claim\n2. Give the argument\n3. Answer the strongest objection",
   },
   {
-    title: "Headings",
-    source: "## Book I\n### The function argument",
-  },
-  {
     title: "Notation",
     source: "Modus ponens takes `P → Q` and `P` to `Q`.",
-  },
-  {
-    title: "Divider",
-    source: "First point.\n\n---\n\nA separate point.",
   },
 ];
 
