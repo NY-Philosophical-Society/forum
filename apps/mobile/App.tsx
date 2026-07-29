@@ -37,6 +37,7 @@ import { ConversationScreen } from "./src/screens/ConversationScreen";
 import { MockOAuthScreen } from "./src/screens/MockOAuthScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
+import { UserProfileScreen } from "./src/screens/UserProfileScreen";
 import { FormattingScreen } from "./src/screens/FormattingScreen";
 import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
 import { AdminReportsScreen } from "./src/screens/AdminReportsScreen";
@@ -90,6 +91,11 @@ function FeedStack() {
         component={NewThreadScreen}
         options={{ title: "New Thread" }}
       />
+      <FeedStackNav.Screen
+        name="UserProfile"
+        component={UserProfileScreen}
+        options={{ title: "Profile" }}
+      />
     </FeedStackNav.Navigator>
   );
 }
@@ -108,6 +114,11 @@ function MessagesStack() {
         component={ConversationScreen}
         options={({ route }) => ({ title: route.params.displayName })}
       />
+      <MessagesStackNav.Screen
+        name="UserProfile"
+        component={UserProfileScreen}
+        options={{ title: "Profile" }}
+      />
     </MessagesStackNav.Navigator>
   );
 }
@@ -119,6 +130,11 @@ function ProfileStack() {
       <ProfileStackNav.Screen
         name="Profile"
         component={ProfileScreen}
+        options={{ title: "Profile" }}
+      />
+      <ProfileStackNav.Screen
+        name="UserProfile"
+        component={UserProfileScreen}
         options={{ title: "Profile" }}
       />
       <ProfileStackNav.Screen

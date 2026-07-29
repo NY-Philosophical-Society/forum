@@ -8,6 +8,7 @@ import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { MessagesStackParamList } from "../navigation";
+import { Avatar } from "../components/Avatar";
 
 type Props = NativeStackScreenProps<MessagesStackParamList, "Messages">;
 
@@ -60,9 +61,7 @@ export function MessagesScreen({ navigation }: Props) {
             navigation.navigate("Conversation", { userId: u.id, displayName: u.displayName })
           }
         >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{u.displayName.charAt(0).toUpperCase()}</Text>
-          </View>
+          <Avatar name={u.displayName} uri={u.avatarUrl} size={40} />
           <Text style={styles.name}>{u.displayName}</Text>
         </Pressable>
       ))}
@@ -98,11 +97,7 @@ export function MessagesScreen({ navigation }: Props) {
               })
             }
           >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {item.otherUser.displayName.charAt(0).toUpperCase()}
-              </Text>
-            </View>
+            <Avatar name={item.otherUser.displayName} uri={item.otherUser.avatarUrl} size={40} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.name}>{item.otherUser.displayName}</Text>
               <Text style={styles.meta} numberOfLines={1}>
@@ -145,15 +140,6 @@ function makeStyles(colors: ThemeColors) {
       padding: spacing.md,
       marginTop: spacing.sm,
     },
-    avatar: {
-      width: 40,
-      height: 40,
-      borderRadius: radius.full,
-      backgroundColor: colors.solid,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    avatarText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.base },
     name: { fontFamily: fonts.serifBold, fontSize: type.base, color: colors.ink },
     meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
     unreadBadge: {

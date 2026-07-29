@@ -13,6 +13,7 @@ import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { FeedStackParamList } from "../navigation";
+import { Avatar } from "../components/Avatar";
 import { Markdown } from "../components/Markdown";
 import { MarkdownHint } from "../components/MarkdownHint";
 import { ReportButton } from "../components/ReportButton";
@@ -21,7 +22,7 @@ type Props = NativeStackScreenProps<FeedStackParamList, "Thread">;
 
 const REPLIES_PAGE = 20;
 
-export function ThreadScreen({ route }: Props) {
+export function ThreadScreen({ route, navigation }: Props) {
   const { threadId } = route.params;
   const { user, token } = useAuth();
   const { colors, dateFormat } = useSettings();
@@ -137,14 +138,14 @@ export function ThreadScreen({ route }: Props) {
             {thread.locked ? " 🔒" : ""}
           </Text>
           <View style={styles.byline}>
-            <View style={styles.miniAvatar}>
-              <Text style={styles.miniAvatarText}>
-                {thread.author.displayName.charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <Text style={styles.meta}>
-              {thread.author.displayName} · {formatDate(thread.createdAt, dateFormat)}
-            </Text>
+            <Pressable
+              style={[styles.byline, { marginTop: 0 }]}
+              onPress={() => navigation.navigate("UserProfile", { userId: thread.author.id })}
+            >
+              <Avatar name={thread.author.displayName} uri={thread.author.avatarUrl} size={22} />
+              <Text style={styles.meta}>{thread.author.displayName}</Text>
+            </Pressable>
+            <Text style={styles.meta}>· {formatDate(thread.createdAt, dateFormat)}</Text>
           </View>
           {thread.tags.length > 0 && (
             <View style={styles.tagRow}>
@@ -183,7 +184,12 @@ export function ThreadScreen({ route }: Props) {
         </View>
       }
       renderItem={({ item }) => (
-        <PostItem post={item} canLike={canLike} onLike={togglePostLike} />
+        <PostItem
+          post={item}
+          canLike={canLike}
+          onLike={togglePostLike}
+          onAuthorPress={(userId) => navigation.navigate("UserProfile", { userId })}
+        />
       )}
       ListFooterComponent={
         <View style={{ marginTop: spacing.lg, paddingBottom: spacing.xl }}>
@@ -227,10 +233,12 @@ function PostItem({
   post,
   canLike,
   onLike,
+  onAuthorPress,
 }: {
   post: PostWithDepth;
   canLike: boolean;
   onLike: (postId: string) => void;
+  onAuthorPress: (userId: string) => void;
 }) {
   const { colors, dateFormat } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -239,14 +247,14 @@ function PostItem({
     <View style={[styles.post, { marginLeft: post.depth * spacing.lg }]}>
       <Markdown>{post.body}</Markdown>
       <View style={styles.byline}>
-        <View style={styles.miniAvatar}>
-          <Text style={styles.miniAvatarText}>
-            {post.author.displayName.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <Text style={styles.meta}>
-          {post.author.displayName} · {formatDate(post.createdAt, dateFormat)}
-        </Text>
+        <Pressable
+          style={[styles.byline, { marginTop: 0 }]}
+          onPress={() => onAuthorPress(post.author.id)}
+        >
+          <Avatar name={post.author.displayName} uri={post.author.avatarUrl} size={22} />
+          <Text style={styles.meta}>{post.author.displayName}</Text>
+        </Pressable>
+        <Text style={styles.meta}>· {formatDate(post.createdAt, dateFormat)}</Text>
       </View>
       <View style={styles.likeRow}>
         <Pressable
@@ -276,15 +284,6 @@ function makeStyles(colors: ThemeColors) {
       marginBottom: spacing.xs,
     },
     byline: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
-    miniAvatar: {
-      width: 22,
-      height: 22,
-      borderRadius: radius.full,
-      backgroundColor: colors.solid,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    miniAvatarText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: 10 },
     meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
     error: { color: colors.danger, fontFamily: fonts.sans },
     tagRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.md },

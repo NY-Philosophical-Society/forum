@@ -13,6 +13,7 @@ import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { FeedStackParamList } from "../navigation";
+import { Avatar } from "../components/Avatar";
 
 type Props = NativeStackScreenProps<FeedStackParamList, "Home">;
 
@@ -192,17 +193,17 @@ export function HomeScreen({ navigation }: Props) {
                 {item.title}
                 {item.locked ? " 🔒" : ""}
               </Text>
-              <View style={styles.byline}>
-                <View style={styles.miniAvatar}>
-                  <Text style={styles.miniAvatarText}>
-                    {item.author.displayName.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <Text style={styles.meta}>
-                  {item.author.displayName} · {formatDate(item.createdAt, dateFormat)}
-                </Text>
-              </View>
             </Pressable>
+            <View style={styles.byline}>
+              <Pressable
+                style={[styles.byline, { marginTop: 0 }]}
+                onPress={() => navigation.navigate("UserProfile", { userId: item.author.id })}
+              >
+                <Avatar name={item.author.displayName} uri={item.author.avatarUrl} size={22} />
+                <Text style={styles.meta}>{item.author.displayName}</Text>
+              </Pressable>
+              <Text style={styles.meta}>· {formatDate(item.createdAt, dateFormat)}</Text>
+            </View>
             {item.tags.length > 0 && (
               <View style={styles.tagRow}>
                 {item.tags.map((t) => (
@@ -305,15 +306,6 @@ function makeStyles(colors: ThemeColors) {
       color: colors.ink,
     },
     byline: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
-    miniAvatar: {
-      width: 22,
-      height: 22,
-      borderRadius: radius.full,
-      backgroundColor: colors.solid,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    miniAvatarText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: 10 },
     meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
     tagRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.md },
     tagPill: {

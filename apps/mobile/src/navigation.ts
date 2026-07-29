@@ -2,15 +2,20 @@ export type FeedStackParamList = {
   Home: undefined;
   Thread: { threadId: string };
   NewThread: { tagId?: string };
+  UserProfile: { userId: string };
 };
 
 export type MessagesStackParamList = {
   Messages: undefined;
   Conversation: { userId: string; displayName: string };
+  UserProfile: { userId: string };
 };
 
 export type ProfileStackParamList = {
   Profile: undefined;
+  UserProfile: { userId: string };
+  EditProfile: undefined;
+  Account: undefined;
   Verify: undefined;
   VerifyMock: { sessionId: string };
   Formatting: undefined;
@@ -24,4 +29,11 @@ export type AuthStackParamList = {
   MockOAuth: { provider: "google" | "apple" };
   ForgotPassword: undefined;
   Settings: undefined;
+};
+
+/** Tab-level routes, for cross-tab jumps (e.g. profile → Message). */
+export type RootTabParamList = {
+  FeedTab: { screen: keyof FeedStackParamList; params?: object } | undefined;
+  MessagesTab: { screen: keyof MessagesStackParamList; params?: object } | undefined;
+  ProfileTab: { screen: keyof ProfileStackParamList; params?: object } | undefined;
 };

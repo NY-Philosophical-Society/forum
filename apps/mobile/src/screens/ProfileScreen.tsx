@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { ProfileStackParamList } from "../navigation";
+import { Avatar } from "../components/Avatar";
 import { VerificationBadge } from "../components/VerificationBadge";
 
 type Props = NativeStackScreenProps<ProfileStackParamList, "Profile">;
@@ -22,6 +23,11 @@ export function ProfileScreen({ navigation }: Props) {
     label: string;
     onPress: () => void;
   }[] = [
+    {
+      icon: "person-outline",
+      label: "View public profile",
+      onPress: () => navigation.navigate("UserProfile", { userId: user.id }),
+    },
     { icon: "shield-checkmark-outline", label: "Verification", onPress: () => navigation.navigate("Verify") },
     {
       icon: "text-outline",
@@ -41,9 +47,7 @@ export function ProfileScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{user.displayName.charAt(0).toUpperCase()}</Text>
-        </View>
+        <Avatar name={user.displayName} uri={user.avatarUrl} size={72} />
         <Text style={styles.name}>{user.displayName}</Text>
         <View style={styles.badges}>
           <VerificationBadge status={user.verificationStatus} />
@@ -75,17 +79,7 @@ export function ProfileScreen({ navigation }: Props) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.paper, padding: spacing.lg },
-    header: { alignItems: "center", paddingVertical: spacing.xl },
-    avatar: {
-      width: 72,
-      height: 72,
-      borderRadius: radius.full,
-      backgroundColor: colors.solid,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: spacing.md,
-    },
-    avatarText: { color: colors.solidText, fontFamily: fonts.serifBold, fontSize: type.xl },
+    header: { alignItems: "center", paddingVertical: spacing.xl, gap: spacing.md },
     name: { fontFamily: fonts.serifBold, fontSize: type.lg, color: colors.ink },
     badges: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
     supporterBadge: {

@@ -14,7 +14,7 @@ type Props = NativeStackScreenProps<MessagesStackParamList, "Conversation">;
 
 const MESSAGES_PAGE = 30;
 
-export function ConversationScreen({ route }: Props) {
+export function ConversationScreen({ route, navigation }: Props) {
   const { userId } = route.params;
   const { user, token } = useAuth();
   const { colors } = useSettings();
@@ -92,6 +92,9 @@ export function ConversationScreen({ route }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.actions}>
+        <Pressable onPress={() => navigation.navigate("UserProfile", { userId })}>
+          <Text style={styles.linkText}>View profile</Text>
+        </Pressable>
         <ReportButton targetType="user" targetId={userId} />
         <Pressable onPress={toggleBlock}>
           <Text style={styles.linkText}>{blocked ? "Unblock" : "Block"}</Text>
