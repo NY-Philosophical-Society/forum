@@ -133,29 +133,35 @@ reportsRouter.post("/:id/resolve", requireAuth, requireAdmin, adminLimiter, asyn
     if (targetType === "thread") {
       const thread = await prisma.thread.findUnique({ where: { id: report.targetId } });
       if (!thread) return res.status(404).json({ error: "The reported thread no longer exists" });
-      if (!thread.deletedAt) await softDeleteThread(thread.id, thread.authorId);
-      await logModeration({
-        actorId: adminId,
-        action: "content_deleted",
-        targetType: "thread",
-        targetId: thread.id,
-        targetLabel: contentLabel(thread.title),
-        reason,
-        detail: { reportId: report.id, authorId: thread.authorId },
-      });
+      // Already gone: close the report, but don't log a deletion that didn't
+      // happen — the log must never claim an action that wasn't taken.
+      if (!thread.deletedAt) {
+        await softDeleteThread(thread.id, thread.authorId);
+        await logModeration({
+          actorId: adminId,
+          action: "content_deleted",
+          targetType: "thread",
+          targetId: thread.id,
+          targetLabel: contentLabel(thread.title),
+          reason,
+          detail: { reportId: report.id, authorId: thread.authorId },
+        });
+      }
     } else if (targetType === "post") {
       const post = await prisma.post.findUnique({ where: { id: report.targetId } });
       if (!post) return res.status(404).json({ error: "The reported reply no longer exists" });
-      if (!post.deletedAt) await softDeletePost(post.id, post.authorId, post.threadId);
-      await logModeration({
-        actorId: adminId,
-        action: "content_deleted",
-        targetType: "post",
-        targetId: post.id,
-        targetLabel: contentLabel(post.body),
-        reason,
-        detail: { reportId: report.id, authorId: post.authorId },
-      });
+      if (!post.deletedAt) {
+        await softDeletePost(post.id, post.authorId, post.threadId);
+        await logModeration({
+          actorId: adminId,
+          action: "content_deleted",
+          targetType: "post",
+          targetId: post.id,
+          targetLabel: contentLabel(post.body),
+          reason,
+          detail: { reportId: report.id, authorId: post.authorId },
+        });
+      }
     } else {
       return res.status(400).json({
         error:
@@ -217,16 +223,16 @@ reportsRouter.post("/:id/resolve", requireAuth, requireAdmin, adminLimiter, asyn
     if (!thread) return res.status(404).json({ error: "The thread no longer exists" });
     if (!thread.locked) {
       await prisma.thread.update({ where: { id: thread.id }, data: { locked: true } });
+      await logModeration({
+        actorId: adminId,
+        action: "thread_locked",
+        targetType: "thread",
+        targetId: thread.id,
+        targetLabel: contentLabel(thread.title),
+        reason,
+        detail: { reportId: report.id },
+      });
     }
-    await logModeration({
-      actorId: adminId,
-      action: "thread_locked",
-      targetType: "thread",
-      targetId: thread.id,
-      targetLabel: contentLabel(thread.title),
-      reason,
-      detail: { reportId: report.id },
-    });
   }
 
   const updated = await prisma.report.update({

@@ -65,6 +65,18 @@ missing before launch" below before you show this to real users.
   final dimensions baked into the URL so clients reserve space with no layout shift — and only
   images from our own storage render inline, so an external image URL can't be used to log
   readers' IPs.
+- **Moderation is a dashboard with an audit trail.** Reports carry a required category
+  (harassment, spam, off-topic, misinformation, impersonation, other) plus an optional note.
+  Admins work them from `/admin` on web — a reports queue that inlines the reported content so a
+  report can be judged without navigating away, member administration (ban/unban, warn, grant or
+  revoke supporter, promote/demote), content management (pin, lock, delete), and a read-only
+  moderation log. Every admin mutation writes one `ModerationLog` row through
+  `apps/api/src/lib/moderation-log.ts` — who, to whom, when, and why — and nothing in the API or
+  the UI can edit or delete a row there. Every destructive action needs a typed reason before it
+  will commit, so the confirmation step and the audit record are the same interaction. Bans are
+  reversible and bite an existing session immediately (`requireAuth` re-reads `bannedAt`). Threads
+  can be pinned above the feed, capped at 3 server-side and sorted as a separate column so
+  `hotScore` is never distorted.
 - **Per-user display settings** (date format MM/DD/YYYY vs. DD/MM/YYYY, light/dark mode) live
   entirely client-side — `apps/web/src/lib/settings-context.tsx` (localStorage) and
   `apps/mobile/src/lib/settings-context.tsx` (AsyncStorage). Dates are formatted with
@@ -236,12 +248,14 @@ Five things need real decisions before this goes live — flagged here rather th
   actual Google/Apple involved.
 - The web preview wall truncates by character count only (`apps/api/src/routes/threads.ts`) — it
   doesn't try to cut at a sentence/word boundary, so the teaser can end mid-word.
-- **Moderation has a backend but almost no interface.** Reporting, blocking, banning, and thread
-  locking all work as endpoints, and admins get a read-only report list — but there's no
-  dashboard to act on a report, and report reasons are freeform text rather than categories. See
-  `docs/prompts/06-admin-moderation.md`.
-- **No admin bootstrap.** Promote an account by setting `role: "admin"` directly in the database.
-  The seed script creates one demo admin (`admin@demo.nyphilosophy.org` / `demo-password-123`).
+- **No admin bootstrap.** The *first* admin still has to be promoted by setting `role: "admin"`
+  directly in the database — after that, admins promote each other from `/admin/users`. The seed
+  script creates one demo admin (`admin@demo.nyphilosophy.org` / `demo-password-123`) plus two
+  open demo reports so the queue isn't empty.
+- **Mobile moderation is the report queue only.** Member administration, content management, and
+  the moderation log are web-only.
+- **Chapters don't exist yet** (`docs/prompts/04-access-chapters.md`), so the admin dashboard has
+  no chapter management and pinning applies to the single main feed.
 - **Supporter status unlocks nothing yet.** `WISDOMKEY` marks an account as a supporter, but no
   content is gated on it. `docs/prompts/04-access-chapters.md` is where that becomes real.
 - **Mobile is behind web.** Reporting, blocking, pagination, password reset, thread locking,
