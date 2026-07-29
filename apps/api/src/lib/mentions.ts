@@ -12,13 +12,17 @@ const MAX_MENTIONS = 20;
  * skipped — a blocked pair must never generate a notification. The rows are
  * synced (add new, drop stale) rather than recreated so an edit doesn't
  * reset createdAt on mentions that were already there.
+ *
+ * Returns the user ids of *newly created* mentions only — the ones that
+ * should produce a notification — so an edit never re-notifies people who
+ * were already mentioned.
  */
 export async function syncMentions(source: {
   authorId: string;
   body: string;
   threadId?: string;
   postId?: string;
-}): Promise<void> {
+}): Promise<string[]> {
   const { authorId, body } = source;
   const where = source.postId
     ? { postId: source.postId }
@@ -65,4 +69,6 @@ export async function syncMentions(source: {
       }),
     ),
   ]);
+
+  return newUserIds;
 }

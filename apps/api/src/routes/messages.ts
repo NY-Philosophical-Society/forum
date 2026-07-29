@@ -4,6 +4,7 @@ import { prisma } from "../db";
 import { requireAuth, requireVerified } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
 import { writeLimiter } from "../lib/rate-limit";
+import { notify, toSnippet } from "../lib/notifications";
 
 export const messagesRouter = Router();
 
@@ -81,10 +82,18 @@ messagesRouter.get("/:userId", requireAuth, async (req, res) => {
   const otherUser = await prisma.user.findUnique({ where: { id: otherId } });
   if (!otherUser) return res.status(404).json({ error: "User not found" });
 
-  await prisma.message.updateMany({
-    where: { senderId: otherId, recipientId: myId, readAt: null },
-    data: { readAt: new Date() },
-  });
+  // Opening the conversation reads the messages, so the bell's collapsed
+  // "N new messages" notification for this sender reads with them.
+  await Promise.all([
+    prisma.message.updateMany({
+      where: { senderId: otherId, recipientId: myId, readAt: null },
+      data: { readAt: new Date() },
+    }),
+    prisma.notification.updateMany({
+      where: { recipientId: myId, actorId: otherId, type: "message", readAt: null },
+      data: { readAt: new Date() },
+    }),
+  ]);
 
   const where = {
     OR: [
@@ -146,6 +155,12 @@ messagesRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req,
 
   const message = await prisma.message.create({
     data: { senderId: req.user!.id, recipientId, body },
+  });
+  await notify({
+    type: "message",
+    recipientId,
+    actorId: req.user!.id,
+    snippet: toSnippet(body),
   });
 
   res.status(201).json({ message: serializeMessage(message) });

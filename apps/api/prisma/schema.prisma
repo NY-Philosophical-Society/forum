@@ -52,6 +52,11 @@ model User {
   passwordResetTokens  PasswordResetToken[]
   mentionsReceived     Mention[]              @relation("MentionsReceived")
   mentionsAuthored     Mention[]              @relation("MentionsAuthored")
+  notificationsReceived Notification[]        @relation("NotificationsReceived")
+  notificationsActed    Notification[]        @relation("NotificationsActed")
+  notificationPrefs     NotificationPreference[]
+  pushTokens            PushToken[]
+  bookmarks             Bookmark[]
 }
 
 model VerificationSession {
@@ -97,11 +102,13 @@ model Thread {
   // are excluded from the feed and profile listings.
   deletedAt  DateTime?
 
-  author   User         @relation(fields: [authorId], references: [id])
-  tags     Tag[]
-  posts    Post[]
-  likes    ThreadLike[]
-  mentions Mention[]
+  author        User           @relation(fields: [authorId], references: [id])
+  tags          Tag[]
+  posts         Post[]
+  likes         ThreadLike[]
+  mentions      Mention[]
+  notifications Notification[]
+  bookmarks     Bookmark[]
 }
 
 model ThreadLike {
@@ -130,10 +137,11 @@ model Post {
   // never sent to clients once deletedAt is set.
   deletedAt DateTime?
 
-  thread   Thread     @relation(fields: [threadId], references: [id])
-  author   User       @relation(fields: [authorId], references: [id])
-  likes    PostLike[]
-  mentions Mention[]
+  thread        Thread         @relation(fields: [threadId], references: [id])
+  author        User           @relation(fields: [authorId], references: [id])
+  likes         PostLike[]
+  mentions      Mention[]
+  notifications Notification[]
 }
 
 model PostLike {
@@ -216,6 +224,87 @@ model Mention {
   // One row per (user, place) no matter how many times the name appears.
   @@unique([userId, threadId])
   @@unique([userId, postId])
+  @@index([userId, createdAt])
+}
+
+// One in-app notification row per event, except likes (collapsed onto one
+// unread row per target — "3 people liked your reply") and DMs (one unread
+// row per sender). All creation goes through lib/notifications.ts notify(),
+// which owns the self/block/preference rules — and is the single place a
+// chapter-visibility check lands when brief 04 introduces one. This table
+// grows fastest of anything in the app; both indexes below are load-bearing
+// (unread badge polls every 15s).
+model Notification {
+  id          String    @id @default(cuid())
+  recipientId String
+  // Most recent actor (the only one shown with an avatar).
+  actorId     String
+  // A NotificationType from packages/shared (reply_thread, like_post, ...).
+  type        String
+  threadId    String?
+  postId      String?
+  // Collapse bookkeeping: distinct actors for likes, message count for DMs.
+  count       Int       @default(1)
+  // JSON array of actor ids already counted, so a like → unlike → like
+  // toggle can't inflate `count`. Capped in lib/notifications.ts.
+  actorIds    String    @default("[]")
+  // Plain-text excerpt captured when the event happened.
+  snippet     String?
+  readAt      DateTime?
+  // Bumped when a collapsed row absorbs a new event, so it resurfaces.
+  createdAt   DateTime  @default(now())
+
+  recipient User    @relation("NotificationsReceived", fields: [recipientId], references: [id])
+  actor     User    @relation("NotificationsActed", fields: [actorId], references: [id])
+  thread    Thread? @relation(fields: [threadId], references: [id])
+  post      Post?   @relation(fields: [postId], references: [id])
+
+  @@index([recipientId, readAt])
+  @@index([recipientId, createdAt])
+}
+
+// Per-user notification switches, one row per NotificationPrefKey plus the
+// "master" kill switch. Absent row = enabled; rows exist only once a user
+// changes something. One toggle covers in-app and push together.
+model NotificationPreference {
+  id      String  @id @default(cuid())
+  userId  String
+  key     String
+  enabled Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, key])
+}
+
+// An Expo push token for one device. Registered on login (once permission
+// is granted), removed on logout. A token is unique per device, so a device
+// that switches accounts is reassigned, never duplicated.
+model PushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+// A saved thread. Listing filters out deleted threads at read time — and is
+// where the brief-04 chapter-visibility filter must land, so a saved thread
+// the user has lost access to never leaks back through their saved list.
+model Bookmark {
+  id        String   @id @default(cuid())
+  userId    String
+  threadId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  thread Thread @relation(fields: [threadId], references: [id])
+
+  @@unique([userId, threadId])
   @@index([userId, createdAt])
 }
 

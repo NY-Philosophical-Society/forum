@@ -1,4 +1,4 @@
-import type { VerificationStatus } from "./schemas";
+import type { NotificationType, VerificationStatus } from "./schemas";
 
 export interface PublicUser {
   id: string;
@@ -80,6 +80,8 @@ export interface ThreadSummary {
   myLiked: boolean;
   postCount: number;
   locked: boolean;
+  /** Present on feed/detail/bookmark responses; absent where no viewer exists. */
+  myBookmarked?: boolean;
 }
 
 export interface ThreadFeedResponse {
@@ -160,6 +162,73 @@ export interface ConversationResponse {
 export interface OAuthConfig {
   google: { enabled: boolean; webClientId: string | null; iosClientId: string | null };
   apple: { enabled: boolean; servicesId: string | null };
+}
+
+export interface NotificationItem {
+  id: string;
+  type: NotificationType;
+  /** Most recent actor. Null only if the actor's account no longer exists. */
+  actor: PublicUser | null;
+  /** Distinct actors for collapsed likes; message count for collapsed DMs; 1 otherwise. */
+  count: number;
+  threadId: string | null;
+  postId: string | null;
+  /** Title of the thread the event happened in ("[deleted]" if it was removed). */
+  threadTitle: string | null;
+  snippet: string | null;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export interface NotificationsResponse {
+  notifications: NotificationItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+  unreadCount: number;
+}
+
+export interface NotificationPreferences {
+  master: boolean;
+  replies: boolean;
+  likes: boolean;
+  mentions: boolean;
+  messages: boolean;
+}
+
+export interface ThreadSearchResult {
+  id: string;
+  title: string;
+  snippet: string;
+  author: PublicUser;
+  createdAt: string;
+  likeCount: number;
+  postCount: number;
+}
+
+export interface PostSearchResult {
+  id: string;
+  threadId: string;
+  threadTitle: string;
+  snippet: string;
+  author: PublicUser;
+  createdAt: string;
+}
+
+export interface SearchSection<T> {
+  items: T[];
+  total: number;
+  hasMore: boolean;
+}
+
+export interface SearchResponse {
+  q: string;
+  threads: SearchSection<ThreadSearchResult>;
+  posts: SearchSection<PostSearchResult>;
+  users: SearchSection<PublicUser>;
+  limit: number;
+  offset: number;
 }
 
 export interface ReportSummary {

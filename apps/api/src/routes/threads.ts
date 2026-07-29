@@ -6,6 +6,7 @@ import { DELETED_AUTHOR, toPublicUser } from "../lib/serialize";
 import { hotScore, recomputeThreadHotScore } from "../lib/ranking";
 import { writeLimiter } from "../lib/rate-limit";
 import { syncMentions } from "../lib/mentions";
+import { notify, toSnippet } from "../lib/notifications";
 
 export const threadsRouter = Router();
 
@@ -221,7 +222,16 @@ threadsRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, 
       tags: { connect: tagIds.map((id) => ({ id })) },
     },
   });
-  await syncMentions({ authorId: req.user!.id, body, threadId: thread.id });
+  const newMentions = await syncMentions({ authorId: req.user!.id, body, threadId: thread.id });
+  for (const userId of newMentions) {
+    await notify({
+      type: "mention",
+      recipientId: userId,
+      actorId: req.user!.id,
+      threadId: thread.id,
+      snippet: toSnippet(body),
+    });
+  }
 
   res.status(201).json({ thread: { id: thread.id } });
 });
@@ -266,7 +276,16 @@ threadsRouter.patch("/:id", requireAuth, writeLimiter, async (req, res) => {
     },
   });
   if (body !== undefined) {
-    await syncMentions({ authorId: thread.authorId, body, threadId: thread.id });
+    const newMentions = await syncMentions({ authorId: thread.authorId, body, threadId: thread.id });
+    for (const userId of newMentions) {
+      await notify({
+        type: "mention",
+        recipientId: userId,
+        actorId: thread.authorId,
+        threadId: thread.id,
+        snippet: toSnippet(body),
+      });
+    }
   }
 
   res.json({ ok: true });
@@ -302,6 +321,13 @@ threadsRouter.post("/:id/like", requireAuth, requireVerified, writeLimiter, asyn
     await prisma.threadLike.delete({ where: { id: existing.id } });
   } else {
     await prisma.threadLike.create({ data: { threadId, userId: req.user!.id } });
+    await notify({
+      type: "like_thread",
+      recipientId: thread.authorId,
+      actorId: req.user!.id,
+      threadId,
+      snippet: toSnippet(thread.title),
+    });
   }
   await recomputeThreadHotScore(threadId);
 

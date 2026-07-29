@@ -145,6 +145,87 @@ export const deleteAccountSchema = z.object({
 });
 export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
 
+/**
+ * Everything that creates an in-app notification. Reply/like split by target
+ * (thread vs reply) so clients can word them precisely; likes collapse onto
+ * one row per target and messages onto one row per sender (see the API's
+ * lib/notifications.ts).
+ */
+export const NotificationType = {
+  REPLY_THREAD: "reply_thread",
+  REPLY_POST: "reply_post",
+  LIKE_THREAD: "like_thread",
+  LIKE_POST: "like_post",
+  MENTION: "mention",
+  MESSAGE: "message",
+} as const;
+export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
+
+/** User-facing preference groups — coarser than NotificationType on purpose. */
+export const NotificationPrefKey = {
+  REPLIES: "replies",
+  LIKES: "likes",
+  MENTIONS: "mentions",
+  MESSAGES: "messages",
+} as const;
+export type NotificationPrefKey =
+  (typeof NotificationPrefKey)[keyof typeof NotificationPrefKey];
+
+export function prefKeyForNotificationType(type: NotificationType): NotificationPrefKey {
+  switch (type) {
+    case "reply_thread":
+    case "reply_post":
+      return "replies";
+    case "like_thread":
+    case "like_post":
+      return "likes";
+    case "mention":
+      return "mentions";
+    case "message":
+      return "messages";
+  }
+}
+
+export const updateNotificationPrefsSchema = z.object({
+  master: z.boolean().optional(),
+  replies: z.boolean().optional(),
+  likes: z.boolean().optional(),
+  mentions: z.boolean().optional(),
+  messages: z.boolean().optional(),
+});
+export type UpdateNotificationPrefsInput = z.infer<typeof updateNotificationPrefsSchema>;
+
+export const markNotificationsReadSchema = z.object({
+  ids: z.array(z.string()).min(1).max(100),
+});
+export type MarkNotificationsReadInput = z.infer<typeof markNotificationsReadSchema>;
+
+export const registerPushTokenSchema = z.object({
+  token: z.string().min(1).max(400),
+  platform: z.enum(["ios", "android"]),
+});
+export type RegisterPushTokenInput = z.infer<typeof registerPushTokenSchema>;
+
+export const deregisterPushTokenSchema = z.object({
+  token: z.string().min(1).max(400),
+});
+export type DeregisterPushTokenInput = z.infer<typeof deregisterPushTokenSchema>;
+
+export const SearchResultType = {
+  ALL: "all",
+  THREADS: "threads",
+  POSTS: "posts",
+  USERS: "users",
+} as const;
+export type SearchResultType = (typeof SearchResultType)[keyof typeof SearchResultType];
+
+export const SEARCH_MIN_QUERY_LENGTH = 2;
+
+export const createBookmarkSchema = z.object({
+  threadId: z.string(),
+});
+export type CreateBookmarkInput = z.infer<typeof createBookmarkSchema>;
+
 export const requestPasswordResetSchema = z.object({
   email: z.string().email(),
 });

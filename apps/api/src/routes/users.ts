@@ -267,6 +267,9 @@ usersRouter.delete("/me", requireAuth, authLimiter, async (req, res) => {
     },
   });
   if (avatarKey) await storageProvider.remove(avatarKey);
+  // A deleted account has no devices to push to and no inbox to read.
+  await prisma.pushToken.deleteMany({ where: { userId: req.user!.id } });
+  await prisma.notification.deleteMany({ where: { recipientId: req.user!.id } });
 
   res.json({ deleted: true });
 });
