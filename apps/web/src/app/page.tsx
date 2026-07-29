@@ -114,11 +114,7 @@ function HomeFeed() {
         </div>
       )}
 
-      <h1 className="page-title">Discussion Feed</h1>
-      <p className="meta">
-        A real-name space for philosophical argument. Anyone may read; posting asks that you
-        verify who you are.
-      </p>
+      <h1 className="page-title">Forum</h1>
 
       <div className="feed-controls row between wrap">
         <div className="segmented">
