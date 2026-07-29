@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   flattenPostTree,
   formatDate,
@@ -15,7 +15,7 @@ import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { FeedStackParamList } from "../navigation";
 import { Avatar } from "../components/Avatar";
 import { Markdown } from "../components/Markdown";
-import { MarkdownHint } from "../components/MarkdownHint";
+import { MarkdownComposer } from "../components/MarkdownComposer";
 import { ReportButton } from "../components/ReportButton";
 
 type Props = NativeStackScreenProps<FeedStackParamList, "Thread">;
@@ -34,6 +34,9 @@ export function ThreadScreen({ route, navigation }: Props) {
   const [repliesWindow, setRepliesWindow] = useState(REPLIES_PAGE);
   const [loadingMore, setLoadingMore] = useState(false);
   const [locking, setLocking] = useState(false);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(
     (window: number) => {
@@ -86,6 +89,69 @@ export function ThreadScreen({ route, navigation }: Props) {
     }
   }
 
+  function confirmDeleteThread() {
+    const hasReplies = (thread?.postCount ?? 0) > 0;
+    Alert.alert(
+      "Delete thread?",
+      hasReplies
+        ? "Your title and text are removed; existing replies stay readable under a [deleted] notice."
+        : "This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!token) return;
+            try {
+              await api.delete(`/api/threads/${threadId}`, token);
+              navigation.goBack();
+            } catch (err: any) {
+              Alert.alert("Could not delete", err.message);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function confirmDeletePost(postId: string) {
+    Alert.alert(
+      "Delete reply?",
+      "Replies to it will stay under a [deleted] notice.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!token) return;
+            try {
+              await api.delete(`/api/posts/${postId}`, token);
+              load(repliesWindow);
+            } catch (err: any) {
+              Alert.alert("Could not delete", err.message);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function savePostEdit(postId: string) {
+    if (!token || !editingBody.trim()) return;
+    setSaving(true);
+    try {
+      await api.patch(`/api/posts/${postId}`, { body: editingBody }, token);
+      setEditingPostId(null);
+      load(repliesWindow);
+    } catch (err: any) {
+      Alert.alert("Could not save", err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function submitReply() {
     if (!token || !replyBody.trim()) return;
     setSubmitting(true);
@@ -122,8 +188,13 @@ export function ThreadScreen({ route, navigation }: Props) {
     );
   }
 
+  const isAdmin = user?.role === "admin";
   const canLike = user?.verificationStatus === "VERIFIED";
-  const canPost = canLike && !thread.locked;
+  const canPost = canLike && !thread.locked && !thread.deleted;
+  const canEditThread =
+    !thread.deleted &&
+    Boolean(user) &&
+    (isAdmin || (user!.id === thread.author.id && user!.verificationStatus === "VERIFIED"));
   const orderedPosts = flattenPostTree(thread.posts);
 
   return (
@@ -138,14 +209,21 @@ export function ThreadScreen({ route, navigation }: Props) {
             {thread.locked ? " 🔒" : ""}
           </Text>
           <View style={styles.byline}>
-            <Pressable
-              style={[styles.byline, { marginTop: 0 }]}
-              onPress={() => navigation.navigate("UserProfile", { userId: thread.author.id })}
-            >
-              <Avatar name={thread.author.displayName} uri={thread.author.avatarUrl} size={22} />
+            {thread.author.id ? (
+              <Pressable
+                style={[styles.byline, { marginTop: 0 }]}
+                onPress={() => navigation.navigate("UserProfile", { userId: thread.author.id })}
+              >
+                <Avatar name={thread.author.displayName} uri={thread.author.avatarUrl} size={22} />
+                <Text style={styles.meta}>{thread.author.displayName}</Text>
+              </Pressable>
+            ) : (
               <Text style={styles.meta}>{thread.author.displayName}</Text>
-            </Pressable>
+            )}
             <Text style={styles.meta}>· {formatDate(thread.createdAt, dateFormat)}</Text>
+            {thread.editedAt && (
+              <Text style={styles.editedNote}>edited {formatDate(thread.editedAt, dateFormat)}</Text>
+            )}
           </View>
           {thread.tags.length > 0 && (
             <View style={styles.tagRow}>
@@ -156,41 +234,105 @@ export function ThreadScreen({ route, navigation }: Props) {
               ))}
             </View>
           )}
-          {user?.role === "admin" && (
-            <Pressable style={styles.lockButton} onPress={toggleLock} disabled={locking}>
-              <Text style={styles.lockButtonText}>
-                {thread.locked ? "Unlock thread" : "Lock thread"}
-              </Text>
-            </Pressable>
+          {(canEditThread || isAdmin) && (
+            <View style={styles.actionRow}>
+              {canEditThread && (
+                <>
+                  <Pressable
+                    style={styles.actionButton}
+                    onPress={() =>
+                      navigation.navigate("EditThread", {
+                        threadId: thread.id,
+                        title: thread.title,
+                        body: thread.body,
+                        tagIds: thread.tags.map((t) => t.id),
+                      })
+                    }
+                  >
+                    <Text style={styles.actionButtonText}>Edit</Text>
+                  </Pressable>
+                  <Pressable style={styles.actionButton} onPress={confirmDeleteThread}>
+                    <Text style={styles.actionButtonText}>Delete</Text>
+                  </Pressable>
+                </>
+              )}
+              {isAdmin && (
+                <Pressable style={styles.actionButton} onPress={toggleLock} disabled={locking}>
+                  <Text style={styles.actionButtonText}>
+                    {thread.locked ? "Unlock thread" : "Lock thread"}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
           )}
           <View style={styles.card}>
-            <Markdown>{thread.body}</Markdown>
-            <View style={styles.likeRow}>
-              <Pressable
-                style={[styles.likeButton, thread.myLiked && styles.likeButtonActive]}
-                disabled={!canLike}
-                onPress={toggleThreadLike}
-              >
-                <Text style={thread.myLiked ? styles.likeTextActive : styles.likeText}>
-                  ♥ {thread.likeCount}
-                </Text>
-              </Pressable>
-              <ReportButton targetType="thread" targetId={thread.id} />
-            </View>
+            {thread.deleted ? (
+              <Text style={styles.tombstone}>
+                This thread was deleted. The replies below are preserved.
+              </Text>
+            ) : (
+              <>
+                <Markdown>{thread.body}</Markdown>
+                <View style={styles.likeRow}>
+                  <Pressable
+                    style={[styles.likeButton, thread.myLiked && styles.likeButtonActive]}
+                    disabled={!canLike}
+                    onPress={toggleThreadLike}
+                  >
+                    <Text style={thread.myLiked ? styles.likeTextActive : styles.likeText}>
+                      ♥ {thread.likeCount}
+                    </Text>
+                  </Pressable>
+                  <ReportButton targetType="thread" targetId={thread.id} />
+                </View>
+              </>
+            )}
           </View>
           <Text style={styles.h2}>
             {thread.postCount} {thread.postCount === 1 ? "Reply" : "Replies"}
           </Text>
         </View>
       }
-      renderItem={({ item }) => (
-        <PostItem
-          post={item}
-          canLike={canLike}
-          onLike={togglePostLike}
-          onAuthorPress={(userId) => navigation.navigate("UserProfile", { userId })}
-        />
-      )}
+      renderItem={({ item }) =>
+        editingPostId === item.id ? (
+          <View style={[styles.post, { marginLeft: item.depth * spacing.lg }]}>
+            <MarkdownComposer value={editingBody} onChange={setEditingBody} minHeight={100} />
+            <View style={styles.actionRow}>
+              <Pressable
+                style={styles.actionButton}
+                onPress={() => savePostEdit(item.id)}
+                disabled={saving}
+              >
+                <Text style={styles.actionButtonText}>{saving ? "Saving..." : "Save"}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.actionButton}
+                onPress={() => setEditingPostId(null)}
+                disabled={saving}
+              >
+                <Text style={styles.actionButtonText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <PostItem
+            post={item}
+            canLike={canLike}
+            canModify={Boolean(
+              user &&
+                !item.deleted &&
+                (isAdmin || (user.id === item.author.id && user.verificationStatus === "VERIFIED")),
+            )}
+            onLike={togglePostLike}
+            onEdit={(p) => {
+              setEditingPostId(p.id);
+              setEditingBody(p.body);
+            }}
+            onDelete={confirmDeletePost}
+            onAuthorPress={(userId) => navigation.navigate("UserProfile", { userId })}
+          />
+        )
+      }
       ListFooterComponent={
         <View style={{ marginTop: spacing.lg, paddingBottom: spacing.xl }}>
           {thread.hasMoreReplies && (
@@ -200,20 +342,19 @@ export function ThreadScreen({ route, navigation }: Props) {
               </Text>
             </Pressable>
           )}
-          {thread.locked ? (
+          {thread.deleted ? (
+            <Text style={styles.notice}>This thread was deleted — no new replies.</Text>
+          ) : thread.locked ? (
             <Text style={styles.notice}>This thread is locked — no new replies.</Text>
           ) : canPost ? (
             <>
               <Text style={styles.label}>Add a reply</Text>
-              <TextInput
-                style={styles.textarea}
-                multiline
-                placeholder="Make your case..."
-                placeholderTextColor={colors.muted}
+              <MarkdownComposer
                 value={replyBody}
-                onChangeText={setReplyBody}
+                onChange={setReplyBody}
+                placeholder="Make your case..."
+                minHeight={80}
               />
-              <MarkdownHint />
               <Pressable style={styles.button} onPress={submitReply} disabled={submitting}>
                 <Text style={styles.buttonText}>{submitting ? "Posting..." : "Post reply"}</Text>
               </Pressable>
@@ -232,16 +373,33 @@ export function ThreadScreen({ route, navigation }: Props) {
 function PostItem({
   post,
   canLike,
+  canModify,
   onLike,
+  onEdit,
+  onDelete,
   onAuthorPress,
 }: {
   post: PostWithDepth;
   canLike: boolean;
+  canModify: boolean;
   onLike: (postId: string) => void;
+  onEdit: (post: PostWithDepth) => void;
+  onDelete: (postId: string) => void;
   onAuthorPress: (userId: string) => void;
 }) {
   const { colors, dateFormat } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  if (post.deleted) {
+    return (
+      <View style={[styles.post, { marginLeft: post.depth * spacing.lg }]}>
+        <Text style={styles.tombstone}>[deleted]</Text>
+        <View style={styles.byline}>
+          <Text style={styles.meta}>· {formatDate(post.createdAt, dateFormat)}</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.post, { marginLeft: post.depth * spacing.lg }]}>
@@ -255,6 +413,9 @@ function PostItem({
           <Text style={styles.meta}>{post.author.displayName}</Text>
         </Pressable>
         <Text style={styles.meta}>· {formatDate(post.createdAt, dateFormat)}</Text>
+        {post.editedAt && (
+          <Text style={styles.editedNote}>edited {formatDate(post.editedAt, dateFormat)}</Text>
+        )}
       </View>
       <View style={styles.likeRow}>
         <Pressable
@@ -266,6 +427,16 @@ function PostItem({
             ♥ {post.likeCount}
           </Text>
         </Pressable>
+        {canModify && (
+          <>
+            <Pressable onPress={() => onEdit(post)}>
+              <Text style={styles.linkAction}>Edit</Text>
+            </Pressable>
+            <Pressable onPress={() => onDelete(post.id)}>
+              <Text style={styles.linkAction}>Delete</Text>
+            </Pressable>
+          </>
+        )}
         <ReportButton targetType="post" targetId={post.id} />
       </View>
     </View>
@@ -283,8 +454,26 @@ function makeStyles(colors: ThemeColors) {
       marginTop: spacing.xl,
       marginBottom: spacing.xs,
     },
-    byline: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
+    byline: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+      flexWrap: "wrap",
+    },
     meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
+    editedNote: {
+      color: colors.muted,
+      fontFamily: fonts.sans,
+      fontSize: type.xs,
+      fontStyle: "italic",
+    },
+    tombstone: {
+      color: colors.muted,
+      fontFamily: fonts.sans,
+      fontSize: type.base,
+      fontStyle: "italic",
+    },
     error: { color: colors.danger, fontFamily: fonts.sans },
     tagRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.md },
     tagPill: {
@@ -301,16 +490,17 @@ function makeStyles(colors: ThemeColors) {
       color: colors.inkSoft,
       letterSpacing: 0.5,
     },
-    lockButton: {
+    actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md, flexWrap: "wrap" },
+    actionButton: {
       alignSelf: "flex-start",
       borderWidth: 1,
       borderColor: colors.borderStrong,
       borderRadius: radius.sm,
       paddingVertical: spacing.xs,
       paddingHorizontal: spacing.md,
-      marginTop: spacing.md,
     },
-    lockButtonText: { color: colors.ink, fontFamily: fonts.displayMedium, fontSize: type.sm },
+    actionButtonText: { color: colors.ink, fontFamily: fonts.displayMedium, fontSize: type.sm },
+    linkAction: { color: colors.muted, fontFamily: fonts.displayMedium, fontSize: type.sm },
     card: {
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -318,12 +508,6 @@ function makeStyles(colors: ThemeColors) {
       borderRadius: radius.md,
       padding: spacing.lg,
       marginTop: spacing.md,
-    },
-    body: {
-      fontFamily: fonts.sans,
-      fontSize: type.base,
-      lineHeight: 25,
-      color: colors.ink,
     },
     post: {
       borderLeftWidth: 2,
@@ -365,18 +549,6 @@ function makeStyles(colors: ThemeColors) {
       fontSize: type.sm,
       color: colors.ink,
       marginBottom: spacing.xs,
-    },
-    textarea: {
-      borderWidth: 1,
-      borderColor: colors.borderStrong,
-      borderRadius: radius.sm,
-      padding: spacing.md,
-      minHeight: 80,
-      backgroundColor: colors.surface,
-      color: colors.ink,
-      fontFamily: fonts.sans,
-      fontSize: type.base,
-      textAlignVertical: "top",
     },
     button: {
       backgroundColor: colors.solid,

@@ -9,19 +9,24 @@ import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { FeedStackParamList } from "../navigation";
 
-type Props = NativeStackScreenProps<FeedStackParamList, "NewThread">;
+type Props = NativeStackScreenProps<FeedStackParamList, "EditThread">;
 
-export function NewThreadScreen({ route, navigation }: Props) {
-  const { tagId } = route.params;
+/**
+ * Edit your own thread (title, body, tags). Initial values arrive as route
+ * params from ThreadScreen; saving PATCHes and pops back, and ThreadScreen's
+ * focus effect refetches.
+ */
+export function EditThreadScreen({ route, navigation }: Props) {
+  const { threadId } = route.params;
   const { token } = useAuth();
   const { colors } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [tags, setTags] = useState<TagWithCount[] | null>(null);
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(tagId ? [tagId] : []);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>(route.params.tagIds);
+  const [title, setTitle] = useState(route.params.title);
+  const [body, setBody] = useState(route.params.body);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api.get<{ tags: TagWithCount[] }>("/api/tags").then((res) => setTags(res.tags));
@@ -31,42 +36,31 @@ export function NewThreadScreen({ route, navigation }: Props) {
     setSelectedTagIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
-  async function onSubmit() {
+  async function onSave() {
     setError(null);
-    setSubmitting(true);
+    setSaving(true);
     try {
-      const { thread } = await api.post<{ thread: { id: string } }>(
-        "/api/threads",
-        { title, body, tagIds: selectedTagIds },
-        token,
-      );
-      navigation.replace("Thread", { threadId: thread.id });
+      await api.patch(`/api/threads/${threadId}`, { title, body, tagIds: selectedTagIds }, token);
+      navigation.goBack();
     } catch (err: any) {
-      setError(err.message ?? "Could not create thread");
+      setError(err.message ?? "Could not save changes");
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: spacing.lg }}>
-      <Text style={styles.meta}>Pose the question well and the discussion will follow.</Text>
       <Text style={styles.label}>Title</Text>
       <TextInput
         style={styles.input}
         value={title}
         onChangeText={setTitle}
-        placeholder="Frame it as a question worth arguing about"
         placeholderTextColor={colors.muted}
       />
-      <Text style={styles.label}>Opening post</Text>
-      <MarkdownComposer
-        value={body}
-        onChange={setBody}
-        placeholder="State your position, or lay out the question..."
-        minHeight={140}
-      />
-      <Text style={styles.label}>Tags (optional)</Text>
+      <Text style={styles.label}>Text</Text>
+      <MarkdownComposer value={body} onChange={setBody} minHeight={140} />
+      <Text style={styles.label}>Tags</Text>
       <View style={styles.tagWrap}>
         {tags?.map((t) => (
           <Pressable
@@ -81,8 +75,8 @@ export function NewThreadScreen({ route, navigation }: Props) {
         ))}
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
-      <Pressable style={styles.button} onPress={onSubmit} disabled={submitting}>
-        <Text style={styles.buttonText}>{submitting ? "Posting..." : "Post thread"}</Text>
+      <Pressable style={styles.button} onPress={onSave} disabled={saving}>
+        <Text style={styles.buttonText}>{saving ? "Saving..." : "Save changes"}</Text>
       </Pressable>
     </ScrollView>
   );
@@ -91,12 +85,6 @@ export function NewThreadScreen({ route, navigation }: Props) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.paper },
-    meta: {
-      color: colors.muted,
-      fontFamily: fonts.sans,
-      fontSize: type.sm,
-      marginBottom: spacing.md,
-    },
     label: {
       fontFamily: fonts.displaySemi,
       fontSize: type.sm,

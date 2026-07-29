@@ -2,13 +2,14 @@ import { useNavigation, useFocusEffect, type NavigationProp } from "@react-navig
 import type { RouteProp } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { formatDate, type UserProfileResponse } from "@nyps-forum/shared";
+import { formatDate, stripMarkdown, type UserProfileResponse } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { RootTabParamList } from "../navigation";
 import { Avatar } from "../components/Avatar";
+import { Markdown } from "../components/Markdown";
 import { ReportButton } from "../components/ReportButton";
 import { VerificationBadge } from "../components/VerificationBadge";
 
@@ -126,7 +127,11 @@ export function UserProfileScreen({ route }: Props) {
           {profile.threadCount === 1 ? "thread" : "threads"} · {profile.replyCount}{" "}
           {profile.replyCount === 1 ? "reply" : "replies"}
         </Text>
-        {user.bio && <Text style={styles.bio}>{user.bio}</Text>}
+        {user.bio && (
+          <View style={styles.bio}>
+            <Markdown>{user.bio}</Markdown>
+          </View>
+        )}
 
         {!isSelf && viewer && (
           <View style={styles.actions}>
@@ -192,7 +197,7 @@ export function UserProfileScreen({ route }: Props) {
       {profile.replies.map((r) => (
         <Pressable key={r.id} style={styles.card} onPress={() => openThread(r.threadId)}>
           <Text style={styles.replyQuote} numberOfLines={3}>
-            {r.body}
+            {stripMarkdown(r.body)}
           </Text>
           <Text style={[styles.meta, { marginTop: spacing.sm }]}>
             in <Text style={styles.replyThreadTitle}>{r.threadTitle}</Text> ·{" "}

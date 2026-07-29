@@ -4,8 +4,8 @@ import { useSettings } from "../lib/settings-context";
 import { fonts, spacing, type, type ThemeColors } from "../lib/theme";
 
 /**
- * Composer footnote. There's no toolbar on mobile — the keyboard already owns
- * the bottom of the screen — so the syntax is spelled out instead.
+ * Composer footnote — spells out the syntax the toolbar inserts and points
+ * at the full guide.
  */
 export function MarkdownHint() {
   const { colors } = useSettings();

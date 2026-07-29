@@ -27,6 +27,7 @@ import type {
 } from "./src/navigation";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { ThreadScreen } from "./src/screens/ThreadScreen";
+import { EditThreadScreen } from "./src/screens/EditThreadScreen";
 import { NewThreadScreen } from "./src/screens/NewThreadScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { SignupScreen } from "./src/screens/SignupScreen";
@@ -92,6 +93,11 @@ function FeedStack() {
         name="NewThread"
         component={NewThreadScreen}
         options={{ title: "New Thread" }}
+      />
+      <FeedStackNav.Screen
+        name="EditThread"
+        component={EditThreadScreen}
+        options={{ title: "Edit Thread" }}
       />
       <FeedStackNav.Screen
         name="UserProfile"

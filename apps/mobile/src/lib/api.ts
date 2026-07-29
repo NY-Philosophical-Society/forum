@@ -2,7 +2,7 @@
 // dev machine. Set EXPO_PUBLIC_API_URL in .env to your machine's LAN IP
 // (e.g. http://192.168.1.23:4000) when testing on a real device. The iOS
 // Simulator can usually still reach localhost directly.
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 
 class ApiError extends Error {
   constructor(message: string) {

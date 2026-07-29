@@ -2,6 +2,8 @@ export type FeedStackParamList = {
   Home: undefined;
   Thread: { threadId: string };
   NewThread: { tagId?: string };
+  // Initial values ride along so the edit screen never shows a loading state.
+  EditThread: { threadId: string; title: string; body: string; tagIds: string[] };
   UserProfile: { userId: string };
 };
 
