@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { flattenPostTree, formatDateTime, type ThreadDetail } from "@nyps-forum/shared";
+import {
+  flattenPostTree,
+  formatDateTime,
+  stripMarkdown,
+  type PostWithDepth,
+  type TagWithCount,
+  type ThreadDetail,
+} from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
@@ -15,6 +22,7 @@ const REPLIES_PAGE = 20;
 
 export default function ThreadPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { user, token } = useAuth();
   const { dateFormat } = useSettings();
   const [thread, setThread] = useState<ThreadDetail | null>(null);
@@ -25,6 +33,19 @@ export default function ThreadPage() {
   const [repliesWindow, setRepliesWindow] = useState(REPLIES_PAGE);
   const [loadingMore, setLoadingMore] = useState(false);
   const [locking, setLocking] = useState(false);
+
+  // Thread edit mode (author or admin).
+  const [editingThread, setEditingThread] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const [editTagIds, setEditTagIds] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<TagWithCount[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Reply edit mode.
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editingPostBody, setEditingPostBody] = useState("");
 
   async function load(window: number) {
     try {
@@ -74,6 +95,86 @@ export default function ThreadPage() {
     }
   }
 
+  function startThreadEdit() {
+    if (!thread) return;
+    setEditTitle(thread.title);
+    setEditBody(thread.body);
+    setEditTagIds(thread.tags.map((t) => t.id));
+    setEditingThread(true);
+    setActionError(null);
+    if (!allTags) {
+      api.get<{ tags: TagWithCount[] }>("/api/tags").then((res) => setAllTags(res.tags));
+    }
+  }
+
+  async function saveThreadEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) return;
+    setSaving(true);
+    setActionError(null);
+    try {
+      await api.patch(
+        `/api/threads/${id}`,
+        { title: editTitle, body: editBody, tagIds: editTagIds },
+        token,
+      );
+      setEditingThread(false);
+      await load(repliesWindow);
+    } catch (err: any) {
+      setActionError(err.message ?? "Could not save changes");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteThread() {
+    if (!token) return;
+    const hasReplies = (thread?.postCount ?? 0) > 0;
+    const message = hasReplies
+      ? "Delete this thread? Your title and text are removed; existing replies stay readable under a [deleted] notice."
+      : "Delete this thread? This can't be undone.";
+    if (!window.confirm(message)) return;
+    try {
+      await api.delete(`/api/threads/${id}`, token);
+      router.push("/");
+    } catch (err: any) {
+      setActionError(err.message ?? "Could not delete the thread");
+    }
+  }
+
+  function startPostEdit(p: PostWithDepth) {
+    setEditingPostId(p.id);
+    setEditingPostBody(p.body);
+    setActionError(null);
+  }
+
+  async function savePostEdit(postId: string) {
+    if (!token) return;
+    setSaving(true);
+    setActionError(null);
+    try {
+      await api.patch(`/api/posts/${postId}`, { body: editingPostBody }, token);
+      setEditingPostId(null);
+      await load(repliesWindow);
+    } catch (err: any) {
+      setActionError(err.message ?? "Could not save changes");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deletePost(postId: string) {
+    if (!token) return;
+    if (!window.confirm("Delete this reply? Replies to it will stay under a [deleted] notice."))
+      return;
+    try {
+      await api.delete(`/api/posts/${postId}`, token);
+      await load(repliesWindow);
+    } catch (err: any) {
+      setActionError(err.message ?? "Could not delete the reply");
+    }
+  }
+
   async function submitReply(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
@@ -114,7 +215,12 @@ export default function ThreadPage() {
     );
   }
 
-  const canPost = user?.verificationStatus === "VERIFIED" && !thread.locked;
+  const isAdmin = user?.role === "admin";
+  const canPost = user?.verificationStatus === "VERIFIED" && !thread.locked && !thread.deleted;
+  const canEditThread =
+    !thread.deleted &&
+    Boolean(user) &&
+    (isAdmin || (user!.id === thread.author.id && user!.verificationStatus === "VERIFIED"));
   const orderedPosts = flattenPostTree(thread.posts);
 
   return (
@@ -128,19 +234,38 @@ export default function ThreadPage() {
           {thread.title}
           {thread.locked && " 🔒"}
         </h1>
-        {user?.role === "admin" && (
-          <button className="secondary btn-sm" onClick={toggleLock} disabled={locking}>
-            {thread.locked ? "Unlock" : "Lock"} thread
-          </button>
-        )}
+        <div className="row wrap">
+          {canEditThread && !editingThread && (
+            <>
+              <button className="secondary btn-sm" onClick={startThreadEdit}>
+                Edit
+              </button>
+              <button className="secondary btn-sm" onClick={deleteThread}>
+                Delete
+              </button>
+            </>
+          )}
+          {isAdmin && (
+            <button className="secondary btn-sm" onClick={toggleLock} disabled={locking}>
+              {thread.locked ? "Unlock" : "Lock"} thread
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="row" style={{ margin: "0.75rem 0" }}>
-        <Link className="author-link" href={`/u/${thread.author.id}`}>
-          <Avatar name={thread.author.displayName} src={thread.author.avatarUrl} size={26} />
+      <div className="row wrap" style={{ margin: "0.75rem 0" }}>
+        {thread.author.id ? (
+          <Link className="author-link" href={`/u/${thread.author.id}`}>
+            <Avatar name={thread.author.displayName} src={thread.author.avatarUrl} size={26} />
+            <p className="meta">{thread.author.displayName}</p>
+          </Link>
+        ) : (
           <p className="meta">{thread.author.displayName}</p>
-        </Link>
+        )}
         <p className="meta">· {formatDateTime(thread.createdAt, dateFormat)}</p>
+        {thread.editedAt && (
+          <p className="edited-note">edited {formatDateTime(thread.editedAt, dateFormat)}</p>
+        )}
       </div>
 
       {thread.tags.length > 0 && (
@@ -153,19 +278,76 @@ export default function ThreadPage() {
         </div>
       )}
 
-      <div className="card">
-        <Markdown>{thread.body}</Markdown>
-        <div className="like-row">
-          <button
-            className={`like-button ${thread.myLiked ? "like-button-active" : ""}`}
-            disabled={user?.verificationStatus !== "VERIFIED"}
-            onClick={toggleThreadLike}
-          >
-            ♥ {thread.likeCount}
-          </button>
-          <ReportButton targetType="thread" targetId={thread.id} />
+      {editingThread ? (
+        <form className="card inline-edit" onSubmit={saveThreadEdit} style={{ maxWidth: "none" }}>
+          <label>
+            Title
+            <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} required />
+          </label>
+          <label>
+            Text
+            <MarkdownEditor value={editBody} onChange={setEditBody} minHeight="200px" required />
+          </label>
+          <label>
+            Tags
+            <div className="tag-row" style={{ marginBottom: 0 }}>
+              {allTags?.map((t) => (
+                <button
+                  type="button"
+                  key={t.id}
+                  className={`tag-chip ${editTagIds.includes(t.id) ? "tag-chip-active" : ""}`}
+                  onClick={() =>
+                    setEditTagIds((prev) =>
+                      prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id],
+                    )
+                  }
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          </label>
+          <div className="row">
+            <button type="submit" disabled={saving}>
+              {saving ? "Saving..." : "Save changes"}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setEditingThread(false)}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="card">
+          {thread.deleted ? (
+            <p className="tombstone">
+              This thread was deleted. The replies below are preserved.
+            </p>
+          ) : thread.previewOnly ? (
+            <p style={{ margin: 0 }}>{stripMarkdown(thread.body)}</p>
+          ) : (
+            <Markdown>{thread.body}</Markdown>
+          )}
+          {!thread.deleted && (
+            <div className="like-row">
+              <button
+                className={`like-button ${thread.myLiked ? "like-button-active" : ""}`}
+                disabled={user?.verificationStatus !== "VERIFIED"}
+                onClick={toggleThreadLike}
+              >
+                ♥ {thread.likeCount}
+              </button>
+              <ReportButton targetType="thread" targetId={thread.id} />
+            </div>
+          )}
         </div>
-      </div>
+      )}
+
+      {actionError && <p className="error">{actionError}</p>}
 
       {thread.previewOnly ? (
         <div className="wall-card">
@@ -197,29 +379,75 @@ export default function ThreadPage() {
           </h3>
           {orderedPosts.map((p) => (
             <div className="post" key={p.id} style={{ marginLeft: `${p.depth * 1.5}rem` }}>
-              <Markdown>{p.body}</Markdown>
-              <div className="row" style={{ marginTop: "0.6rem" }}>
-                <Link className="author-link" href={`/u/${p.author.id}`}>
-                  <Avatar name={p.author.displayName} src={p.author.avatarUrl} size={22} />
-                  <p className="meta">{p.author.displayName}</p>
-                </Link>
-                <p className="meta">· {formatDateTime(p.createdAt, dateFormat)}</p>
-              </div>
-              <div className="like-row">
-                <button
-                  className={`like-button ${p.myLiked ? "like-button-active" : ""}`}
-                  disabled={user?.verificationStatus !== "VERIFIED"}
-                  onClick={() => togglePostLike(p.id)}
-                >
-                  ♥ {p.likeCount}
-                </button>
-                {canPost && (
-                  <button className="link-button" onClick={() => setReplyTo(p.id)}>
-                    Reply
-                  </button>
-                )}
-                <ReportButton targetType="post" targetId={p.id} />
-              </div>
+              {p.deleted ? (
+                <>
+                  <p className="tombstone">[deleted]</p>
+                  <div className="row" style={{ marginTop: "0.6rem" }}>
+                    <p className="meta">· {formatDateTime(p.createdAt, dateFormat)}</p>
+                  </div>
+                </>
+              ) : editingPostId === p.id ? (
+                <div className="inline-edit">
+                  <MarkdownEditor
+                    value={editingPostBody}
+                    onChange={setEditingPostBody}
+                    minHeight="120px"
+                  />
+                  <div className="row">
+                    <button className="btn-sm" onClick={() => savePostEdit(p.id)} disabled={saving}>
+                      {saving ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      className="secondary btn-sm"
+                      onClick={() => setEditingPostId(null)}
+                      disabled={saving}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <Markdown>{p.body}</Markdown>
+                  <div className="row wrap" style={{ marginTop: "0.6rem" }}>
+                    <Link className="author-link" href={`/u/${p.author.id}`}>
+                      <Avatar name={p.author.displayName} src={p.author.avatarUrl} size={22} />
+                      <p className="meta">{p.author.displayName}</p>
+                    </Link>
+                    <p className="meta">· {formatDateTime(p.createdAt, dateFormat)}</p>
+                    {p.editedAt && (
+                      <p className="edited-note">edited {formatDateTime(p.editedAt, dateFormat)}</p>
+                    )}
+                  </div>
+                  <div className="like-row">
+                    <button
+                      className={`like-button ${p.myLiked ? "like-button-active" : ""}`}
+                      disabled={user?.verificationStatus !== "VERIFIED"}
+                      onClick={() => togglePostLike(p.id)}
+                    >
+                      ♥ {p.likeCount}
+                    </button>
+                    {canPost && (
+                      <button className="link-button" onClick={() => setReplyTo(p.id)}>
+                        Reply
+                      </button>
+                    )}
+                    {user &&
+                      (isAdmin ||
+                        (user.id === p.author.id && user.verificationStatus === "VERIFIED")) && (
+                        <>
+                          <button className="link-button" onClick={() => startPostEdit(p)}>
+                            Edit
+                          </button>
+                          <button className="link-button" onClick={() => deletePost(p.id)}>
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    <ReportButton targetType="post" targetId={p.id} />
+                  </div>
+                </>
+              )}
             </div>
           ))}
 
@@ -229,7 +457,9 @@ export default function ThreadPage() {
             </button>
           )}
 
-          {thread.locked ? (
+          {thread.deleted ? (
+            <p className="notice">This thread was deleted — no new replies.</p>
+          ) : thread.locked ? (
             <p className="notice">This thread is locked — no new replies.</p>
           ) : canPost ? (
             <form onSubmit={submitReply} style={{ marginTop: "2rem", maxWidth: "none" }}>
