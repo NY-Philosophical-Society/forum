@@ -64,7 +64,7 @@ export default function MessagesInboxPage() {
             <Link href={`/messages/${u.id}`} key={u.id} style={{ textDecoration: "none" }}>
               <div className="card conversation-row">
                 <div className="row">
-                  <Avatar name={u.displayName} size={32} />
+                  <Avatar name={u.displayName} src={u.avatarUrl} size={32} />
                   <span className="title">{u.displayName}</span>
                 </div>
               </div>
@@ -94,7 +94,7 @@ export default function MessagesInboxPage() {
         <Link href={`/messages/${c.otherUser.id}`} key={c.otherUser.id} style={{ textDecoration: "none" }}>
           <div className="card conversation-row">
             <div className="row" style={{ minWidth: 0 }}>
-              <Avatar name={c.otherUser.displayName} size={36} />
+              <Avatar name={c.otherUser.displayName} src={c.otherUser.avatarUrl} size={36} />
               <div style={{ minWidth: 0 }}>
                 <span className="title">{c.otherUser.displayName}</span>
                 <p

@@ -41,7 +41,7 @@ export function ProfileMenu() {
   return (
     <div className="profile-menu" ref={menuRef}>
       <button className="profile-trigger" onClick={() => setOpen((v) => !v)}>
-        <Avatar name={user.displayName} size={32} />
+        <Avatar name={user.displayName} src={user.avatarUrl} size={32} />
         {unreadCount > 0 && <span className="unread-count">{unreadCount}</span>}
       </button>
 
@@ -54,6 +54,9 @@ export function ProfileMenu() {
               {user.isSupporter && <span className="badge badge-supporter">supporter</span>}
             </div>
           </div>
+          <Link href={`/u/${user.id}`} onClick={() => setOpen(false)}>
+            My profile
+          </Link>
           <Link href="/verify" onClick={() => setOpen(false)}>
             Verification
           </Link>

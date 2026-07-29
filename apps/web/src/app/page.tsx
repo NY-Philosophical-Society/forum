@@ -191,10 +191,11 @@ function HomeFeed() {
             {t.locked && " 🔒"}
           </Link>
           <div className="row" style={{ marginTop: "0.6rem" }}>
-            <Avatar name={t.author.displayName} size={24} />
-            <p className="meta">
-              {t.author.displayName} · {formatDate(t.createdAt, dateFormat)}
-            </p>
+            <Link className="author-link" href={`/u/${t.author.id}`}>
+              <Avatar name={t.author.displayName} src={t.author.avatarUrl} size={24} />
+              <p className="meta">{t.author.displayName}</p>
+            </Link>
+            <p className="meta">· {formatDate(t.createdAt, dateFormat)}</p>
           </div>
           {t.tags.length > 0 && (
             <div className="row wrap" style={{ marginTop: "0.75rem" }}>

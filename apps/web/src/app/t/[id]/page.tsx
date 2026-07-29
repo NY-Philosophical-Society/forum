@@ -136,10 +136,11 @@ export default function ThreadPage() {
       </div>
 
       <div className="row" style={{ margin: "0.75rem 0" }}>
-        <Avatar name={thread.author.displayName} size={26} />
-        <p className="meta">
-          {thread.author.displayName} · {formatDateTime(thread.createdAt, dateFormat)}
-        </p>
+        <Link className="author-link" href={`/u/${thread.author.id}`}>
+          <Avatar name={thread.author.displayName} src={thread.author.avatarUrl} size={26} />
+          <p className="meta">{thread.author.displayName}</p>
+        </Link>
+        <p className="meta">· {formatDateTime(thread.createdAt, dateFormat)}</p>
       </div>
 
       {thread.tags.length > 0 && (
@@ -198,10 +199,11 @@ export default function ThreadPage() {
             <div className="post" key={p.id} style={{ marginLeft: `${p.depth * 1.5}rem` }}>
               <Markdown>{p.body}</Markdown>
               <div className="row" style={{ marginTop: "0.6rem" }}>
-                <Avatar name={p.author.displayName} size={22} />
-                <p className="meta">
-                  {p.author.displayName} · {formatDateTime(p.createdAt, dateFormat)}
-                </p>
+                <Link className="author-link" href={`/u/${p.author.id}`}>
+                  <Avatar name={p.author.displayName} src={p.author.avatarUrl} size={22} />
+                  <p className="meta">{p.author.displayName}</p>
+                </Link>
+                <p className="meta">· {formatDateTime(p.createdAt, dateFormat)}</p>
               </div>
               <div className="like-row">
                 <button

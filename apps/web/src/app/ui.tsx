@@ -1,19 +1,52 @@
 "use client";
 
+import { useState } from "react";
+
 /**
  * Shared UI primitives for the forum. Visual primitives that are pure CSS
  * (buttons, cards, chips, badges) stay as classes in globals.css; these are
  * the ones that carry structure or state.
  */
 
-export function Avatar({ name, size = 28 }: { name: string; size?: number }) {
+/** First letter of the name; "?" for names with none (e.g. "[deleted]"). */
+export function avatarInitial(name: string): string {
+  const letter = name.match(/\p{L}/u);
+  return letter ? letter[0].toUpperCase() : "?";
+}
+
+export function Avatar({
+  name,
+  src,
+  size = 28,
+}: {
+  name: string;
+  /** Photo URL; null/undefined falls back to initials. */
+  src?: string | null;
+  size?: number;
+}) {
+  // Tracks the exact URL that failed, so a *new* src gets a fresh chance.
+  const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
+  if (src && brokenSrc !== src) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        className="avatar avatar-photo"
+        style={{ width: size, height: size }}
+        src={src}
+        alt=""
+        // A dead URL must degrade to initials, never a broken-image glyph.
+        onError={() => setBrokenSrc(src)}
+        aria-hidden
+      />
+    );
+  }
   return (
     <span
       className="avatar"
       style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}
       aria-hidden
     >
-      {name.charAt(0).toUpperCase()}
+      {avatarInitial(name)}
     </span>
   );
 }

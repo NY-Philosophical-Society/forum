@@ -106,10 +106,10 @@ export default function ConversationPage() {
       </Link>
 
       <div className="row between wrap">
-        <div className="row">
-          <Avatar name={otherUser.displayName} size={36} />
+        <Link className="author-link" href={`/u/${otherUser.id}`}>
+          <Avatar name={otherUser.displayName} src={otherUser.avatarUrl} size={36} />
           <h1 style={{ margin: 0, fontSize: "var(--text-xl)" }}>{otherUser.displayName}</h1>
-        </div>
+        </Link>
         <div className="row">
           <ReportButton targetType="user" targetId={otherUser.id} />
           <button className="link-button" onClick={toggleBlock}>
