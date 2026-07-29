@@ -11,7 +11,10 @@
     "dev:api": "npm run dev --workspace=apps/api",
     "dev:web": "npm run dev --workspace=apps/web",
     "dev:mobile": "npm run start --workspace=apps/mobile",
+    "db:up": "npm run db:up --workspace=apps/api",
+    "db:down": "npm run db:down --workspace=apps/api",
     "db:migrate": "npm run db:migrate --workspace=apps/api",
+    "db:deploy": "npm run db:deploy --workspace=apps/api",
     "db:seed": "npm run db:seed --workspace=apps/api"
   }
 }

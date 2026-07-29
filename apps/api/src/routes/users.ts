@@ -214,7 +214,9 @@ usersRouter.get("/", requireAuth, async (req, res) => {
 
   const users = await prisma.user.findMany({
     where: {
-      displayName: { contains: search },
+      // Postgres LIKE is case-sensitive; without this, typing "@ali" would
+      // not offer "Alice" in the mention autocomplete.
+      displayName: { contains: search, mode: "insensitive" },
       id: { not: req.user!.id },
       deletedAt: null,
       blocking: { none: { blockedId: req.user!.id } },

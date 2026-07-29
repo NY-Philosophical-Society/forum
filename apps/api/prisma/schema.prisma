@@ -1,11 +1,14 @@
-// Local prototype uses SQLite for zero-setup dev. Swap provider to "postgresql"
-// and set DATABASE_URL to a real connection string for production.
+// Postgres everywhere — local dev, tests, and production run the same engine,
+// so nothing can pass locally on SQLite semantics and then fail on a host.
+// Local Postgres needs no install: `npm run db:up` (see scripts/local-postgres.ts),
+// or Docker Compose if you prefer (docker-compose.yml). Deploys run
+// `prisma migrate deploy`, never `dev` — see docs/DEPLOY.md.
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

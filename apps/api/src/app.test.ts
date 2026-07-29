@@ -10,9 +10,9 @@ describe("test harness", () => {
     expect(res.body).toEqual({ ok: true });
   });
 
-  it("runs against the throwaway test database, not dev.db", async () => {
-    expect(process.env.DATABASE_URL).toMatch(/nyps-api-test-/);
-    expect(process.env.DATABASE_URL).not.toMatch(/dev\.db/);
+  it("runs against the throwaway test schema, not the dev database", async () => {
+    expect(process.env.DATABASE_URL).toMatch(/schema=nyps_api_test_/);
+    expect(process.env.DATABASE_URL).not.toMatch(/schema=public/);
     // setup.ts wiped it — a fresh migrated schema with no seed data.
     expect(await prisma.user.count()).toBe(0);
   });
