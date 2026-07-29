@@ -2011,10 +2011,16 @@ mark {
 }
 
 /* A moderation warning in the notification list reads as a warning, not as
-   another like. */
+   another like — and its text is the whole point, so it isn't line-clamped. */
 .notif-warning {
   border-left: 2px solid var(--danger);
   padding-left: var(--space-3);
+}
+
+.notif-warning .notif-snippet {
+  display: block;
+  color: var(--ink);
+  -webkit-line-clamp: unset;
 }
 
 @media (max-width: 640px) {

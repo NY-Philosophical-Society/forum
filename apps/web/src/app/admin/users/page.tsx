@@ -10,8 +10,8 @@ import {
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
-import { Avatar, EmptyState, Skeleton, StatusBadge } from "../../ui";
-import { AdminFilters, AdminSearch, AdminSelect, ConfirmAction } from "../admin-ui";
+import { Avatar, ConfirmAction, EmptyState, Skeleton, StatusBadge } from "../../ui";
+import { AdminFilters, AdminSearch, AdminSelect } from "../admin-ui";
 
 const PAGE_SIZE = 25;
 

@@ -96,6 +96,109 @@ export function PostSkeleton() {
   );
 }
 
+/**
+ * A two-step destructive action: the button reveals a panel that states what
+ * will happen and takes the reason, and only that panel's button commits. The
+ * reason isn't UI politeness — for moderation actions it's what gets written to
+ * the moderation log, so the confirmation step and the audit record are one
+ * interaction rather than two things a hurried admin can get half of.
+ */
+export function ConfirmAction({
+  label,
+  title,
+  description,
+  confirmLabel,
+  danger = false,
+  reasonRequired = true,
+  reasonLabel = "Reason (recorded in the moderation log)",
+  reasonPlaceholder,
+  disabled = false,
+  onConfirm,
+  onDone,
+}: {
+  label: string;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  danger?: boolean;
+  reasonRequired?: boolean;
+  reasonLabel?: string;
+  reasonPlaceholder?: string;
+  disabled?: boolean;
+  onConfirm: (reason: string) => Promise<void>;
+  onDone?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function commit() {
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm(reason.trim());
+      setOpen(false);
+      setReason("");
+      onDone?.();
+    } catch (e: any) {
+      setError(e.message ?? "That didn't work");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        className={danger ? "btn-sm danger-button" : "secondary btn-sm"}
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        {label}
+      </button>
+    );
+  }
+
+  return (
+    <div className={`confirm-panel ${danger ? "confirm-panel-danger" : ""}`}>
+      <p className="confirm-title">{title}</p>
+      <p className="meta">{description}</p>
+      <label>
+        {reasonLabel}
+        {!reasonRequired && <span className="field-hint"> Optional</span>}
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={reasonPlaceholder}
+          autoFocus
+          style={{ minHeight: "58px" }}
+        />
+      </label>
+      {error && <p className="error">{error}</p>}
+      <div className="row">
+        <button
+          className={danger ? "btn-sm danger-button" : "btn-sm"}
+          onClick={commit}
+          disabled={busy || (reasonRequired && reason.trim().length < 3)}
+        >
+          {busy ? "Working..." : confirmLabel}
+        </button>
+        <button
+          className="secondary btn-sm"
+          onClick={() => {
+            setOpen(false);
+            setError(null);
+          }}
+          disabled={busy}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const statusBadgeClass: Record<string, string> = {
   VERIFIED: "badge badge-verified",
   PENDING: "badge badge-pending",

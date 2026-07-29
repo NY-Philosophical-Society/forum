@@ -17,8 +17,8 @@ import {
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
-import { Avatar, EmptyState, Skeleton } from "../../ui";
-import { AdminFilters, AdminSelect, ConfirmAction } from "../admin-ui";
+import { Avatar, ConfirmAction, EmptyState, Skeleton } from "../../ui";
+import { AdminFilters, AdminSelect } from "../admin-ui";
 
 const PAGE_SIZE = 20;
 
