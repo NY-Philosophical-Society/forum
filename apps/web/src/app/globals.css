@@ -1405,3 +1405,149 @@ button.danger-button:hover {
   border-color: var(--danger);
   color: var(--stone);
 }
+
+/* ---------------------------------------------------------------------------
+   Brief 03 — content: markdown preview, mentions, image embeds, edit/delete
+--------------------------------------------------------------------------- */
+
+/* Image embeds. Dimensions come as width/height attributes parsed from the
+   upload URL, so the aspect-ratio box is reserved before the bytes load. */
+.md-image-button {
+  display: block;
+  padding: 0;
+  margin: var(--space-3) 0;
+  background: none;
+  border: none;
+  cursor: zoom-in;
+  max-width: 100%;
+  border-radius: 0;
+}
+
+.md-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(21, 43, 66, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+  padding: var(--space-5);
+}
+
+.lightbox img {
+  max-width: min(90vw, 1600px);
+  max-height: 90vh;
+  border-radius: var(--radius-sm);
+}
+
+.lightbox-close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  background: none;
+  border: none;
+  color: var(--stone);
+  font-size: var(--text-lg);
+  padding: var(--space-2);
+  cursor: pointer;
+}
+
+/* @mentions — links to a member's profile, set off from prose links */
+.md .mention {
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.md .mention:hover {
+  text-decoration: underline;
+}
+
+/* Composer: write/preview toggle + mention autocomplete */
+.md-tool.md-preview-toggle {
+  width: auto;
+  padding: 0 var(--space-3);
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+}
+
+.md-tool.md-tool-active {
+  background: var(--solid);
+  color: var(--solid-text);
+  border-color: var(--solid);
+}
+
+.md-preview {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--hairline);
+}
+
+.md-input-wrap {
+  position: relative;
+}
+
+.mention-menu {
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: var(--space-2);
+  z-index: 30;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  background: var(--paper);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.mention-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.mention-option-active,
+.mention-option:hover {
+  background: var(--surface);
+}
+
+/* Edit/delete affordances and tombstones */
+.edited-note {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-style: italic;
+}
+
+.tombstone {
+  color: var(--muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.inline-edit {
+  margin-top: var(--space-3);
+}
+
+.inline-edit .row {
+  margin-top: var(--space-3);
+}

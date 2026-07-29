@@ -166,7 +166,8 @@ export default function EditProfilePage() {
               style={{ minHeight: "100px" }}
             />
             <p className="field-hint">
-              {bio.length}/{BIO_MAX_LENGTH} characters. Plain text.
+              {bio.length}/{BIO_MAX_LENGTH} characters. Markdown works here — **bold**, *italic*,
+              links.
             </p>
           </label>
           {error && <p className="error">{error}</p>}

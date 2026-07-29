@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { formatDate, type UserProfileResponse } from "@nyps-forum/shared";
+import { formatDate, stripMarkdown, type UserProfileResponse } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
+import { Markdown } from "../../markdown";
 import { ReportButton } from "../../report-button";
 import { Avatar, EmptyState, Skeleton, StatusBadge } from "../../ui";
 
@@ -104,7 +105,11 @@ export default function UserProfilePage() {
             {profile.threadCount === 1 ? "thread" : "threads"} · {profile.replyCount}{" "}
             {profile.replyCount === 1 ? "reply" : "replies"}
           </p>
-          {user.bio && <p className="profile-bio">{user.bio}</p>}
+          {user.bio && (
+            <div className="profile-bio">
+              <Markdown>{user.bio}</Markdown>
+            </div>
+          )}
           <div className="row wrap" style={{ marginTop: "0.9rem" }}>
             {isSelf ? (
               <Link href="/settings/profile">
@@ -195,7 +200,7 @@ export default function UserProfilePage() {
           )}
           {profile.replies.map((r) => (
             <div className="card" key={r.id}>
-              <p className="profile-reply-quote">{r.body}</p>
+              <p className="profile-reply-quote">{stripMarkdown(r.body)}</p>
               <p className="meta">
                 in{" "}
                 <Link href={`/t/${r.threadId}`} style={{ fontWeight: 600 }}>
