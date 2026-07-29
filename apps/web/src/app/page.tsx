@@ -7,6 +7,7 @@ import { formatDate, type TagWithCount, type ThreadFeedResponse, type ThreadSumm
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
+import { Avatar, EmptyState, ThreadCardSkeleton } from "./ui";
 
 const PAGE_SIZE = 20;
 
@@ -21,6 +22,7 @@ function HomeFeed() {
 
   const [tags, setTags] = useState<TagWithCount[] | null>(null);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [loading, setLoading] = useState(true);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -46,6 +48,7 @@ function HomeFeed() {
   }, []);
 
   useEffect(() => {
+    setLoading(true);
     const qs = new URLSearchParams({ sort, limit: String(PAGE_SIZE), offset: "0" });
     if (activeTag) qs.set("tag", activeTag);
     api
@@ -55,7 +58,8 @@ function HomeFeed() {
         setHasMore(res.hasMore);
         setOffset(res.threads.length);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   }, [sort, activeTag, token]);
 
   async function loadMore() {
@@ -97,6 +101,8 @@ function HomeFeed() {
     );
   }
 
+  const activeTagName = tags?.find((t) => t.slug === activeTag)?.name;
+
   return (
     <div>
       {showLinkedToast && (
@@ -108,21 +114,23 @@ function HomeFeed() {
         </div>
       )}
 
-      <h1>Discussion Feed</h1>
+      <h1 className="page-title">Discussion Feed</h1>
       <p className="meta">
-        A real-name, ID-verified space for philosophical discussion. Anyone can read; posting,
-        liking, and replying requires identity verification.
+        A real-name space for philosophical argument. Anyone may read; posting asks that you
+        verify who you are.
       </p>
 
-      <div className="tab-row">
-        <button className={sort === "hot" ? "" : "secondary"} onClick={() => setSort("hot")}>
-          Hot
-        </button>
-        <button className={sort === "new" ? "" : "secondary"} onClick={() => setSort("new")}>
-          New
-        </button>
+      <div className="feed-controls row between wrap">
+        <div className="segmented">
+          <button className={sort === "hot" ? "segmented-active" : ""} onClick={() => setSort("hot")}>
+            Hot
+          </button>
+          <button className={sort === "new" ? "segmented-active" : ""} onClick={() => setSort("new")}>
+            New
+          </button>
+        </div>
         {user?.verificationStatus === "VERIFIED" && (
-          <Link href={activeTag ? `/new-thread?tag=${activeTag}` : "/new-thread"} style={{ marginLeft: "auto" }}>
+          <Link href={activeTag ? `/new-thread?tag=${activeTag}` : "/new-thread"}>
             <button>Start a thread</button>
           </Link>
         )}
@@ -142,32 +150,60 @@ function HomeFeed() {
             onClick={() => setTag(t.slug)}
             title={t.description}
           >
-            {t.name} ({t.threadCount})
+            {t.name}
           </button>
         ))}
         {tags && tags.length > VISIBLE_TAG_COUNT && (
           <button className="tag-chip" onClick={() => setShowAllTags((v) => !v)}>
-            {showAllTags ? "Show less" : `Show more (+${tags.length - VISIBLE_TAG_COUNT})`}
+            {showAllTags ? "Show less" : `More +${tags.length - VISIBLE_TAG_COUNT}`}
           </button>
         )}
       </div>
 
       {error && <p className="error">{error}</p>}
-      {threads.length === 0 && !error && <p className="meta">No threads yet — be the first.</p>}
+
+      {loading && (
+        <>
+          <ThreadCardSkeleton />
+          <ThreadCardSkeleton />
+          <ThreadCardSkeleton />
+        </>
+      )}
+
+      {!loading && !error && threads.length === 0 && (
+        <EmptyState
+          title={activeTagName ? `Nothing under ${activeTagName} yet` : "The floor is open"}
+          hint={
+            activeTagName
+              ? "No one has raised a question here — perhaps that's your opening."
+              : "Every great discussion starts with someone willing to ask first."
+          }
+          action={
+            user?.verificationStatus === "VERIFIED" ? (
+              <Link href={activeTag ? `/new-thread?tag=${activeTag}` : "/new-thread"}>
+                <button>Start a thread</button>
+              </Link>
+            ) : undefined
+          }
+        />
+      )}
 
       {threads.map((t) => (
-        <div className="card" key={t.id}>
+        <article className="card thread-card" key={t.id}>
           <Link className="title" href={`/t/${t.id}`}>
             {t.title}
             {t.locked && " 🔒"}
           </Link>
-          <p className="meta">
-            by {t.author.displayName} · {formatDate(t.createdAt, dateFormat)}
-          </p>
+          <div className="row" style={{ marginTop: "0.6rem" }}>
+            <Avatar name={t.author.displayName} size={24} />
+            <p className="meta">
+              {t.author.displayName} · {formatDate(t.createdAt, dateFormat)}
+            </p>
+          </div>
           {t.tags.length > 0 && (
-            <div className="tag-row" style={{ marginTop: "0.4rem" }}>
+            <div className="row wrap" style={{ marginTop: "0.75rem" }}>
               {t.tags.map((tag) => (
-                <span className="tag-chip" key={tag.id}>
+                <span className="tag-static" key={tag.id}>
                   {tag.name}
                 </span>
               ))}
@@ -181,9 +217,11 @@ function HomeFeed() {
             >
               ♥ {t.likeCount}
             </button>
-            <span className="meta">{t.postCount} replies</span>
+            <span className="meta">
+              {t.postCount} {t.postCount === 1 ? "reply" : "replies"}
+            </span>
           </div>
-        </div>
+        </article>
       ))}
 
       {hasMore && (
@@ -199,7 +237,7 @@ function HomeFeed() {
 // during static prerender unless it sits inside a Suspense boundary.
 export default function HomePage() {
   return (
-    <Suspense fallback={<p className="meta">Loading feed...</p>}>
+    <Suspense fallback={<ThreadCardSkeleton />}>
       <HomeFeed />
     </Suspense>
   );

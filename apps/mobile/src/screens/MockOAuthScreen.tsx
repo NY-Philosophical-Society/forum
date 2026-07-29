@@ -1,21 +1,19 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput } from "react-native";
 import type { AuthResponse } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
-import type { ThemeColors } from "../lib/theme";
-import type { RootStackParamList } from "../navigation";
+import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
+import type { AuthStackParamList } from "../navigation";
 
-type Props = NativeStackScreenProps<RootStackParamList, "MockOAuth">;
+type Props = NativeStackScreenProps<AuthStackParamList, "MockOAuth">;
 
 /**
  * Stands in for Google's / Apple's own hosted sign-in screen. A real
  * integration never shows this — the provider's native SDK handles it and
- * this app only ever receives the resulting identity token. Exists purely so
- * the sign-up/sign-in UX can be tried without real OAuth credentials (see
- * apps/api/src/lib/oauth.ts).
+ * this app only ever receives the resulting identity token.
  */
 export function MockOAuthScreen({ route }: Props) {
   const { provider } = route.params;
@@ -38,9 +36,8 @@ export function MockOAuthScreen({ route }: Props) {
         email,
         displayName,
       });
-      // No further navigation needed — the root navigator swaps to the app
-      // stack automatically once the session is set.
-      setSession(res.token, res.user);
+      // The root navigator swaps to the app tabs once the session is set.
+      setSession(res.token, res.user, res.linked);
     } catch (err: any) {
       setError(err.message ?? "Could not sign in");
     } finally {
@@ -49,11 +46,11 @@ export function MockOAuthScreen({ route }: Props) {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.h1}>Mock {providerLabel} Sign-In</Text>
+    <ScrollView style={styles.container} contentContainerStyle={{ padding: spacing.xl }}>
       <Text style={styles.notice}>
-        This screen exists only because real {providerLabel} sign-in isn&apos;t configured on
-        this server yet.
+        Real {providerLabel} sign-in isn&apos;t configured on this server — in production this is
+        {" "}
+        {providerLabel}&apos;s own hosted screen.
       </Text>
       <Text style={styles.label}>Name (as {providerLabel} would provide it)</Text>
       <TextInput style={styles.input} value={displayName} onChangeText={setDisplayName} />
@@ -71,39 +68,48 @@ export function MockOAuthScreen({ route }: Props) {
           {submitting ? "Signing in..." : `Continue as this ${providerLabel} user`}
         </Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-    h1: { fontSize: 20, fontWeight: "700", color: colors.ink, marginBottom: 8 },
+    container: { flex: 1, backgroundColor: colors.paper },
     notice: {
       backgroundColor: colors.pendingBg,
       color: colors.pendingText,
-      padding: 10,
-      borderRadius: 6,
-      marginBottom: 12,
-      fontSize: 13,
+      fontFamily: fonts.display,
+      fontSize: type.sm,
+      padding: spacing.md,
+      borderRadius: radius.sm,
+      marginBottom: spacing.lg,
+      lineHeight: 20,
     },
-    label: { fontWeight: "700", color: colors.ink, marginTop: 8, marginBottom: 4 },
+    label: {
+      fontFamily: fonts.displaySemi,
+      fontSize: type.sm,
+      color: colors.ink,
+      marginBottom: spacing.xs,
+      marginTop: spacing.sm,
+    },
     input: {
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 6,
-      padding: 10,
+      borderColor: colors.borderStrong,
+      borderRadius: radius.sm,
+      padding: spacing.md,
       backgroundColor: colors.surface,
       color: colors.ink,
+      fontFamily: fonts.serif,
+      fontSize: type.base,
     },
-    error: { color: colors.danger, marginTop: 8 },
+    error: { color: colors.danger, fontFamily: fonts.display, marginTop: spacing.sm },
     button: {
       backgroundColor: colors.solid,
-      paddingVertical: 12,
-      borderRadius: 6,
+      paddingVertical: spacing.md,
+      borderRadius: radius.sm,
       alignItems: "center",
-      marginTop: 16,
+      marginTop: spacing.lg,
     },
-    buttonText: { color: colors.solidText, fontWeight: "700" },
+    buttonText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.base },
   });
 }

@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ConversationResponse, DirectMessage, PublicUser } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { ReportButton } from "../../report-button";
+import { Avatar, EmptyState, Skeleton } from "../../ui";
 
 const MESSAGES_PAGE = 30;
 
@@ -82,15 +84,33 @@ export default function ConversationPage() {
   }
 
   if (error && !otherUser) return <p className="error">{error}</p>;
-  if (!otherUser || !messages) return <p>Loading...</p>;
+
+  if (!otherUser || !messages) {
+    return (
+      <div>
+        <Skeleton style={{ height: "1.8rem", width: "40%", marginBottom: "1.5rem" }} />
+        <Skeleton style={{ height: "3rem", width: "60%", marginBottom: "0.75rem", borderRadius: 16 }} />
+        <Skeleton
+          style={{ height: "3rem", width: "55%", marginLeft: "auto", borderRadius: 16 }}
+        />
+      </div>
+    );
+  }
 
   const canSend = user?.verificationStatus === "VERIFIED" && !blocked;
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ margin: 0 }}>{otherUser.displayName}</h1>
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+      <Link href="/messages" className="back-link">
+        ← All messages
+      </Link>
+
+      <div className="row between wrap">
+        <div className="row">
+          <Avatar name={otherUser.displayName} size={36} />
+          <h1 style={{ margin: 0, fontSize: "var(--text-xl)" }}>{otherUser.displayName}</h1>
+        </div>
+        <div className="row">
           <ReportButton targetType="user" targetId={otherUser.id} />
           <button className="link-button" onClick={toggleBlock}>
             {blocked ? "Unblock" : "Block"}
@@ -99,7 +119,7 @@ export default function ConversationPage() {
       </div>
 
       {blocked && (
-        <p className="notice">
+        <p className="notice" style={{ marginTop: "1rem" }}>
           You&apos;ve blocked this user — you can&apos;t send or receive new messages until you
           unblock them.
         </p>
@@ -111,8 +131,10 @@ export default function ConversationPage() {
         </button>
       )}
 
-      <div style={{ margin: "1rem 0" }}>
-        {messages.length === 0 && <p className="meta">No messages yet — say hello.</p>}
+      <div style={{ margin: "1.5rem 0" }}>
+        {messages.length === 0 && (
+          <EmptyState title="No messages yet" hint="Open with a question worth answering." />
+        )}
         {messages.map((m) => (
           <div
             key={m.id}
@@ -124,10 +146,15 @@ export default function ConversationPage() {
       </div>
 
       {canSend ? (
-        <form onSubmit={send}>
+        <form onSubmit={send} style={{ maxWidth: "none" }}>
           <label>
             Message
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} required />
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              style={{ minHeight: "80px" }}
+              required
+            />
           </label>
           {error && <p className="error">{error}</p>}
           <button type="submit" disabled={sending}>

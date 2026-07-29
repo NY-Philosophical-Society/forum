@@ -1,74 +1,180 @@
-import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import type { PublicUser } from "@nyps-forum/shared";
+import { api } from "../lib/api";
+import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
-import type { ThemeColors } from "../lib/theme";
+import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 
 export function SettingsScreen() {
   const { dateFormat, setDateFormat, themeName, setThemeName, colors } = useSettings();
+  const { user, token, refreshUser } = useAuth();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [code, setCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+  const [redeemed, setRedeemed] = useState(false);
+
+  async function redeemCode() {
+    if (!token) return;
+    setRedeemError(null);
+    setRedeeming(true);
+    try {
+      await api.post<{ user: PublicUser }>("/api/auth/redeem-code", { code }, token);
+      setRedeemed(true);
+      setCode("");
+      await refreshUser();
+    } catch (err: any) {
+      setRedeemError(err.message ?? "Could not redeem that code");
+    } finally {
+      setRedeeming(false);
+    }
+  }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.h2}>Date format</Text>
-      <Text style={styles.meta}>Applies to every date and time shown across the app.</Text>
-      <View style={styles.segmented}>
-        <Pressable
-          style={[styles.segment, dateFormat === "MDY" && styles.segmentActive]}
-          onPress={() => setDateFormat("MDY")}
-        >
-          <Text style={dateFormat === "MDY" ? styles.segmentTextActive : styles.segmentText}>
-            MM/DD/YYYY
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.segment, dateFormat === "DMY" && styles.segmentActive]}
-          onPress={() => setDateFormat("DMY")}
-        >
-          <Text style={dateFormat === "DMY" ? styles.segmentTextActive : styles.segmentText}>
-            DD/MM/YYYY
-          </Text>
-        </Pressable>
+    <ScrollView style={styles.container} contentContainerStyle={{ padding: spacing.lg }}>
+      <View style={styles.section}>
+        <Text style={styles.h2}>Date format</Text>
+        <Text style={styles.meta}>Applies to every date and time shown across the forum.</Text>
+        <View style={styles.segmented}>
+          <Pressable
+            style={[styles.segment, dateFormat === "MDY" && styles.segmentActive]}
+            onPress={() => setDateFormat("MDY")}
+          >
+            <Text style={dateFormat === "MDY" ? styles.segmentTextActive : styles.segmentText}>
+              MM/DD/YYYY
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segment, dateFormat === "DMY" && styles.segmentActive]}
+            onPress={() => setDateFormat("DMY")}
+          >
+            <Text style={dateFormat === "DMY" ? styles.segmentTextActive : styles.segmentText}>
+              DD/MM/YYYY
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
-      <Text style={[styles.h2, { marginTop: 24 }]}>Appearance</Text>
-      <View style={styles.segmented}>
-        <Pressable
-          style={[styles.segment, themeName === "light" && styles.segmentActive]}
-          onPress={() => setThemeName("light")}
-        >
-          <Text style={themeName === "light" ? styles.segmentTextActive : styles.segmentText}>
-            Light
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.segment, themeName === "dark" && styles.segmentActive]}
-          onPress={() => setThemeName("dark")}
-        >
-          <Text style={themeName === "dark" ? styles.segmentTextActive : styles.segmentText}>
-            Dark
-          </Text>
-        </Pressable>
+      <View style={styles.section}>
+        <Text style={styles.h2}>Appearance</Text>
+        <Text style={styles.meta}>
+          The dark theme is provisional while the official palette is drawn up.
+        </Text>
+        <View style={styles.segmented}>
+          <Pressable
+            style={[styles.segment, themeName === "light" && styles.segmentActive]}
+            onPress={() => setThemeName("light")}
+          >
+            <Text style={themeName === "light" ? styles.segmentTextActive : styles.segmentText}>
+              Light
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segment, themeName === "dark" && styles.segmentActive]}
+            onPress={() => setThemeName("dark")}
+          >
+            <Text style={themeName === "dark" ? styles.segmentTextActive : styles.segmentText}>
+              Dark
+            </Text>
+          </Pressable>
+        </View>
       </View>
-    </View>
+
+      {user && (
+        <View style={styles.section}>
+          <Text style={styles.h2}>Supporter access</Text>
+          {user.isSupporter || redeemed ? (
+            <Text style={styles.success}>
+              You have supporter access — thank you for sustaining the Society&apos;s events and
+              journal.
+            </Text>
+          ) : (
+            <>
+              <Text style={styles.meta}>
+                Have an access code from a donation or journal subscription? Redeem it here.
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={code}
+                onChangeText={setCode}
+                placeholder="Access code"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="characters"
+              />
+              {redeemError && <Text style={styles.error}>{redeemError}</Text>}
+              <Pressable
+                style={styles.button}
+                onPress={redeemCode}
+                disabled={redeeming || !code.trim()}
+              >
+                <Text style={styles.buttonText}>{redeeming ? "Redeeming..." : "Redeem code"}</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-    h2: { fontSize: 18, fontWeight: "700", color: colors.ink, marginBottom: 4 },
-    meta: { color: colors.muted, fontSize: 13, marginBottom: 12 },
-    segmented: {
-      flexDirection: "row",
+    container: { flex: 1, backgroundColor: colors.paper },
+    section: {
+      backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 999,
-      overflow: "hidden",
+      borderRadius: radius.md,
+      padding: spacing.lg,
+      marginBottom: spacing.lg,
+    },
+    h2: { fontFamily: fonts.serifBold, fontSize: type.md, color: colors.ink, marginBottom: spacing.xs },
+    meta: {
+      color: colors.muted,
+      fontFamily: fonts.display,
+      fontSize: type.sm,
+      marginBottom: spacing.md,
+    },
+    segmented: {
+      flexDirection: "row",
+      backgroundColor: colors.stone2,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.full,
+      padding: 3,
       alignSelf: "flex-start",
     },
-    segment: { paddingVertical: 8, paddingHorizontal: 16, backgroundColor: colors.surface },
-    segmentActive: { backgroundColor: colors.solid },
-    segmentText: { color: colors.ink, fontWeight: "600" },
-    segmentTextActive: { color: colors.solidText, fontWeight: "600" },
+    segment: { paddingVertical: 6, paddingHorizontal: spacing.lg, borderRadius: radius.full },
+    segmentActive: { backgroundColor: colors.surface },
+    segmentText: { color: colors.muted, fontFamily: fonts.displaySemi, fontSize: type.sm },
+    segmentTextActive: { color: colors.ink, fontFamily: fonts.displaySemi, fontSize: type.sm },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      borderRadius: radius.sm,
+      padding: spacing.md,
+      backgroundColor: colors.surface,
+      color: colors.ink,
+      fontFamily: fonts.serif,
+      fontSize: type.base,
+    },
+    error: { color: colors.danger, fontFamily: fonts.display, marginTop: spacing.sm },
+    success: {
+      backgroundColor: colors.verifiedBg,
+      color: colors.verifiedText,
+      fontFamily: fonts.display,
+      fontSize: type.sm,
+      padding: spacing.md,
+      borderRadius: radius.sm,
+    },
+    button: {
+      backgroundColor: colors.solid,
+      paddingVertical: spacing.md,
+      borderRadius: radius.sm,
+      alignItems: "center",
+      marginTop: spacing.md,
+    },
+    buttonText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.sm },
   });
 }

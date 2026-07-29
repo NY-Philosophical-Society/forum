@@ -1,13 +1,13 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
-import type { ThemeColors } from "../lib/theme";
-import type { RootStackParamList } from "../navigation";
+import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
+import type { AuthStackParamList } from "../navigation";
 import { OAuthButtons } from "../components/OAuthButtons";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Signup">;
+type Props = NativeStackScreenProps<AuthStackParamList, "Signup">;
 
 export function SignupScreen({ navigation }: Props) {
   const { signup } = useAuth();
@@ -23,9 +23,8 @@ export function SignupScreen({ navigation }: Props) {
     setError(null);
     setSubmitting(true);
     try {
+      // Once `signup` resolves the root navigator swaps to the app tabs.
       await signup(email, password, displayName);
-      // No further navigation needed — once `signup` resolves, the root
-      // navigator swaps from the auth stack to the app stack automatically.
     } catch (err: any) {
       setError(err.message ?? "Signup failed");
     } finally {
@@ -34,18 +33,23 @@ export function SignupScreen({ navigation }: Props) {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.h1}>Sign up</Text>
-      <Text style={styles.notice}>
-        Create a free account to browse and join the discussion. Posting under your real name
-        requires a one-time identity verification (government ID + selfie match) — do that
-        whenever you're ready, from your account.
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.mark}>
+        <Text style={styles.markText}>Φ</Text>
+      </View>
+      <Text style={styles.h1}>Create your account</Text>
+      <Text style={styles.subtitle}>
+        Posting under your real name asks for a one-time identity verification — do that whenever
+        you&apos;re ready, from your profile.
       </Text>
+
       <OAuthButtons navigation={navigation} />
+
       <Text style={styles.label}>Full real name</Text>
       <TextInput
         style={styles.input}
         placeholder="Jane Doe"
+        placeholderTextColor={colors.muted}
         value={displayName}
         onChangeText={setDisplayName}
       />
@@ -61,49 +65,74 @@ export function SignupScreen({ navigation }: Props) {
       <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} />
       {error && <Text style={styles.error}>{error}</Text>}
       <Pressable style={styles.button} onPress={onSubmit} disabled={submitting}>
-        <Text style={styles.buttonText}>{submitting ? "Creating account..." : "Create account"}</Text>
+        <Text style={styles.buttonText}>
+          {submitting ? "Creating account..." : "Create account"}
+        </Text>
       </Pressable>
       <Pressable style={styles.linkRow} onPress={() => navigation.navigate("Login")}>
         <Text style={styles.linkText}>Already have an account? Log in</Text>
       </Pressable>
-      <Pressable style={styles.linkRow} onPress={() => navigation.navigate("Settings")}>
-        <Text style={styles.linkText}>Settings</Text>
-      </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-    h1: { fontSize: 24, fontWeight: "700", color: colors.ink, marginBottom: 12 },
-    notice: {
-      backgroundColor: colors.pendingBg,
-      color: colors.pendingText,
-      padding: 10,
-      borderRadius: 6,
-      marginBottom: 12,
-      fontSize: 13,
+    container: { flex: 1, backgroundColor: colors.paper },
+    content: { padding: spacing.xl },
+    mark: {
+      width: 48,
+      height: 48,
+      borderRadius: radius.md,
+      backgroundColor: colors.solid,
+      alignItems: "center",
+      justifyContent: "center",
+      alignSelf: "center",
+      marginBottom: spacing.lg,
     },
-    label: { fontWeight: "700", color: colors.ink, marginTop: 8, marginBottom: 4 },
+    markText: { color: colors.solidText, fontFamily: fonts.serifBold, fontSize: type.lg },
+    h1: {
+      fontFamily: fonts.serifBold,
+      fontSize: type.xl,
+      color: colors.ink,
+      textAlign: "center",
+      marginBottom: spacing.xs,
+    },
+    subtitle: {
+      fontFamily: fonts.display,
+      fontSize: type.sm,
+      color: colors.muted,
+      textAlign: "center",
+      marginBottom: spacing.xl,
+      lineHeight: 20,
+    },
+    label: {
+      fontFamily: fonts.displaySemi,
+      fontSize: type.sm,
+      color: colors.ink,
+      marginBottom: spacing.xs,
+      marginTop: spacing.sm,
+    },
     input: {
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 6,
-      padding: 10,
+      borderColor: colors.borderStrong,
+      borderRadius: radius.sm,
+      padding: spacing.md,
       backgroundColor: colors.surface,
       color: colors.ink,
+      fontFamily: fonts.serif,
+      fontSize: type.base,
     },
-    error: { color: colors.danger, marginTop: 8 },
+    error: { color: colors.danger, fontFamily: fonts.display, marginTop: spacing.sm },
     button: {
       backgroundColor: colors.solid,
-      paddingVertical: 12,
-      borderRadius: 6,
+      paddingVertical: spacing.md,
+      borderRadius: radius.sm,
       alignItems: "center",
-      marginTop: 16,
+      marginTop: spacing.lg,
     },
-    buttonText: { color: colors.solidText, fontWeight: "700" },
-    linkRow: { marginTop: 16, alignItems: "center" },
-    linkText: { color: colors.accent, fontWeight: "600" },
+    buttonText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.base },
+    linkRow: { marginTop: spacing.lg, alignItems: "center" },
+    linkText: { color: colors.accent, fontFamily: fonts.displayMedium, fontSize: type.sm },
   });
 }

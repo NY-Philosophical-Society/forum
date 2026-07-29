@@ -6,10 +6,10 @@ import type { ConversationSummary, PublicUser } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
-import type { ThemeColors } from "../lib/theme";
-import type { RootStackParamList } from "../navigation";
+import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
+import type { MessagesStackParamList } from "../navigation";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Messages">;
+type Props = NativeStackScreenProps<MessagesStackParamList, "Messages">;
 
 export function MessagesScreen({ navigation }: Props) {
   const { token } = useAuth();
@@ -44,33 +44,53 @@ export function MessagesScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Find someone to message</Text>
       <TextInput
         style={styles.input}
         value={search}
         onChangeText={setSearch}
-        placeholder="Search by name"
+        placeholder="Find someone to message"
         placeholderTextColor={colors.muted}
       />
 
       {results.map((u) => (
         <Pressable
           key={u.id}
-          style={styles.card}
-          onPress={() => navigation.navigate("Conversation", { userId: u.id, displayName: u.displayName })}
+          style={styles.row}
+          onPress={() =>
+            navigation.navigate("Conversation", { userId: u.id, displayName: u.displayName })
+          }
         >
-          <Text style={styles.cardTitle}>{u.displayName}</Text>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{u.displayName.charAt(0).toUpperCase()}</Text>
+          </View>
+          <Text style={styles.name}>{u.displayName}</Text>
         </Pressable>
       ))}
 
-      <Text style={styles.h2}>Conversations</Text>
-      {conversations?.length === 0 && <Text style={styles.meta}>No conversations yet.</Text>}
+      {conversations === null && (
+        <View style={{ marginTop: spacing.lg, gap: spacing.md }}>
+          <View style={styles.skeletonRow} />
+          <View style={styles.skeletonRow} />
+        </View>
+      )}
+
+      {conversations?.length === 0 && search.trim() === "" && (
+        <View style={styles.empty}>
+          <Text style={styles.emptyMark}>❦</Text>
+          <Text style={styles.emptyTitle}>No conversations yet</Text>
+          <Text style={styles.meta}>
+            Search for a member above and open the first line of dialogue.
+          </Text>
+        </View>
+      )}
+
       <FlatList
         data={conversations ?? []}
         keyExtractor={(c) => c.otherUser.id}
+        style={{ marginTop: spacing.md }}
         renderItem={({ item }) => (
           <Pressable
-            style={styles.card}
+            style={styles.row}
             onPress={() =>
               navigation.navigate("Conversation", {
                 userId: item.otherUser.id,
@@ -78,17 +98,22 @@ export function MessagesScreen({ navigation }: Props) {
               })
             }
           >
-            <View style={styles.rowBetween}>
-              <View>
-                <Text style={styles.cardTitle}>{item.otherUser.displayName}</Text>
-                <Text style={styles.meta}>{item.lastMessage.body}</Text>
-              </View>
-              {item.unreadCount > 0 && (
-                <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadText}>{item.unreadCount}</Text>
-                </View>
-              )}
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {item.otherUser.displayName.charAt(0).toUpperCase()}
+              </Text>
             </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.name}>{item.otherUser.displayName}</Text>
+              <Text style={styles.meta} numberOfLines={1}>
+                {item.lastMessage.body}
+              </Text>
+            </View>
+            {item.unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>{item.unreadCount}</Text>
+              </View>
+            )}
           </Pressable>
         )}
       />
@@ -98,29 +123,54 @@ export function MessagesScreen({ navigation }: Props) {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-    label: { fontWeight: "700", color: colors.ink, marginBottom: 4 },
+    container: { flex: 1, backgroundColor: colors.paper, padding: spacing.lg },
     input: {
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 6,
-      padding: 10,
+      borderColor: colors.borderStrong,
+      borderRadius: radius.sm,
+      padding: spacing.md,
       backgroundColor: colors.surface,
       color: colors.ink,
+      fontFamily: fonts.serif,
+      fontSize: type.base,
     },
-    h2: { fontSize: 16, fontWeight: "700", color: colors.ink, marginTop: 16, marginBottom: 4 },
-    meta: { color: colors.muted, fontSize: 13 },
-    card: {
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+      backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 8,
-      padding: 12,
-      marginTop: 8,
-      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      marginTop: spacing.sm,
     },
-    cardTitle: { fontSize: 15, fontWeight: "700", color: colors.ink },
-    rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-    unreadBadge: { backgroundColor: colors.danger, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
-    unreadText: { color: colors.paper, fontSize: 12, fontWeight: "700" },
+    avatar: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.full,
+      backgroundColor: colors.solid,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.base },
+    name: { fontFamily: fonts.serifBold, fontSize: type.base, color: colors.ink },
+    meta: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
+    unreadBadge: {
+      backgroundColor: colors.accent,
+      borderRadius: radius.full,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 2,
+    },
+    unreadText: { color: colors.paper, fontFamily: fonts.displaySemi, fontSize: type.xs },
+    skeletonRow: { height: 64, borderRadius: radius.md, backgroundColor: colors.stone2 },
+    empty: { alignItems: "center", paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg },
+    emptyMark: { color: colors.accent, fontSize: 28, marginBottom: spacing.md },
+    emptyTitle: {
+      fontFamily: fonts.serifBold,
+      fontSize: type.lg,
+      color: colors.ink,
+      marginBottom: spacing.xs,
+    },
   });
 }

@@ -4,15 +4,15 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
-import type { ThemeColors } from "../lib/theme";
-import type { RootStackParamList } from "../navigation";
+import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
+import type { ProfileStackParamList } from "../navigation";
 
-type Props = NativeStackScreenProps<RootStackParamList, "VerifyMock">;
+type Props = NativeStackScreenProps<ProfileStackParamList, "VerifyMock">;
 
 /**
  * Stands in for a real provider's hosted verification page (Stripe Identity,
  * Persona, Veriff). A real integration opens that provider's own hosted flow
- * (often via an in-app browser / SDK) instead of this screen.
+ * instead of this screen.
  */
 export function VerifyMockScreen({ route, navigation }: Props) {
   const { sessionId } = route.params;
@@ -26,7 +26,7 @@ export function VerifyMockScreen({ route, navigation }: Props) {
     try {
       await api.post(`/api/verification/mock-complete/${sessionId}`, { approve });
       await refreshUser();
-      navigation.replace("Verify");
+      navigation.navigate("Verify");
     } finally {
       setSubmitting(false);
     }
@@ -34,21 +34,21 @@ export function VerifyMockScreen({ route, navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.h1}>Mock Identity Verification</Text>
       <Text style={styles.notice}>
-        This screen exists only because this is a local prototype without a live Stripe Identity
-        / Persona / Veriff account. A real deployment sends the user to that provider&apos;s own
-        hosted flow instead.
+        This screen exists only because this is a local prototype without a live verification
+        vendor. A real deployment sends you to the provider&apos;s own hosted flow.
       </Text>
       <Text style={styles.meta}>Session: {sessionId}</Text>
-      <Text style={[styles.body, { marginBottom: 12 }]}>
-        Simulate the outcome a real ID + selfie check would produce:
-      </Text>
-      <View style={{ flexDirection: "row", gap: 12 }}>
+      <Text style={styles.copy}>Simulate the outcome a real ID + selfie check would produce:</Text>
+      <View style={styles.row}>
         <Pressable style={styles.button} onPress={() => resolve(true)} disabled={submitting}>
           <Text style={styles.buttonText}>Approved</Text>
         </Pressable>
-        <Pressable style={styles.buttonSecondary} onPress={() => resolve(false)} disabled={submitting}>
+        <Pressable
+          style={styles.buttonSecondary}
+          onPress={() => resolve(false)}
+          disabled={submitting}
+        >
           <Text style={styles.buttonSecondaryText}>Rejected</Text>
         </Pressable>
       </View>
@@ -58,27 +58,44 @@ export function VerifyMockScreen({ route, navigation }: Props) {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-    h1: { fontSize: 20, fontWeight: "700", color: colors.ink, marginBottom: 8 },
-    body: { color: colors.ink },
-    meta: { color: colors.muted, fontSize: 13, marginBottom: 8 },
+    container: { flex: 1, backgroundColor: colors.paper, padding: spacing.lg },
     notice: {
       backgroundColor: colors.pendingBg,
       color: colors.pendingText,
-      padding: 10,
-      borderRadius: 6,
-      marginBottom: 12,
-      fontSize: 13,
+      fontFamily: fonts.display,
+      fontSize: type.sm,
+      padding: spacing.md,
+      borderRadius: radius.sm,
+      marginBottom: spacing.lg,
+      lineHeight: 20,
     },
-    button: { backgroundColor: colors.solid, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 6 },
-    buttonText: { color: colors.solidText, fontWeight: "700" },
+    meta: {
+      color: colors.muted,
+      fontFamily: fonts.display,
+      fontSize: type.sm,
+      marginBottom: spacing.md,
+    },
+    copy: {
+      fontFamily: fonts.serif,
+      fontSize: type.base,
+      color: colors.ink,
+      marginBottom: spacing.lg,
+    },
+    row: { flexDirection: "row", gap: spacing.md },
+    button: {
+      backgroundColor: colors.solid,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.xl,
+      borderRadius: radius.sm,
+    },
+    buttonText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.sm },
     buttonSecondary: {
       borderWidth: 1,
-      borderColor: colors.ink,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      borderRadius: 6,
+      borderColor: colors.borderStrong,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.xl,
+      borderRadius: radius.sm,
     },
-    buttonSecondaryText: { color: colors.ink, fontWeight: "700" },
+    buttonSecondaryText: { color: colors.ink, fontFamily: fonts.displaySemi, fontSize: type.sm },
   });
 }

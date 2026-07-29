@@ -7,10 +7,13 @@ interface AuthContextValue {
   user: PublicUser | null;
   token: string | null;
   loading: boolean;
+  /** Set when an OAuth sign-in just attached a provider to an existing account. */
+  linkedNotice: boolean;
+  clearLinkedNotice: () => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, displayName: string) => Promise<void>;
   /** Used by OAuth (Google/Apple) flows, which get a token+user from a different endpoint. */
-  setSession: (token: string, user: PublicUser) => void;
+  setSession: (token: string, user: PublicUser, linked?: boolean) => void;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -22,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [linkedNotice, setLinkedNotice] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(async (stored) => {
@@ -62,11 +66,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(res.user);
   }, []);
 
-  const setSession = useCallback((newToken: string, newUser: PublicUser) => {
+  const setSession = useCallback((newToken: string, newUser: PublicUser, linked?: boolean) => {
     AsyncStorage.setItem(STORAGE_KEY, newToken);
     setToken(newToken);
     setUser(newUser);
+    if (linked) setLinkedNotice(true);
   }, []);
+
+  const clearLinkedNotice = useCallback(() => setLinkedNotice(false), []);
 
   const logout = useCallback(() => {
     AsyncStorage.removeItem(STORAGE_KEY);
@@ -75,8 +82,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, token, loading, login, signup, setSession, logout, refreshUser }),
-    [user, token, loading, login, signup, setSession, logout, refreshUser],
+    () => ({
+      user,
+      token,
+      loading,
+      linkedNotice,
+      clearLinkedNotice,
+      login,
+      signup,
+      setSession,
+      logout,
+      refreshUser,
+    }),
+    [user, token, loading, linkedNotice, clearLinkedNotice, login, signup, setSession, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

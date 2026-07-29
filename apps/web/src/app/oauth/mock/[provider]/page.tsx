@@ -9,9 +9,7 @@ import { useAuth } from "~/lib/auth-context";
 /**
  * Stands in for Google's / Apple's own hosted consent screen. A real
  * integration never shows this — the provider's own SDK/page handles it and
- * this app only ever sees the resulting identity token. This exists purely
- * so the sign-up/sign-in UX can be tried locally without real OAuth
- * credentials (see apps/api/src/lib/oauth.ts).
+ * this app only ever sees the resulting identity token.
  */
 export default function MockOAuthPage() {
   const { provider } = useParams<{ provider: string }>();
@@ -35,7 +33,7 @@ export default function MockOAuthPage() {
         displayName,
       });
       setSession(res.token, res.user);
-      router.push("/");
+      router.push(res.linked ? "/?linked=1" : "/");
     } catch (err: any) {
       setError(err.message ?? "Could not sign in");
     } finally {
@@ -44,32 +42,36 @@ export default function MockOAuthPage() {
   }
 
   return (
-    <div>
-      <h1>Mock {providerLabel} Sign-In</h1>
-      <p className="notice">
-        This screen exists only because real {providerLabel} sign-in isn&apos;t configured on
-        this server yet. In production, this would be {providerLabel}&apos;s own hosted sign-in
-        page — you&apos;d never see this app&apos;s UI at all during that step.
-      </p>
-      <form onSubmit={onSubmit}>
-        <label>
-          Name (as {providerLabel} would provide it)
-          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
-        </label>
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </label>
-        {error && <p className="error">{error}</p>}
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Signing in..." : `Continue as this ${providerLabel} user`}
-        </button>
-      </form>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-icon" aria-hidden>
+          Φ
+        </div>
+        <h1 className="auth-title">Mock {providerLabel} Sign-In</h1>
+        <p className="auth-subtitle">
+          Real {providerLabel} sign-in isn&apos;t configured on this server — in production this
+          is {providerLabel}&apos;s own hosted page.
+        </p>
+        <form onSubmit={onSubmit}>
+          <label>
+            Name (as {providerLabel} would provide it)
+            <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
+          </label>
+          <label>
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </label>
+          {error && <p className="error">{error}</p>}
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Signing in..." : `Continue as this ${providerLabel} user`}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

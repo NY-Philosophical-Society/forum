@@ -7,9 +7,9 @@ import type { AuthResponse, OAuthConfig } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
-import type { ThemeColors } from "../lib/theme";
+import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { RootStackParamList } from "../navigation";
+import type { AuthStackParamList } from "../navigation";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -26,13 +26,12 @@ const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? "";
  * Real Google (expo-auth-session) / Apple (expo-apple-authentication)
  * sign-in when the server has real credentials configured; otherwise routes
  * to a local mock screen. Apple Sign-In additionally requires a custom dev
- * client build (it isn't available in plain Expo Go) — see the mobile
- * section of the README.
+ * client build (it isn't available in plain Expo Go) — see the README.
  */
-export function OAuthButtons<RouteName extends keyof RootStackParamList>({
+export function OAuthButtons<RouteName extends keyof AuthStackParamList>({
   navigation,
 }: {
-  navigation: NativeStackNavigationProp<RootStackParamList, RouteName>;
+  navigation: NativeStackNavigationProp<AuthStackParamList, RouteName>;
 }) {
   const { setSession } = useAuth();
   const { colors } = useSettings();
@@ -64,9 +63,8 @@ export function OAuthButtons<RouteName extends keyof RootStackParamList>({
       api
         .post<AuthResponse>("/api/auth/oauth/google", { idToken: response.params.id_token })
         .then((res) => {
-          // No further navigation needed — once the session is set, the root
-          // navigator swaps from the auth stack to the app stack automatically.
-          setSession(res.token, res.user);
+          // The root navigator swaps to the app tabs once the session is set.
+          setSession(res.token, res.user, res.linked);
         })
         .catch((e) => setError(e.message ?? "Google sign-in failed"));
     }
@@ -96,9 +94,7 @@ export function OAuthButtons<RouteName extends keyof RootStackParamList>({
           identityToken: credential.identityToken,
           displayName: displayName || undefined,
         });
-        // No further navigation needed — the root navigator swaps to the app
-        // stack automatically once the session is set.
-        setSession(res.token, res.user);
+        setSession(res.token, res.user, res.linked);
       } catch (e: any) {
         if (e.code !== "ERR_REQUEST_CANCELED") {
           setError(e.message ?? "Apple sign-in failed");
@@ -112,25 +108,19 @@ export function OAuthButtons<RouteName extends keyof RootStackParamList>({
   if (!config) return null;
 
   return (
-    <View style={{ marginBottom: 16 }}>
+    <View style={{ marginBottom: spacing.lg }}>
       {error && <Text style={styles.error}>{error}</Text>}
       <Pressable style={styles.button} onPress={handleGoogle}>
         <Text style={styles.buttonText}>
-          Continue with Google{!config.google.enabled ? " (demo mode)" : ""}
+          Continue with Google{!config.google.enabled ? "  (demo)" : ""}
         </Text>
       </Pressable>
       <Pressable style={styles.button} onPress={handleApple}>
         <Text style={styles.buttonText}>
-          Continue with Apple{!config.apple.enabled ? " (demo mode)" : ""}
+          Continue with Apple{!config.apple.enabled ? "  (demo)" : ""}
         </Text>
       </Pressable>
-      {(!config.google.enabled || !config.apple.enabled) && (
-        <Text style={styles.meta}>
-          Real Google/Apple sign-in isn&apos;t configured on this server yet — using a local demo
-          flow instead.
-        </Text>
-      )}
-      <Text style={styles.divider}>or continue with email</Text>
+      <Text style={styles.divider}>─  or continue with email  ─</Text>
     </View>
   );
 }
@@ -139,15 +129,23 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     button: {
       borderWidth: 1,
-      borderColor: colors.ink,
-      borderRadius: 6,
-      paddingVertical: 10,
+      borderColor: colors.borderStrong,
+      backgroundColor: colors.surface,
+      borderRadius: radius.sm,
+      paddingVertical: spacing.md,
       alignItems: "center",
-      marginBottom: 8,
+      marginBottom: spacing.sm,
     },
-    buttonText: { color: colors.ink, fontWeight: "700" },
-    error: { color: colors.danger, marginBottom: 8 },
-    meta: { color: colors.muted, fontSize: 12, marginBottom: 8 },
-    divider: { textAlign: "center", color: colors.muted, fontSize: 12, marginVertical: 8 },
+    buttonText: { color: colors.ink, fontFamily: fonts.displaySemi, fontSize: type.base },
+    error: { color: colors.danger, fontFamily: fonts.display, marginBottom: spacing.sm },
+    divider: {
+      textAlign: "center",
+      color: colors.muted,
+      fontFamily: fonts.display,
+      fontSize: type.xs,
+      marginVertical: spacing.md,
+      letterSpacing: 1,
+      textTransform: "uppercase",
+    },
   });
 }

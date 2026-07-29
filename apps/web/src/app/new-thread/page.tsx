@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import type { TagWithCount } from "@nyps-forum/shared";
@@ -18,26 +19,20 @@ function NewThreadForm() {
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showAllTags, setShowAllTags] = useState(false);
-
-  const VISIBLE_TAG_COUNT = 6;
 
   useEffect(() => {
     api.get<{ tags: TagWithCount[] }>("/api/tags").then((res) => {
       setTags(res.tags);
       if (preselectedTagSlug) {
         const match = res.tags.find((t) => t.slug === preselectedTagSlug);
-        if (match) {
-          setSelectedTagIds([match.id]);
-          setShowAllTags(true);
-        }
+        if (match) setSelectedTagIds([match.id]);
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preselectedTagSlug]);
 
-  if (loading) return <p>Loading...</p>;
-  if (!user) return <p>Log in first.</p>;
+  if (loading) return <p className="meta">Loading...</p>;
+  if (!user) return <p className="meta">Log in first.</p>;
   if (user.verificationStatus !== "VERIFIED") {
     return (
       <p className="notice">
@@ -72,20 +67,37 @@ function NewThreadForm() {
 
   return (
     <div>
-      <h1>New Thread</h1>
-      <form onSubmit={onSubmit}>
+      <Link href="/" className="back-link">
+        ← Back to the feed
+      </Link>
+      <h1 className="page-title">New Thread</h1>
+      <p className="meta" style={{ marginBottom: "1.5rem" }}>
+        Pose the question well and the discussion will follow.
+      </p>
+      <form onSubmit={onSubmit} style={{ maxWidth: "none" }}>
         <label>
           Title
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Frame it as a question worth arguing about"
+            required
+          />
         </label>
         <label>
           Opening post
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} required />
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="State your position, or lay out the question..."
+            style={{ minHeight: "180px" }}
+            required
+          />
         </label>
         <label>
-          Tags (optional)
-          <div className="tag-row">
-            {(showAllTags ? tags : tags?.slice(0, VISIBLE_TAG_COUNT))?.map((t) => (
+          Tags <span className="meta" style={{ fontWeight: 400 }}>(optional)</span>
+          <div className="tag-row" style={{ marginBottom: 0 }}>
+            {tags?.map((t) => (
               <button
                 type="button"
                 key={t.id}
@@ -95,15 +107,6 @@ function NewThreadForm() {
                 {t.name}
               </button>
             ))}
-            {tags && tags.length > VISIBLE_TAG_COUNT && (
-              <button
-                type="button"
-                className="tag-chip"
-                onClick={() => setShowAllTags((v) => !v)}
-              >
-                {showAllTags ? "Show less" : `Show more (+${tags.length - VISIBLE_TAG_COUNT})`}
-              </button>
-            )}
           </div>
         </label>
         {error && <p className="error">{error}</p>}

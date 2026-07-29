@@ -33,11 +33,11 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <h1>Settings</h1>
+      <h1 className="page-title">Settings</h1>
 
-      <h3>Date format</h3>
-      <p className="meta">Applies to every date and time shown across the app.</p>
-      <div className="settings-row">
+      <div className="card settings-section" style={{ marginTop: "1.5rem" }}>
+        <h3>Date format</h3>
+        <p className="meta">Applies to every date and time shown across the forum.</p>
         <div className="segmented">
           <button
             type="button"
@@ -56,8 +56,9 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <h3>Appearance</h3>
-      <div className="settings-row">
+      <div className="card settings-section">
+        <h3>Appearance</h3>
+        <p className="meta">The dark theme is provisional while the official palette is drawn up.</p>
         <div className="segmented">
           <button
             type="button"
@@ -77,12 +78,12 @@ export default function SettingsPage() {
       </div>
 
       {user && (
-        <>
+        <div className="card settings-section">
           <h3>Supporter access</h3>
           {user.isSupporter || redeemed ? (
-            <p className="notice">
-              You have supporter access, as a perk of donating or subscribing to the journal.
-              Thank you for supporting the Society.
+            <p className="toast" style={{ marginBottom: 0 }}>
+              You have supporter access — thank you for sustaining the Society&apos;s events and
+              journal.
             </p>
           ) : (
             <>
@@ -101,7 +102,7 @@ export default function SettingsPage() {
               </form>
             </>
           )}
-        </>
+        </div>
       )}
     </div>
   );

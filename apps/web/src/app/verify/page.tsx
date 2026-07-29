@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { VerificationSessionResponse } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
+import { StatusBadge } from "../ui";
 
 export default function VerifyPage() {
   const { user, token, loading } = useAuth();
@@ -12,14 +13,12 @@ export default function VerifyPage() {
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
-  if (loading) return <p>Loading...</p>;
+  if (loading) return <p className="meta">Loading...</p>;
   if (!user) {
     return (
-      <div>
-        <p>
-          You need to <a href="/login">log in</a> first.
-        </p>
-      </div>
+      <p className="meta">
+        You need to <a href="/login">log in</a> first.
+      </p>
     );
   }
 
@@ -42,30 +41,34 @@ export default function VerifyPage() {
 
   return (
     <div>
-      <h1>Identity Verification</h1>
-      <p>
-        Current status: <strong>{user.verificationStatus}</strong>
-      </p>
+      <h1 className="page-title">Identity Verification</h1>
 
-      {user.verificationStatus === "VERIFIED" && (
-        <p className="notice">You&apos;re verified — you can post and reply.</p>
-      )}
+      <div className="card" style={{ marginTop: "1.5rem" }}>
+        <div className="row" style={{ marginBottom: "1rem" }}>
+          <span className="meta">Current status</span>
+          <StatusBadge status={user.verificationStatus} />
+        </div>
 
-      {user.verificationStatus !== "VERIFIED" && (
-        <>
-          <p className="meta">
-            In production this hands off to a hosted identity-verification provider (Stripe
-            Identity / Persona / Veriff): you photograph a government ID and take a live selfie,
-            the provider matches the two and checks the document for authenticity, and we only
-            ever store the pass/fail result — never the document image itself. This prototype
-            simulates that step locally.
+        {user.verificationStatus === "VERIFIED" ? (
+          <p className="toast" style={{ marginBottom: 0 }}>
+            You&apos;re verified — you can post, reply, like, and message under your real name.
           </p>
-          {error && <p className="error">{error}</p>}
-          <button onClick={startVerification} disabled={starting}>
-            {starting ? "Starting..." : "Start verification"}
-          </button>
-        </>
-      )}
+        ) : (
+          <>
+            <p className="prose" style={{ fontSize: "var(--text-base)", marginBottom: "1rem" }}>
+              This forum asks every participant to stand behind their words with their real name.
+              In production this hands off to a hosted identity-verification provider (Stripe
+              Identity / Persona / Veriff): you photograph a government ID and take a live selfie,
+              the provider matches the two, and we only ever store the pass/fail result — never
+              the document itself. This prototype simulates that step locally.
+            </p>
+            {error && <p className="error">{error}</p>}
+            <button onClick={startVerification} disabled={starting}>
+              {starting ? "Starting..." : "Start verification"}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

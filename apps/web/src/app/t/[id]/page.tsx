@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { flattenPostTree, formatDateTime, type ThreadDetail } from "@nyps-forum/shared";
@@ -7,6 +8,7 @@ import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
 import { ReportButton } from "../../report-button";
+import { Avatar, PostSkeleton, Skeleton } from "../../ui";
 
 const REPLIES_PAGE = 20;
 
@@ -94,38 +96,63 @@ export default function ThreadPage() {
   }
 
   if (error) return <p className="error">{error}</p>;
-  if (!thread) return <p>Loading...</p>;
+
+  if (!thread) {
+    return (
+      <div>
+        <Skeleton style={{ height: "1.8rem", width: "80%", marginBottom: "0.75rem" }} />
+        <Skeleton style={{ height: "0.85rem", width: "35%", marginBottom: "1.5rem" }} />
+        <div className="card">
+          <Skeleton style={{ height: "0.95rem", width: "100%", marginBottom: "0.5rem" }} />
+          <Skeleton style={{ height: "0.95rem", width: "92%", marginBottom: "0.5rem" }} />
+          <Skeleton style={{ height: "0.95rem", width: "60%" }} />
+        </div>
+        <PostSkeleton />
+        <PostSkeleton />
+      </div>
+    );
+  }
 
   const canPost = user?.verificationStatus === "VERIFIED" && !thread.locked;
   const orderedPosts = flattenPostTree(thread.posts);
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-        <h1 style={{ margin: 0 }}>
+      <Link href="/" className="back-link">
+        ← Back to the feed
+      </Link>
+
+      <div className="row between wrap" style={{ alignItems: "flex-start" }}>
+        <h1 style={{ margin: 0, maxWidth: "34rem" }}>
           {thread.title}
           {thread.locked && " 🔒"}
         </h1>
         {user?.role === "admin" && (
-          <button className="secondary" onClick={toggleLock} disabled={locking}>
+          <button className="secondary btn-sm" onClick={toggleLock} disabled={locking}>
             {thread.locked ? "Unlock" : "Lock"} thread
           </button>
         )}
       </div>
-      <p className="meta">
-        by {thread.author.displayName} &middot; {formatDateTime(thread.createdAt, dateFormat)}
-      </p>
+
+      <div className="row" style={{ margin: "0.75rem 0" }}>
+        <Avatar name={thread.author.displayName} size={26} />
+        <p className="meta">
+          {thread.author.displayName} · {formatDateTime(thread.createdAt, dateFormat)}
+        </p>
+      </div>
+
       {thread.tags.length > 0 && (
-        <div className="tag-row" style={{ marginTop: "0.4rem" }}>
+        <div className="row wrap" style={{ marginBottom: "1rem" }}>
           {thread.tags.map((tag) => (
-            <span className="tag-chip" key={tag.id}>
+            <span className="tag-static" key={tag.id}>
               {tag.name}
             </span>
           ))}
         </div>
       )}
+
       <div className="card">
-        <p>{thread.body}</p>
+        <p className="prose">{thread.body}</p>
         <div className="like-row">
           <button
             className={`like-button ${thread.myLiked ? "like-button-active" : ""}`}
@@ -140,16 +167,19 @@ export default function ThreadPage() {
 
       {thread.previewOnly ? (
         <div className="wall-card">
+          <span className="empty-mark" aria-hidden>
+            ❦
+          </span>
           <p className="wall-title">
             {thread.postCount > 0
-              ? `${thread.postCount} ${thread.postCount === 1 ? "reply" : "replies"} — sign up to keep reading`
-              : "Sign up to join this discussion"}
+              ? `${thread.postCount} ${thread.postCount === 1 ? "reply" : "replies"} await`
+              : "Join this discussion"}
           </p>
           <p className="meta">
             NYPS Forum is free to join — read the full discussion, like posts, and reply once
             you've verified your identity.
           </p>
-          <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.75rem" }}>
+          <div className="row" style={{ marginTop: "1rem" }}>
             <a href="/signup">
               <button>Sign up free</button>
             </a>
@@ -160,13 +190,18 @@ export default function ThreadPage() {
         </div>
       ) : (
         <>
-          <h3>{thread.postCount} Replies</h3>
+          <h3 style={{ marginTop: "2rem" }}>
+            {thread.postCount} {thread.postCount === 1 ? "Reply" : "Replies"}
+          </h3>
           {orderedPosts.map((p) => (
-            <div className="post" key={p.id} style={{ marginLeft: `${p.depth * 1.75}rem` }}>
-              <p>{p.body}</p>
-              <p className="meta">
-                {p.author.displayName} &middot; {formatDateTime(p.createdAt, dateFormat)}
-              </p>
+            <div className="post" key={p.id} style={{ marginLeft: `${p.depth * 1.5}rem` }}>
+              <p className="prose">{p.body}</p>
+              <div className="row" style={{ marginTop: "0.6rem" }}>
+                <Avatar name={p.author.displayName} size={22} />
+                <p className="meta">
+                  {p.author.displayName} · {formatDateTime(p.createdAt, dateFormat)}
+                </p>
+              </div>
               <div className="like-row">
                 <button
                   className={`like-button ${p.myLiked ? "like-button-active" : ""}`}
@@ -176,7 +211,7 @@ export default function ThreadPage() {
                   ♥ {p.likeCount}
                 </button>
                 {canPost && (
-                  <button className="secondary" onClick={() => setReplyTo(p.id)}>
+                  <button className="link-button" onClick={() => setReplyTo(p.id)}>
                     Reply
                   </button>
                 )}
@@ -194,25 +229,23 @@ export default function ThreadPage() {
           {thread.locked ? (
             <p className="notice">This thread is locked — no new replies.</p>
           ) : canPost ? (
-            <form onSubmit={submitReply} style={{ marginTop: "1.5rem" }}>
+            <form onSubmit={submitReply} style={{ marginTop: "2rem", maxWidth: "none" }}>
               <label>
-                {replyTo ? "Replying to a comment" : "Add a reply"}
-                {replyTo && (
-                  <button
-                    type="button"
-                    className="secondary"
-                    style={{ marginLeft: "0.5rem", padding: "0.1rem 0.5rem" }}
-                    onClick={() => setReplyTo(null)}
-                  >
-                    cancel
-                  </button>
-                )}
+                <span className="row wrap">
+                  {replyTo ? "Replying to a comment" : "Add a reply"}
+                  {replyTo && (
+                    <button type="button" className="link-button" onClick={() => setReplyTo(null)}>
+                      cancel
+                    </button>
+                  )}
+                </span>
+                <textarea
+                  value={replyBody}
+                  onChange={(e) => setReplyBody(e.target.value)}
+                  placeholder="Make your case..."
+                  required
+                />
               </label>
-              <textarea
-                value={replyBody}
-                onChange={(e) => setReplyBody(e.target.value)}
-                required
-              />
               <button type="submit" disabled={submitting}>
                 {submitting ? "Posting..." : "Post reply"}
               </button>

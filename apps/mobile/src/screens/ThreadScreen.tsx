@@ -2,14 +2,22 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useMemo, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { flattenPostTree, formatDate, type PostWithDepth, type ThreadDetail } from "@nyps-forum/shared";
+import {
+  flattenPostTree,
+  formatDate,
+  type PostWithDepth,
+  type ThreadDetail,
+} from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
-import type { ThemeColors } from "../lib/theme";
-import type { RootStackParamList } from "../navigation";
+import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
+import type { FeedStackParamList } from "../navigation";
+import { ReportButton } from "../components/ReportButton";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Thread">;
+type Props = NativeStackScreenProps<FeedStackParamList, "Thread">;
+
+const REPLIES_PAGE = 20;
 
 export function ThreadScreen({ route }: Props) {
   const { threadId } = route.params;
@@ -20,30 +28,59 @@ export function ThreadScreen({ route }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [repliesWindow, setRepliesWindow] = useState(REPLIES_PAGE);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [locking, setLocking] = useState(false);
 
-  const load = useCallback(() => {
-    api
-      .get<{ thread: ThreadDetail }>(`/api/threads/${threadId}`, token)
-      .then((res) => setThread(res.thread))
-      .catch((e) => setError(e.message));
-  }, [threadId, token]);
+  const load = useCallback(
+    (window: number) => {
+      api
+        .get<{ thread: ThreadDetail }>(
+          `/api/threads/${threadId}?repliesLimit=${window}&repliesOffset=0`,
+          token,
+        )
+        .then((res) => setThread(res.thread))
+        .catch((e) => setError(e.message));
+    },
+    [threadId, token],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      load(repliesWindow);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [load]),
   );
+
+  async function loadMoreReplies() {
+    setLoadingMore(true);
+    const nextWindow = repliesWindow + REPLIES_PAGE;
+    load(nextWindow);
+    setRepliesWindow(nextWindow);
+    setLoadingMore(false);
+  }
 
   async function toggleThreadLike() {
     if (!token) return;
     await api.post(`/api/threads/${threadId}/like`, {}, token);
-    load();
+    load(repliesWindow);
   }
 
   async function togglePostLike(postId: string) {
     if (!token) return;
     await api.post(`/api/posts/${postId}/like`, {}, token);
-    load();
+    load(repliesWindow);
+  }
+
+  async function toggleLock() {
+    if (!token) return;
+    setLocking(true);
+    try {
+      await api.post(`/api/threads/${threadId}/lock`, {}, token);
+      load(repliesWindow);
+    } finally {
+      setLocking(false);
+    }
   }
 
   async function submitReply() {
@@ -52,16 +89,38 @@ export function ThreadScreen({ route }: Props) {
     try {
       await api.post("/api/posts", { threadId, body: replyBody }, token);
       setReplyBody("");
-      load();
+      const nextWindow = repliesWindow + 1;
+      load(nextWindow);
+      setRepliesWindow(nextWindow);
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (error) return <Text style={styles.error}>{error}</Text>;
-  if (!thread) return <Text style={styles.meta}>Loading...</Text>;
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.error}>{error}</Text>
+      </View>
+    );
+  }
 
-  const canPost = user?.verificationStatus === "VERIFIED";
+  if (!thread) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.skeletonBar, { width: "85%", height: 20 }]} />
+        <View style={[styles.skeletonBar, { width: "40%" }]} />
+        <View style={styles.card}>
+          <View style={[styles.skeletonBar, { width: "100%" }]} />
+          <View style={[styles.skeletonBar, { width: "90%" }]} />
+          <View style={[styles.skeletonBar, { width: "55%" }]} />
+        </View>
+      </View>
+    );
+  }
+
+  const canLike = user?.verificationStatus === "VERIFIED";
+  const canPost = canLike && !thread.locked;
   const orderedPosts = flattenPostTree(thread.posts);
 
   return (
@@ -71,45 +130,78 @@ export function ThreadScreen({ route }: Props) {
       keyExtractor={(p) => p.id}
       ListHeaderComponent={
         <View>
-          <Text style={styles.h1}>{thread.title}</Text>
-          <Text style={styles.meta}>
-            by {thread.author.displayName} · {formatDate(thread.createdAt, dateFormat)}
+          <Text style={styles.h1}>
+            {thread.title}
+            {thread.locked ? " 🔒" : ""}
           </Text>
+          <View style={styles.byline}>
+            <View style={styles.miniAvatar}>
+              <Text style={styles.miniAvatarText}>
+                {thread.author.displayName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <Text style={styles.meta}>
+              {thread.author.displayName} · {formatDate(thread.createdAt, dateFormat)}
+            </Text>
+          </View>
           {thread.tags.length > 0 && (
             <View style={styles.tagRow}>
               {thread.tags.map((t) => (
                 <View key={t.id} style={styles.tagPill}>
-                  <Text style={styles.tagPillText}>{t.name}</Text>
+                  <Text style={styles.tagPillText}>{t.name.toUpperCase()}</Text>
                 </View>
               ))}
             </View>
           )}
-          <View style={styles.card}>
-            <Text style={{ color: colors.ink }}>{thread.body}</Text>
-            <Pressable
-              style={[styles.likeButton, thread.myLiked && styles.likeButtonActive]}
-              disabled={!canPost}
-              onPress={toggleThreadLike}
-            >
-              <Text style={thread.myLiked ? styles.likeTextActive : styles.likeText}>
-                ♥ {thread.likeCount}
+          {user?.role === "admin" && (
+            <Pressable style={styles.lockButton} onPress={toggleLock} disabled={locking}>
+              <Text style={styles.lockButtonText}>
+                {thread.locked ? "Unlock thread" : "Lock thread"}
               </Text>
             </Pressable>
+          )}
+          <View style={styles.card}>
+            <Text style={styles.body}>{thread.body}</Text>
+            <View style={styles.likeRow}>
+              <Pressable
+                style={[styles.likeButton, thread.myLiked && styles.likeButtonActive]}
+                disabled={!canLike}
+                onPress={toggleThreadLike}
+              >
+                <Text style={thread.myLiked ? styles.likeTextActive : styles.likeText}>
+                  ♥ {thread.likeCount}
+                </Text>
+              </Pressable>
+              <ReportButton targetType="thread" targetId={thread.id} />
+            </View>
           </View>
-          <Text style={styles.h2}>{thread.posts.length} Replies</Text>
+          <Text style={styles.h2}>
+            {thread.postCount} {thread.postCount === 1 ? "Reply" : "Replies"}
+          </Text>
         </View>
       }
       renderItem={({ item }) => (
-        <PostItem post={item} canLike={canPost} onLike={togglePostLike} />
+        <PostItem post={item} canLike={canLike} onLike={togglePostLike} />
       )}
       ListFooterComponent={
-        <View style={{ marginTop: 16 }}>
-          {canPost ? (
+        <View style={{ marginTop: spacing.lg, paddingBottom: spacing.xl }}>
+          {thread.hasMoreReplies && (
+            <Pressable style={styles.loadMore} onPress={loadMoreReplies} disabled={loadingMore}>
+              <Text style={styles.loadMoreText}>
+                {loadingMore ? "Loading..." : "Load more replies"}
+              </Text>
+            </Pressable>
+          )}
+          {thread.locked ? (
+            <Text style={styles.notice}>This thread is locked — no new replies.</Text>
+          ) : canPost ? (
             <>
               <Text style={styles.label}>Add a reply</Text>
               <TextInput
                 style={styles.textarea}
                 multiline
+                placeholder="Make your case..."
+                placeholderTextColor={colors.muted}
                 value={replyBody}
                 onChangeText={setReplyBody}
               />
@@ -119,7 +211,7 @@ export function ThreadScreen({ route }: Props) {
             </>
           ) : (
             <Text style={styles.notice}>
-              {user ? "Verify your identity" : "Log in"} to reply and like.
+              Verify your identity from the Profile tab to reply and like.
             </Text>
           )}
         </View>
@@ -141,92 +233,164 @@ function PostItem({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <View style={[styles.post, { marginLeft: post.depth * 16 }]}>
-      <Text style={{ color: colors.ink }}>{post.body}</Text>
-      <Text style={styles.meta}>
-        {post.author.displayName} · {formatDate(post.createdAt, dateFormat)}
-      </Text>
-      <Pressable
-        style={[styles.likeButton, post.myLiked && styles.likeButtonActive]}
-        disabled={!canLike}
-        onPress={() => onLike(post.id)}
-      >
-        <Text style={post.myLiked ? styles.likeTextActive : styles.likeText}>
-          ♥ {post.likeCount}
+    <View style={[styles.post, { marginLeft: post.depth * spacing.lg }]}>
+      <Text style={styles.body}>{post.body}</Text>
+      <View style={styles.byline}>
+        <View style={styles.miniAvatar}>
+          <Text style={styles.miniAvatarText}>
+            {post.author.displayName.charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <Text style={styles.meta}>
+          {post.author.displayName} · {formatDate(post.createdAt, dateFormat)}
         </Text>
-      </Pressable>
+      </View>
+      <View style={styles.likeRow}>
+        <Pressable
+          style={[styles.likeButton, post.myLiked && styles.likeButtonActive]}
+          disabled={!canLike}
+          onPress={() => onLike(post.id)}
+        >
+          <Text style={post.myLiked ? styles.likeTextActive : styles.likeText}>
+            ♥ {post.likeCount}
+          </Text>
+        </Pressable>
+        <ReportButton targetType="post" targetId={post.id} />
+      </View>
     </View>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-    h1: { fontSize: 20, fontWeight: "700", color: colors.ink },
-    h2: { fontSize: 16, fontWeight: "700", color: colors.ink, marginTop: 16, marginBottom: 4 },
-    meta: { color: colors.muted, fontSize: 12, marginTop: 4 },
-    error: { color: colors.danger, padding: 16 },
-    tagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 },
-    tagPill: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 999,
-      paddingVertical: 2,
-      paddingHorizontal: 8,
+    container: { flex: 1, backgroundColor: colors.paper, padding: spacing.lg },
+    h1: { fontFamily: fonts.serifBold, fontSize: type.lg, lineHeight: 28, color: colors.ink },
+    h2: {
+      fontFamily: fonts.serifBold,
+      fontSize: type.md,
+      color: colors.ink,
+      marginTop: spacing.xl,
+      marginBottom: spacing.xs,
     },
-    tagPillText: { fontSize: 11, color: colors.ink },
-    card: {
+    byline: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
+    miniAvatar: {
+      width: 22,
+      height: 22,
+      borderRadius: radius.full,
+      backgroundColor: colors.solid,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    miniAvatarText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: 10 },
+    meta: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
+    error: { color: colors.danger, fontFamily: fonts.display },
+    tagRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.md },
+    tagPill: {
+      backgroundColor: colors.stone2,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 8,
-      padding: 12,
-      marginTop: 8,
+      borderRadius: radius.full,
+      paddingVertical: 2,
+      paddingHorizontal: spacing.sm,
+    },
+    tagPillText: {
+      fontFamily: fonts.displaySemi,
+      fontSize: type.xs,
+      color: colors.inkSoft,
+      letterSpacing: 0.5,
+    },
+    lockButton: {
+      alignSelf: "flex-start",
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      borderRadius: radius.sm,
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.md,
+      marginTop: spacing.md,
+    },
+    lockButtonText: { color: colors.ink, fontFamily: fonts.displayMedium, fontSize: type.sm },
+    card: {
       backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      padding: spacing.lg,
+      marginTop: spacing.md,
+    },
+    body: {
+      fontFamily: fonts.serif,
+      fontSize: type.base,
+      lineHeight: 25,
+      color: colors.ink,
     },
     post: {
-      borderLeftWidth: 3,
+      borderLeftWidth: 2,
       borderLeftColor: colors.border,
-      paddingLeft: 12,
-      marginTop: 12,
+      paddingLeft: spacing.md,
+      marginTop: spacing.lg,
     },
+    likeRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md, flexWrap: "wrap" },
     likeButton: {
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 999,
+      borderColor: colors.borderStrong,
+      borderRadius: radius.full,
       paddingVertical: 3,
-      paddingHorizontal: 10,
-      marginTop: 8,
-      alignSelf: "flex-start",
+      paddingHorizontal: spacing.md,
     },
-    likeButtonActive: { backgroundColor: colors.rejectedBg, borderColor: colors.rejectedBorder },
-    likeText: { color: colors.ink, fontSize: 13 },
-    likeTextActive: { color: colors.danger, fontSize: 13, fontWeight: "700" },
+    likeButtonActive: { backgroundColor: colors.accentBg, borderColor: colors.supporterBorder },
+    likeText: { color: colors.muted, fontFamily: fonts.displayMedium, fontSize: type.sm },
+    likeTextActive: { color: colors.accent, fontFamily: fonts.displaySemi, fontSize: type.sm },
+    loadMore: {
+      borderWidth: 1,
+      borderStyle: "dashed",
+      borderColor: colors.borderStrong,
+      borderRadius: radius.sm,
+      paddingVertical: spacing.md,
+      alignItems: "center",
+      marginBottom: spacing.lg,
+    },
+    loadMoreText: { color: colors.accent, fontFamily: fonts.displayMedium, fontSize: type.sm },
     notice: {
       backgroundColor: colors.pendingBg,
       color: colors.pendingText,
-      padding: 10,
-      borderRadius: 6,
+      fontFamily: fonts.display,
+      fontSize: type.sm,
+      padding: spacing.md,
+      borderRadius: radius.sm,
     },
-    label: { fontWeight: "700", color: colors.ink, marginBottom: 4 },
+    label: {
+      fontFamily: fonts.displaySemi,
+      fontSize: type.sm,
+      color: colors.ink,
+      marginBottom: spacing.xs,
+    },
     textarea: {
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 6,
-      padding: 10,
+      borderColor: colors.borderStrong,
+      borderRadius: radius.sm,
+      padding: spacing.md,
       minHeight: 80,
       backgroundColor: colors.surface,
       color: colors.ink,
+      fontFamily: fonts.serif,
+      fontSize: type.base,
       textAlignVertical: "top",
     },
     button: {
       backgroundColor: colors.solid,
-      paddingVertical: 10,
-      borderRadius: 6,
+      paddingVertical: spacing.md,
+      borderRadius: radius.sm,
       alignItems: "center",
-      marginTop: 8,
+      marginTop: spacing.md,
       alignSelf: "flex-start",
-      paddingHorizontal: 16,
+      paddingHorizontal: spacing.xl,
     },
-    buttonText: { color: colors.solidText, fontWeight: "700" },
+    buttonText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.sm },
+    skeletonBar: {
+      height: 14,
+      borderRadius: radius.sm,
+      backgroundColor: colors.stone2,
+      marginBottom: spacing.md,
+    },
   });
 }

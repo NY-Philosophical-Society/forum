@@ -5,10 +5,11 @@ import type { VerificationSessionResponse } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
-import type { ThemeColors } from "../lib/theme";
-import type { RootStackParamList } from "../navigation";
+import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
+import type { ProfileStackParamList } from "../navigation";
+import { VerificationBadge } from "../components/VerificationBadge";
 
-type Props = NativeStackScreenProps<RootStackParamList, "Verify">;
+type Props = NativeStackScreenProps<ProfileStackParamList, "Verify">;
 
 export function VerifyScreen({ navigation }: Props) {
   const { user, token } = useAuth();
@@ -17,13 +18,7 @@ export function VerifyScreen({ navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
 
-  if (!user) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.body}>You need to log in first.</Text>
-      </View>
-    );
-  }
+  if (!user) return null;
 
   async function startVerification() {
     setError(null);
@@ -44,52 +39,78 @@ export function VerifyScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.h1}>Identity Verification</Text>
-      <Text style={styles.body}>
-        Current status: <Text style={{ fontWeight: "700" }}>{user.verificationStatus}</Text>
-      </Text>
+      <View style={styles.card}>
+        <View style={styles.statusRow}>
+          <Text style={styles.meta}>Current status</Text>
+          <VerificationBadge status={user.verificationStatus} />
+        </View>
 
-      {user.verificationStatus === "VERIFIED" ? (
-        <Text style={styles.notice}>You&apos;re verified — you can post and reply.</Text>
-      ) : (
-        <>
-          <Text style={styles.meta}>
-            In production this hands off to a hosted identity-verification provider (Stripe
-            Identity / Persona / Veriff): you photograph a government ID and take a live selfie,
-            the provider matches the two, and we only ever store the pass/fail result — never the
-            document image. This prototype simulates that step locally.
+        {user.verificationStatus === "VERIFIED" ? (
+          <Text style={styles.success}>
+            You&apos;re verified — you can post, reply, like, and message under your real name.
           </Text>
-          {error && <Text style={styles.error}>{error}</Text>}
-          <Pressable style={styles.button} onPress={startVerification} disabled={starting}>
-            <Text style={styles.buttonText}>{starting ? "Starting..." : "Start verification"}</Text>
-          </Pressable>
-        </>
-      )}
+        ) : (
+          <>
+            <Text style={styles.copy}>
+              This forum asks every participant to stand behind their words with their real name.
+              In production this hands off to a hosted identity-verification provider: you
+              photograph a government ID and take a live selfie, the provider matches the two, and
+              we only ever store the pass/fail result — never the document itself. This prototype
+              simulates that step locally.
+            </Text>
+            {error && <Text style={styles.error}>{error}</Text>}
+            <Pressable style={styles.button} onPress={startVerification} disabled={starting}>
+              <Text style={styles.buttonText}>
+                {starting ? "Starting..." : "Start verification"}
+              </Text>
+            </Pressable>
+          </>
+        )}
+      </View>
     </View>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.paper, padding: 16 },
-    h1: { fontSize: 22, fontWeight: "700", color: colors.ink, marginBottom: 8 },
-    body: { color: colors.ink },
-    meta: { color: colors.muted, fontSize: 13, marginVertical: 12 },
-    error: { color: colors.danger },
-    notice: {
+    container: { flex: 1, backgroundColor: colors.paper, padding: spacing.lg },
+    card: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      padding: spacing.lg,
+    },
+    statusRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+      marginBottom: spacing.lg,
+    },
+    meta: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
+    copy: {
+      fontFamily: fonts.serif,
+      fontSize: type.base,
+      lineHeight: 24,
+      color: colors.ink,
+      marginBottom: spacing.lg,
+    },
+    success: {
       backgroundColor: colors.verifiedBg,
       color: colors.verifiedText,
-      padding: 10,
-      borderRadius: 6,
-      marginTop: 12,
+      fontFamily: fonts.display,
+      fontSize: type.sm,
+      padding: spacing.md,
+      borderRadius: radius.sm,
+      lineHeight: 20,
     },
+    error: { color: colors.danger, fontFamily: fonts.display, marginBottom: spacing.sm },
     button: {
       backgroundColor: colors.solid,
-      paddingVertical: 12,
-      borderRadius: 6,
+      paddingVertical: spacing.md,
+      borderRadius: radius.sm,
       alignItems: "center",
-      marginTop: 8,
     },
-    buttonText: { color: colors.solidText, fontWeight: "700" },
+    buttonText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.base },
   });
 }

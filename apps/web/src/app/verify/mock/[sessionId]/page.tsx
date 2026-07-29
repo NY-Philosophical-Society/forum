@@ -8,8 +8,7 @@ import { useAuth } from "~/lib/auth-context";
 /**
  * Stands in for a real provider's hosted verification page (Stripe Identity,
  * Persona, Veriff). A real integration redirects here instead of rendering it
- * inside this app, captures the ID photo + selfie, and calls our webhook —
- * the user never sees this screen in production.
+ * inside this app — the user never sees this screen in production.
  */
 export default function MockVerificationPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -29,22 +28,27 @@ export default function MockVerificationPage() {
   }
 
   return (
-    <div>
-      <h1>Mock Identity Verification</h1>
-      <p className="notice">
-        This screen exists only because this is a local prototype without a live Stripe
-        Identity / Persona / Veriff account. A real deployment sends the user to that
-        provider&apos;s own hosted page here instead.
-      </p>
-      <p>Session: {sessionId}</p>
-      <p>Simulate the outcome a real ID + selfie check would produce:</p>
-      <div style={{ display: "flex", gap: "0.75rem" }}>
-        <button onClick={() => resolve(true)} disabled={submitting}>
-          Simulate: approved
-        </button>
-        <button className="secondary" onClick={() => resolve(false)} disabled={submitting}>
-          Simulate: rejected
-        </button>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-icon" aria-hidden>
+          Φ
+        </div>
+        <h1 className="auth-title">Mock Identity Verification</h1>
+        <p className="auth-subtitle">
+          A stand-in for the provider&apos;s hosted ID + selfie check — this screen never exists
+          in production.
+        </p>
+        <p className="meta" style={{ marginBottom: "1.25rem" }}>
+          Session: {sessionId}
+        </p>
+        <div className="row" style={{ justifyContent: "center" }}>
+          <button onClick={() => resolve(true)} disabled={submitting}>
+            Simulate: approved
+          </button>
+          <button className="secondary" onClick={() => resolve(false)} disabled={submitting}>
+            Simulate: rejected
+          </button>
+        </div>
       </div>
     </div>
   );
