@@ -131,7 +131,7 @@ function makeStyles(colors: ThemeColors) {
       padding: spacing.md,
       backgroundColor: colors.surface,
       color: colors.ink,
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
     },
     row: {
@@ -155,7 +155,7 @@ function makeStyles(colors: ThemeColors) {
     },
     avatarText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.base },
     name: { fontFamily: fonts.serifBold, fontSize: type.base, color: colors.ink },
-    meta: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
+    meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
     unreadBadge: {
       backgroundColor: colors.accent,
       borderRadius: radius.full,

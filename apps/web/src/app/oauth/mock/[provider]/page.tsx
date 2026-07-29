@@ -44,9 +44,7 @@ export default function MockOAuthPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-icon" aria-hidden>
-          Φ
-        </div>
+        <img src="/nypc-icon.png" alt="The New York Philosophy Club" className="auth-logo" />
         <h1 className="auth-title">Mock {providerLabel} Sign-In</h1>
         <p className="auth-subtitle">
           Real {providerLabel} sign-in isn&apos;t configured on this server — in production this

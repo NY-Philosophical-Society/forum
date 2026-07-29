@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 export interface ThemeColors {
   ink: string;
   inkSoft: string;
@@ -29,7 +31,9 @@ export const lightColors: ThemeColors = {
   inkSoft: "#2a4050",
   paper: "#fffdf2",
   stone2: "#faf6e3",
-  surface: "#ffffff",
+  // Cards default to no fill per the design system — "surface" is the page
+  // color so bordered containers read as outlines, and stone2 is emphasis.
+  surface: "#fffdf2",
   accent: "#96421f",
   accentBg: "#f6ece2",
   border: "rgba(21, 43, 66, 0.14)",
@@ -55,7 +59,7 @@ export const darkColors: ThemeColors = {
   inkSoft: "#d6d2c6",
   paper: "#1b1f22",
   stone2: "#22282c",
-  surface: "#262b2f",
+  surface: "#1b1f22",
   accent: "#dcb877",
   accentBg: "#332a17",
   border: "rgba(233, 230, 221, 0.14)",
@@ -85,6 +89,9 @@ export const fonts = {
   display: "Newsreader_400Regular",
   displayMedium: "Newsreader_500Medium",
   displaySemi: "Newsreader_600SemiBold",
+  /* Body copy and UI text are Helvetica Neue per the design system —
+     the iOS system face; Android falls back to its default sans. */
+  sans: Platform.select({ ios: "Helvetica Neue", default: "sans-serif" }) as string,
 } as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;

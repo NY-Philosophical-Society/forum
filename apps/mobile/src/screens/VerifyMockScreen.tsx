@@ -62,7 +62,7 @@ function makeStyles(colors: ThemeColors) {
     notice: {
       backgroundColor: colors.pendingBg,
       color: colors.pendingText,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       padding: spacing.md,
       borderRadius: radius.sm,
@@ -71,12 +71,12 @@ function makeStyles(colors: ThemeColors) {
     },
     meta: {
       color: colors.muted,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       marginBottom: spacing.md,
     },
     copy: {
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
       color: colors.ink,
       marginBottom: spacing.lg,

@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput } from "react-native";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
@@ -33,10 +33,12 @@ export function LoginScreen({ navigation }: Props) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.mark}>
-        <Text style={styles.markText}>Φ</Text>
-      </View>
-      <Text style={styles.h1}>Log in to NYPS Forum</Text>
+      <Image
+        source={require("../../assets/nypc-icon.png")}
+        style={styles.mark}
+        resizeMode="contain"
+      />
+      <Text style={styles.h1}>Log in to the Forum</Text>
       <Text style={styles.subtitle}>A real-name space for philosophical argument.</Text>
 
       <OAuthButtons navigation={navigation} />
@@ -73,16 +75,11 @@ function makeStyles(colors: ThemeColors) {
     container: { flex: 1, backgroundColor: colors.paper },
     content: { padding: spacing.xl },
     mark: {
-      width: 48,
-      height: 48,
-      borderRadius: radius.md,
-      backgroundColor: colors.solid,
-      alignItems: "center",
-      justifyContent: "center",
+      width: 64,
+      height: 64,
       alignSelf: "center",
       marginBottom: spacing.lg,
     },
-    markText: { color: colors.solidText, fontFamily: fonts.serifBold, fontSize: type.lg },
     h1: {
       fontFamily: fonts.serifBold,
       fontSize: type.xl,
@@ -91,7 +88,7 @@ function makeStyles(colors: ThemeColors) {
       marginBottom: spacing.xs,
     },
     subtitle: {
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       color: colors.muted,
       textAlign: "center",
@@ -111,10 +108,10 @@ function makeStyles(colors: ThemeColors) {
       padding: spacing.md,
       backgroundColor: colors.surface,
       color: colors.ink,
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
     },
-    error: { color: colors.danger, fontFamily: fonts.display, marginTop: spacing.sm },
+    error: { color: colors.danger, fontFamily: fonts.sans, marginTop: spacing.sm },
     button: {
       backgroundColor: colors.solid,
       paddingVertical: spacing.md,
@@ -125,6 +122,6 @@ function makeStyles(colors: ThemeColors) {
     buttonText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: type.base },
     linkRow: { marginTop: spacing.lg, alignItems: "center" },
     linkText: { color: colors.accent, fontFamily: fonts.displayMedium, fontSize: type.sm },
-    linkTextMuted: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
+    linkTextMuted: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
   });
 }

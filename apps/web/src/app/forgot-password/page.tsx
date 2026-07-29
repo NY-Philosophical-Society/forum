@@ -32,7 +32,7 @@ export default function ForgotPasswordPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-icon">Φ</div>
+        <img src="/nypc-icon.png" alt="The New York Philosophy Club" className="auth-logo" />
         <h1 className="auth-title">Reset your password</h1>
         <p className="auth-subtitle">
           <Link href="/login">Back to log in</Link>

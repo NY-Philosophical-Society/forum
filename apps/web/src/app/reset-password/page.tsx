@@ -31,7 +31,7 @@ function ResetPasswordForm() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-icon">Φ</div>
+        <img src="/nypc-icon.png" alt="The New York Philosophy Club" className="auth-logo" />
         <h1 className="auth-title">Choose a new password</h1>
 
         {!token ? (

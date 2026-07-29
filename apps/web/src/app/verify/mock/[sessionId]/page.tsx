@@ -30,9 +30,7 @@ export default function MockVerificationPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-icon" aria-hidden>
-          Φ
-        </div>
+        <img src="/nypc-icon.png" alt="The New York Philosophy Club" className="auth-logo" />
         <h1 className="auth-title">Mock Identity Verification</h1>
         <p className="auth-subtitle">
           A stand-in for the provider&apos;s hosted ID + selfie check — this screen never exists

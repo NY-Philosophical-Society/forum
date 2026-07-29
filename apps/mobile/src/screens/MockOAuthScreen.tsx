@@ -78,7 +78,7 @@ function makeStyles(colors: ThemeColors) {
     notice: {
       backgroundColor: colors.pendingBg,
       color: colors.pendingText,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       padding: spacing.md,
       borderRadius: radius.sm,
@@ -99,10 +99,10 @@ function makeStyles(colors: ThemeColors) {
       padding: spacing.md,
       backgroundColor: colors.surface,
       color: colors.ink,
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
     },
-    error: { color: colors.danger, fontFamily: fonts.display, marginTop: spacing.sm },
+    error: { color: colors.danger, fontFamily: fonts.sans, marginTop: spacing.sm },
     button: {
       backgroundColor: colors.solid,
       paddingVertical: spacing.md,

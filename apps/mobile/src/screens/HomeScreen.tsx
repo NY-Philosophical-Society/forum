@@ -251,7 +251,7 @@ function makeStyles(colors: ThemeColors) {
       padding: spacing.md,
       marginBottom: spacing.md,
     },
-    toastText: { color: colors.verifiedText, fontFamily: fonts.display, fontSize: type.sm },
+    toastText: { color: colors.verifiedText, fontFamily: fonts.sans, fontSize: type.sm },
     controls: {
       flexDirection: "row",
       alignItems: "center",
@@ -289,7 +289,7 @@ function makeStyles(colors: ThemeColors) {
     chipActive: { backgroundColor: colors.solid, borderColor: colors.solid },
     chipText: { color: colors.ink, fontFamily: fonts.displayMedium, fontSize: type.sm },
     chipTextActive: { color: colors.solidText, fontFamily: fonts.displayMedium, fontSize: type.sm },
-    error: { color: colors.danger, fontFamily: fonts.display },
+    error: { color: colors.danger, fontFamily: fonts.sans },
     card: {
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -314,7 +314,7 @@ function makeStyles(colors: ThemeColors) {
       justifyContent: "center",
     },
     miniAvatarText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: 10 },
-    meta: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
+    meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
     tagRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.md },
     tagPill: {
       backgroundColor: colors.stone2,

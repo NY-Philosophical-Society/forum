@@ -14,7 +14,7 @@ import {
   Newsreader_500Medium,
   Newsreader_600SemiBold,
 } from "@expo-google-fonts/newsreader";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Image, Text, View } from "react-native";
 import { AuthProvider, useAuth } from "./src/lib/auth-context";
 import { SettingsProvider, useSettings } from "./src/lib/settings-context";
 import { useUnreadCount } from "./src/lib/use-unread";
@@ -57,11 +57,32 @@ function useHeaderOptions() {
   };
 }
 
+function BrandTitle() {
+  const { colors, themeName } = useSettings();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      <Image
+        source={require("./assets/nypc-icon.png")}
+        // The ink amphora disappears on dark paper — lift it via tint.
+        style={{ width: 26, height: 26, tintColor: themeName === "dark" ? colors.ink : undefined }}
+        resizeMode="contain"
+      />
+      <Text style={{ fontFamily: fonts.serifBold, fontSize: 15, color: colors.ink }}>
+        New York Philosophy Club
+      </Text>
+    </View>
+  );
+}
+
 function FeedStack() {
   const options = useHeaderOptions();
   return (
     <FeedStackNav.Navigator screenOptions={options}>
-      <FeedStackNav.Screen name="Home" component={HomeScreen} options={{ title: "NYPS Forum" }} />
+      <FeedStackNav.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ headerTitle: () => <BrandTitle /> }}
+      />
       <FeedStackNav.Screen name="Thread" component={ThreadScreen} options={{ title: "Thread" }} />
       <FeedStackNav.Screen
         name="NewThread"

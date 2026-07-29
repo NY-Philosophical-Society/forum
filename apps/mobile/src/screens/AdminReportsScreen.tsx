@@ -65,7 +65,7 @@ export function AdminReportsScreen() {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.paper, padding: spacing.lg },
-    error: { color: colors.danger, fontFamily: fonts.display },
+    error: { color: colors.danger, fontFamily: fonts.sans },
     card: {
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -90,13 +90,13 @@ function makeStyles(colors: ThemeColors) {
       letterSpacing: 0.5,
     },
     body: {
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
       lineHeight: 22,
       color: colors.ink,
       marginBottom: spacing.sm,
     },
-    meta: { fontFamily: fonts.display, fontSize: type.sm, color: colors.muted },
+    meta: { fontFamily: fonts.sans, fontSize: type.sm, color: colors.muted },
     empty: { alignItems: "center", paddingVertical: spacing.xxl },
     emptyMark: { color: colors.accent, fontSize: 28, marginBottom: spacing.md },
     emptyTitle: {

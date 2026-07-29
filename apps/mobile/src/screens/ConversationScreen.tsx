@@ -177,7 +177,7 @@ function makeStyles(colors: ThemeColors) {
     },
     linkText: {
       color: colors.muted,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       textDecorationLine: "underline",
     },
@@ -199,8 +199,8 @@ function makeStyles(colors: ThemeColors) {
       alignSelf: "flex-start",
       borderBottomLeftRadius: radius.sm,
     },
-    bubbleTextMine: { color: colors.solidText, fontFamily: fonts.serif, fontSize: type.base, lineHeight: 22 },
-    bubbleTextTheirs: { color: colors.ink, fontFamily: fonts.serif, fontSize: type.base, lineHeight: 22 },
+    bubbleTextMine: { color: colors.solidText, fontFamily: fonts.sans, fontSize: type.base, lineHeight: 22 },
+    bubbleTextTheirs: { color: colors.ink, fontFamily: fonts.sans, fontSize: type.base, lineHeight: 22 },
     composeRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm, alignItems: "center" },
     input: {
       flex: 1,
@@ -210,7 +210,7 @@ function makeStyles(colors: ThemeColors) {
       padding: spacing.md,
       backgroundColor: colors.surface,
       color: colors.ink,
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
     },
     button: {
@@ -223,13 +223,13 @@ function makeStyles(colors: ThemeColors) {
     notice: {
       backgroundColor: colors.pendingBg,
       color: colors.pendingText,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       padding: spacing.md,
       borderRadius: radius.sm,
       marginBottom: spacing.md,
     },
-    error: { color: colors.danger, fontFamily: fonts.display, marginTop: spacing.xs },
+    error: { color: colors.danger, fontFamily: fonts.sans, marginTop: spacing.xs },
     loadMore: {
       borderWidth: 1,
       borderStyle: "dashed",
@@ -248,6 +248,6 @@ function makeStyles(colors: ThemeColors) {
       color: colors.ink,
       marginBottom: spacing.xs,
     },
-    meta: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
+    meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
   });
 }

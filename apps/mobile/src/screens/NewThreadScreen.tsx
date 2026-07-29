@@ -94,7 +94,7 @@ function makeStyles(colors: ThemeColors) {
     container: { flex: 1, backgroundColor: colors.paper },
     meta: {
       color: colors.muted,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       marginBottom: spacing.md,
     },
@@ -112,7 +112,7 @@ function makeStyles(colors: ThemeColors) {
       padding: spacing.md,
       backgroundColor: colors.surface,
       color: colors.ink,
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
     },
     textarea: {
@@ -123,7 +123,7 @@ function makeStyles(colors: ThemeColors) {
       minHeight: 140,
       backgroundColor: colors.surface,
       color: colors.ink,
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
       lineHeight: 22,
       textAlignVertical: "top",
@@ -140,7 +140,7 @@ function makeStyles(colors: ThemeColors) {
     chipActive: { backgroundColor: colors.solid, borderColor: colors.solid },
     chipText: { color: colors.ink, fontFamily: fonts.displayMedium, fontSize: type.sm },
     chipTextActive: { color: colors.solidText, fontFamily: fonts.displayMedium, fontSize: type.sm },
-    error: { color: colors.danger, fontFamily: fonts.display, marginTop: spacing.md },
+    error: { color: colors.danger, fontFamily: fonts.sans, marginTop: spacing.md },
     button: {
       backgroundColor: colors.solid,
       paddingVertical: spacing.md,

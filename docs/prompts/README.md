@@ -47,8 +47,16 @@ Supporter status is granted by redeeming an access code (`WISDOMKEY`, unlimited
 use) — a deliberate placeholder for a real donation/subscription API check later.
 
 **Design**
-- Warm, literary, philosophical-society. Cream paper, deep navy ink, terracotta
-  accent. Serif throughout. Built for long-form argument, not scroll.
+- **`docs/DESIGN_SYSTEM.md` is the source of truth** — copied from
+  nyphilosophy.org and binding here. Highlights: flat design (never add drop
+  shadows); cards default to *no fill* with an ink/15 border, `stone-2` is the
+  emphasis fill; terracotta is precious (hairlines, ticks, small badges — never
+  large fills).
+- Type: **Libre Baskerville** headings · **Newsreader** button labels/display ·
+  **Helvetica Neue** body copy and UI text. Do not introduce new fonts.
+- The real brand assets live at `apps/web/public/nypc-icon.png` /
+  `nypc-logo.png` and `apps/mobile/assets/nypc-icon.png` — the ink amphora of
+  The New York Philosophy Club. Use them; never invent a substitute mark.
 - Editorial palette v1, shared with nyphilosophy.org — use these exact values:
 
   | Token | Hex | Role |
@@ -66,8 +74,6 @@ use) — a deliberate placeholder for a real donation/subscription API check lat
 - Same brand on web and mobile; platform-appropriate UX. Don't port web patterns
   (dropdown menus) literally to mobile — use sheets, native segmented controls,
   proper list rows.
-- The `Φ` in the auth card is a placeholder. Leave it typographic; don't invent a
-  Society logo.
 
 ## Standing constraints — apply to every brief
 

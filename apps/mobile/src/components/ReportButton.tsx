@@ -75,11 +75,11 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     linkText: {
       color: colors.muted,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       textDecorationLine: "underline",
     },
-    doneText: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
+    doneText: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
     form: { marginTop: spacing.sm, width: "100%", gap: spacing.sm },
     input: {
       borderWidth: 1,
@@ -89,11 +89,11 @@ function makeStyles(colors: ThemeColors) {
       minHeight: 60,
       backgroundColor: colors.surface,
       color: colors.ink,
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       textAlignVertical: "top",
     },
-    error: { color: colors.danger, fontFamily: fonts.display, fontSize: type.sm },
+    error: { color: colors.danger, fontFamily: fonts.sans, fontSize: type.sm },
     row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
     submit: {
       backgroundColor: colors.solid,

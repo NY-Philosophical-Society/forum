@@ -32,7 +32,8 @@ export default function SignupPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-icon">Φ</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/nypc-icon.png" alt="The New York Philosophy Club" className="auth-logo" />
         <h1 className="auth-title">Create your account</h1>
         <p className="auth-subtitle">
           Already have one? <Link href="/login">Log in</Link>

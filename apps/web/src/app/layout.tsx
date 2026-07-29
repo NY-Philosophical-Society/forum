@@ -26,8 +26,8 @@ const display = Newsreader({
 });
 
 export const metadata: Metadata = {
-  title: "NYPS Forum",
-  description: "Verified-identity philosophical discussion forum.",
+  title: "Forum — The New York Philosophy Club",
+  description: "The New York Philosophy Club's verified-identity discussion forum.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

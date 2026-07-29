@@ -137,11 +137,11 @@ function makeStyles(colors: ThemeColors) {
       marginBottom: spacing.sm,
     },
     buttonText: { color: colors.ink, fontFamily: fonts.displaySemi, fontSize: type.base },
-    error: { color: colors.danger, fontFamily: fonts.display, marginBottom: spacing.sm },
+    error: { color: colors.danger, fontFamily: fonts.sans, marginBottom: spacing.sm },
     divider: {
       textAlign: "center",
       color: colors.muted,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.xs,
       marginVertical: spacing.md,
       letterSpacing: 1,

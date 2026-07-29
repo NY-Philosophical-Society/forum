@@ -282,8 +282,8 @@ function makeStyles(colors: ThemeColors) {
       justifyContent: "center",
     },
     miniAvatarText: { color: colors.solidText, fontFamily: fonts.displaySemi, fontSize: 10 },
-    meta: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
-    error: { color: colors.danger, fontFamily: fonts.display },
+    meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
+    error: { color: colors.danger, fontFamily: fonts.sans },
     tagRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.md },
     tagPill: {
       backgroundColor: colors.stone2,
@@ -318,7 +318,7 @@ function makeStyles(colors: ThemeColors) {
       marginTop: spacing.md,
     },
     body: {
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
       lineHeight: 25,
       color: colors.ink,
@@ -353,7 +353,7 @@ function makeStyles(colors: ThemeColors) {
     notice: {
       backgroundColor: colors.pendingBg,
       color: colors.pendingText,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       padding: spacing.md,
       borderRadius: radius.sm,
@@ -372,7 +372,7 @@ function makeStyles(colors: ThemeColors) {
       minHeight: 80,
       backgroundColor: colors.surface,
       color: colors.ink,
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
       textAlignVertical: "top",
     },

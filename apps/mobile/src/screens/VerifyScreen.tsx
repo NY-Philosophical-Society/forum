@@ -87,9 +87,9 @@ function makeStyles(colors: ThemeColors) {
       gap: spacing.md,
       marginBottom: spacing.lg,
     },
-    meta: { color: colors.muted, fontFamily: fonts.display, fontSize: type.sm },
+    meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
     copy: {
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sans,
       fontSize: type.base,
       lineHeight: 24,
       color: colors.ink,
@@ -98,13 +98,13 @@ function makeStyles(colors: ThemeColors) {
     success: {
       backgroundColor: colors.verifiedBg,
       color: colors.verifiedText,
-      fontFamily: fonts.display,
+      fontFamily: fonts.sans,
       fontSize: type.sm,
       padding: spacing.md,
       borderRadius: radius.sm,
       lineHeight: 20,
     },
-    error: { color: colors.danger, fontFamily: fonts.display, marginBottom: spacing.sm },
+    error: { color: colors.danger, fontFamily: fonts.sans, marginBottom: spacing.sm },
     button: {
       backgroundColor: colors.solid,
       paddingVertical: spacing.md,
