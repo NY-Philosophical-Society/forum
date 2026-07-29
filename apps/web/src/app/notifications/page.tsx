@@ -16,8 +16,13 @@ import { Avatar, EmptyState, PostSkeleton } from "../ui";
 
 const PAGE_SIZE = 20;
 
-/** Where tapping a notification lands: the exact reply, not just the thread. */
-function targetHref(n: NotificationItem): string {
+/**
+ * Where tapping a notification lands: the exact reply, not just the thread.
+ * Null for a moderation warning — the warning text *is* the content, so
+ * clicking it marks it read rather than navigating somewhere unrelated.
+ */
+function targetHref(n: NotificationItem): string | null {
+  if (n.type === "warning") return null;
   if (n.type === "message" && n.actor) return `/messages/${n.actor.id}`;
   if (n.threadId) return `/t/${n.threadId}${n.postId ? `#post-${n.postId}` : ""}`;
   return "/";
@@ -66,7 +71,8 @@ export default function NotificationsPage() {
         prev?.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)) ?? null,
       );
     }
-    router.push(targetHref(n));
+    const href = targetHref(n);
+    if (href) router.push(href);
   }
 
   async function markAllRead() {
@@ -120,7 +126,9 @@ export default function NotificationsPage() {
       {items?.map((n) => (
         <button
           key={n.id}
-          className={`notif-row ${n.readAt ? "" : "notif-unread"}`}
+          className={`notif-row ${n.readAt ? "" : "notif-unread"} ${
+            n.type === "warning" ? "notif-warning" : ""
+          }`}
           onClick={() => open(n)}
         >
           <Avatar name={n.actor?.displayName ?? "?"} src={n.actor?.avatarUrl} size={34} />

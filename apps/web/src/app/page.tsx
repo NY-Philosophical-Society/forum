@@ -201,7 +201,18 @@ function HomeFeed() {
       )}
 
       {threads.map((t) => (
-        <article className="card thread-card" key={t.id}>
+        <article
+          className={`card thread-card ${t.pinnedAt ? "pinned-card" : ""}`}
+          key={t.id}
+        >
+          {t.pinnedAt && (
+            <p className="pinned-label" style={{ marginBottom: "0.35rem" }}>
+              <span className="pin-mark" aria-hidden>
+                ❖
+              </span>
+              Pinned
+            </p>
+          )}
           <Link className="title" href={`/t/${t.id}`}>
             {t.title}
             {t.locked && " 🔒"}

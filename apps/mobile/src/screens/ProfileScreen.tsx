@@ -49,7 +49,7 @@ export function ProfileScreen({ navigation }: Props) {
   if (user.role === "admin") {
     rows.push({
       icon: "flag-outline",
-      label: "Reports (admin)",
+      label: "Moderation queue",
       onPress: () => navigation.navigate("AdminReports"),
     });
   }

@@ -82,6 +82,9 @@ export function NotificationsScreen() {
           null,
       );
     }
+    // A moderation warning has nowhere to go — its text is the content, so
+    // tapping it just marks it read.
+    if (n.type === "warning") return;
     if (n.type === "message" && n.actor) {
       tabNavigation.navigate("MessagesTab", {
         screen: "Conversation",
@@ -139,7 +142,11 @@ export function NotificationsScreen() {
         keyExtractor={(n) => n.id}
         renderItem={({ item: n }) => (
           <Pressable
-            style={[styles.row, !n.readAt && styles.rowUnread]}
+            style={[
+              styles.row,
+              !n.readAt && styles.rowUnread,
+              n.type === "warning" && styles.rowWarning,
+            ]}
             onPress={() => open(n)}
           >
             <Avatar name={n.actor?.displayName ?? "?"} uri={n.actor?.avatarUrl} size={34} />
@@ -152,7 +159,11 @@ export function NotificationsScreen() {
                 ) : null}
               </Text>
               {n.snippet ? (
-                <Text style={styles.snippet} numberOfLines={2}>
+                // A warning's full text is the point, so it isn't clipped.
+                <Text
+                  style={[styles.snippet, n.type === "warning" && styles.snippetWarning]}
+                  numberOfLines={n.type === "warning" ? undefined : 2}
+                >
                   {n.snippet}
                 </Text>
               ) : null}
@@ -207,11 +218,14 @@ function makeStyles(colors: ThemeColors) {
     },
     // stone2 is the emphasis fill — unread is exactly what it's for.
     rowUnread: { backgroundColor: colors.stone2 },
+    // A moderation warning reads as a warning, not as another like.
+    rowWarning: { borderLeftWidth: 2, borderLeftColor: colors.danger },
     body: { flex: 1, gap: spacing.xs },
     line: { fontFamily: fonts.sans, fontSize: type.base, color: colors.ink, lineHeight: 21 },
     actorName: { fontFamily: fonts.displaySemi },
     threadTitle: { fontFamily: fonts.serif },
     snippet: { fontFamily: fonts.sans, fontSize: type.sm, color: colors.muted, lineHeight: 19 },
+    snippetWarning: { color: colors.ink },
     meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.xs },
     dot: {
       width: 8,

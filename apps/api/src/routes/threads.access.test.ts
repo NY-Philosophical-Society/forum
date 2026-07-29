@@ -92,7 +92,7 @@ describe("write access tiers", () => {
       request(app).post(`/api/threads/${threadId}/like`),
       request(app).post(`/api/posts/${postId}/like`),
       request(app).post("/api/messages").send({ recipientId: author.id, body: "hi" }),
-      request(app).post("/api/reports").send({ targetType: "thread", targetId: threadId, reason: "spam" }),
+      request(app).post("/api/reports").send({ targetType: "thread", targetId: threadId, category: "spam" }),
     ];
     for (const attempt of await Promise.all(attempts)) {
       expect(attempt.status).toBe(401);

@@ -50,6 +50,8 @@ model User {
   sentMessages         Message[] @relation("SentMessages")
   receivedMessages     Message[] @relation("ReceivedMessages")
   reports              Report[]
+  reportsResolved      Report[]               @relation("ReportsResolved")
+  moderationActions    ModerationLog[]        @relation("ModerationActions")
   blocking             Block[]                @relation("Blocker")
   blockedBy            Block[]                @relation("Blocked")
   passwordResetTokens  PasswordResetToken[]
@@ -97,6 +99,11 @@ model Thread {
   // fetching every thread and sorting in JS.
   hotScore   Float    @default(0)
   locked     Boolean  @default(false)
+  // Admin pin. Deliberately NOT folded into hotScore: the feed sorts on this
+  // column first, so pinning lifts a thread without distorting its ranking,
+  // and unpinning restores the true order with nothing to recompute. Capped
+  // at MAX_PINNED_THREADS server-side.
+  pinnedAt   DateTime?
   createdAt  DateTime @default(now())
   // Set on every successful author/admin edit; clients show "edited <time>".
   editedAt   DateTime?
@@ -175,18 +182,61 @@ model Message {
   recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id])
 }
 
-// A user reporting a thread, a post, a message, or another user. No admin UI
-// to review these yet — GET /api/reports (admin-only) lists them for now.
+// A user reporting a thread, a post, a message, or another user. Triaged from
+// the admin dashboard (/admin/reports on web) via GET /api/reports and the
+// resolve/dismiss routes; resolving performs the action and closes the report
+// in one call, so a report can't be marked handled without its action running.
 model Report {
   id         String   @id @default(cuid())
   reporterId String
   targetType String
   targetId   String
-  reason     String
+  // A ReportCategory from packages/shared. Rows filed before categories
+  // existed default to "other", keeping their original text as the note.
+  category   String   @default("other")
+  // The reporter's optional free-text note. Still named `reason` in the
+  // column so pre-category rows carry their text through unchanged; the API
+  // and both clients call this field `note`.
+  reason     String?
   status     String   @default("open")
   createdAt  DateTime @default(now())
+  // Who closed it and how. resolutionAction is a ReportAction; the note is
+  // the mandatory reason, mirrored into the moderation log.
+  resolvedById     String?
+  resolvedAt       DateTime?
+  resolutionAction String?
+  resolutionNote   String?
 
-  reporter User @relation(fields: [reporterId], references: [id])
+  reporter   User  @relation(fields: [reporterId], references: [id])
+  resolvedBy User? @relation("ReportsResolved", fields: [resolvedById], references: [id])
+
+  @@index([status, createdAt])
+}
+
+// The accountability record for the Society's board: one row per admin
+// mutation, written only through lib/moderation-log.ts logModeration() so a
+// new endpoint can't quietly skip it. Append-only by construction — nothing
+// in the API updates or deletes a row here, and the UI is read-only.
+model ModerationLog {
+  id          String   @id @default(cuid())
+  // The acting admin.
+  actorId     String
+  // A ModerationAction from packages/shared.
+  action      String
+  targetType  String
+  targetId    String
+  // Human label captured at action time (thread title, member name), so the
+  // entry still reads sensibly once the target is deleted or renamed.
+  targetLabel String?
+  reason      String?
+  // JSON blob of action-specific detail, e.g. {"reportId":"..."}.
+  detail      String?
+  createdAt   DateTime @default(now())
+
+  actor User @relation("ModerationActions", fields: [actorId], references: [id])
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
 }
 
 // Blocking prevents new messages in either direction; it does not hide

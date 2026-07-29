@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   flattenPostTree,
   formatDateTime,
+  MAX_PINNED_THREADS,
   stripMarkdown,
   type PostWithDepth,
   type TagWithCount,
@@ -16,7 +17,7 @@ import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
 import { Markdown, MarkdownEditor } from "../../markdown";
 import { ReportButton } from "../../report-button";
-import { Avatar, PostSkeleton, Skeleton } from "../../ui";
+import { Avatar, ConfirmAction, PostSkeleton, Skeleton } from "../../ui";
 
 const REPLIES_PAGE = 20;
 // Notification deep links (#post-...) may point past the first page of
@@ -175,6 +176,13 @@ export default function ThreadPage() {
     }
   }
 
+  async function togglePin(reason: string) {
+    if (!token) return;
+    if (thread?.pinnedAt) await api.delete(`/api/threads/${id}/pin`, token);
+    else await api.post(`/api/threads/${id}/pin`, { reason }, token);
+    await load(repliesWindow);
+  }
+
   function startPostEdit(p: PostWithDepth) {
     setEditingPostId(p.id);
     setEditingPostBody(p.body);
@@ -249,6 +257,9 @@ export default function ThreadPage() {
   }
 
   const isAdmin = user?.role === "admin";
+  // Acting on someone else's content is moderation and needs a logged reason;
+  // acting on your own is not.
+  const moderatingThread = Boolean(isAdmin && user && user.id !== thread.author.id);
   const canPost = user?.verificationStatus === "VERIFIED" && !thread.locked && !thread.deleted;
   const canEditThread =
     !thread.deleted &&
@@ -264,6 +275,11 @@ export default function ThreadPage() {
 
       <div className="row between wrap" style={{ alignItems: "flex-start" }}>
         <h1 style={{ margin: 0, maxWidth: "34rem" }}>
+          {thread.pinnedAt && (
+            <span className="pin-mark" title="Pinned to the top of the feed" aria-hidden>
+              ❖
+            </span>
+          )}
           {thread.title}
           {thread.locked && " 🔒"}
         </h1>
@@ -273,15 +289,46 @@ export default function ThreadPage() {
               <button className="secondary btn-sm" onClick={startThreadEdit}>
                 Edit
               </button>
-              <button className="secondary btn-sm" onClick={deleteThread}>
-                Delete
-              </button>
+              {/* An author deleting their own thread just confirms; an admin
+                  removing someone else's owes the moderation log a reason. */}
+              {moderatingThread ? (
+                <ConfirmAction
+                  label="Remove"
+                  title="Remove this thread"
+                  description="Soft delete: the title and text go, and replies underneath stay readable under a [deleted] notice."
+                  confirmLabel="Remove thread"
+                  danger
+                  onConfirm={async (reason) => {
+                    await api.deleteWithBody(`/api/threads/${id}`, { reason }, token);
+                    router.push("/");
+                  }}
+                />
+              ) : (
+                <button className="secondary btn-sm" onClick={deleteThread}>
+                  Delete
+                </button>
+              )}
             </>
           )}
           {isAdmin && (
-            <button className="secondary btn-sm" onClick={toggleLock} disabled={locking}>
-              {thread.locked ? "Unlock" : "Lock"} thread
-            </button>
+            <>
+              <button className="secondary btn-sm" onClick={toggleLock} disabled={locking}>
+                {thread.locked ? "Unlock" : "Lock"} thread
+              </button>
+              <ConfirmAction
+                label={thread.pinnedAt ? "Unpin" : "Pin"}
+                title={thread.pinnedAt ? "Unpin this thread" : "Pin this thread to the feed"}
+                description={
+                  thread.pinnedAt
+                    ? "It returns to its natural position in Hot and New."
+                    : `Sorts above everything in both Hot and New. At most ${MAX_PINNED_THREADS} threads can be pinned at once.`
+                }
+                confirmLabel={thread.pinnedAt ? "Unpin" : "Pin thread"}
+                reasonRequired={false}
+                reasonLabel="Note (recorded in the moderation log)"
+                onConfirm={togglePin}
+              />
+            </>
           )}
         </div>
       </div>
@@ -485,9 +532,23 @@ export default function ThreadPage() {
                           <button className="link-button" onClick={() => startPostEdit(p)}>
                             Edit
                           </button>
-                          <button className="link-button" onClick={() => deletePost(p.id)}>
-                            Delete
-                          </button>
+                          {isAdmin && user.id !== p.author.id ? (
+                            <ConfirmAction
+                              label="Remove"
+                              title="Remove this reply"
+                              description="Soft delete: replies below it stay readable under a [deleted] notice."
+                              confirmLabel="Remove reply"
+                              danger
+                              onConfirm={async (reason) => {
+                                await api.deleteWithBody(`/api/posts/${p.id}`, { reason }, token);
+                                await load(repliesWindow);
+                              }}
+                            />
+                          ) : (
+                            <button className="link-button" onClick={() => deletePost(p.id)}>
+                              Delete
+                            </button>
+                          )}
                         </>
                       )}
                     <ReportButton targetType="post" targetId={p.id} />

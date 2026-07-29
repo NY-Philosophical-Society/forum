@@ -1,11 +1,20 @@
 import { Router } from "express";
-import { createThreadSchema, updateThreadSchema } from "@nyps-forum/shared";
+import {
+  adminDeleteSchema,
+  createThreadSchema,
+  MAX_PINNED_THREADS,
+  pinThreadSchema,
+  toggleLockSchema,
+  updateThreadSchema,
+} from "@nyps-forum/shared";
 import { prisma } from "../db";
 import { optionalAuth, requireAdmin, requireAuth, requireVerified } from "../middleware/auth";
 import { DELETED_AUTHOR, toPublicUser } from "../lib/serialize";
 import { hotScore, recomputeThreadHotScore } from "../lib/ranking";
-import { writeLimiter } from "../lib/rate-limit";
+import { adminLimiter, writeLimiter } from "../lib/rate-limit";
 import { syncMentions } from "../lib/mentions";
+import { contentLabel, logModeration } from "../lib/moderation-log";
+import { softDeleteThread } from "../lib/moderation";
 import { notify, toSnippet } from "../lib/notifications";
 
 export const threadsRouter = Router();
@@ -31,7 +40,13 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
       // Both sorts are plain DB-level ORDER BYs now — hotScore is kept
       // current by recomputeThreadHotScore() on every like/reply instead of
       // being recomputed by fetching and sorting every thread per request.
-      orderBy: sort === "new" ? { createdAt: "desc" } : { hotScore: "desc" },
+      // Pins ride in front of either sort as a separate column: SQLite puts
+      // NULLs last on DESC, so unpinned threads fall through to their real
+      // order and hotScore is never touched by a pin.
+      orderBy: [
+        { pinnedAt: "desc" },
+        sort === "new" ? { createdAt: "desc" } : { hotScore: "desc" },
+      ],
       skip: offset,
       take: limit,
       include: {
@@ -56,6 +71,7 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
       myLiked: viewerId ? t.likes.length > 0 : false,
       postCount: t._count.posts,
       locked: t.locked,
+      pinnedAt: t.pinnedAt?.toISOString() ?? null,
       myBookmarked: viewerId ? t.bookmarks.length > 0 : false,
     })),
     total,
@@ -153,6 +169,7 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
       previewOnly: isAnonymous,
       deleted: threadDeleted,
       locked: thread.locked,
+      pinnedAt: thread.pinnedAt?.toISOString() ?? null,
       author: threadDeleted ? DELETED_AUTHOR : toPublicUser(thread.author),
       createdAt: thread.createdAt.toISOString(),
       editedAt: threadDeleted ? null : thread.editedAt?.toISOString() ?? null,
@@ -300,14 +317,37 @@ threadsRouter.delete("/:id", requireAuth, writeLimiter, async (req, res) => {
   if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
 
   const isAdmin = req.user!.role === "admin";
-  if (!isAdmin && thread.authorId !== req.user!.id) {
+  const isAuthor = thread.authorId === req.user!.id;
+  if (!isAdmin && !isAuthor) {
     return res.status(403).json({ error: "You can only delete your own threads" });
   }
 
-  // Soft delete: replies under it survive (see GET /:id); the opening post's
-  // mentions are cleared so they can't become notifications later.
-  await prisma.thread.update({ where: { id: thread.id }, data: { deletedAt: new Date() } });
-  await syncMentions({ authorId: thread.authorId, body: "", threadId: thread.id });
+  // An admin removing someone else's thread owes the log a reason; authors
+  // deleting their own work don't (it isn't a moderation action).
+  const moderating = isAdmin && !isAuthor;
+  let reason: string | null = null;
+  if (moderating) {
+    const parsed = adminDeleteSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message });
+    }
+    reason = parsed.data.reason;
+  }
+
+  // Soft delete — the same tombstone an author's own deletion produces, so
+  // replies under it survive and there's only one deletion semantics.
+  await softDeleteThread(thread.id, thread.authorId);
+  if (moderating) {
+    await logModeration({
+      actorId: req.user!.id,
+      action: "content_deleted",
+      targetType: "thread",
+      targetId: thread.id,
+      targetLabel: contentLabel(thread.title),
+      reason,
+      detail: { authorId: thread.authorId },
+    });
+  }
 
   res.json({ deleted: true });
 });
@@ -338,7 +378,12 @@ threadsRouter.post("/:id/like", requireAuth, requireVerified, writeLimiter, asyn
   res.json({ liked: !existing });
 });
 
-threadsRouter.post("/:id/lock", requireAuth, requireAdmin, async (req, res) => {
+threadsRouter.post("/:id/lock", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const parsed = toggleLockSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
   const thread = await prisma.thread.findUnique({ where: { id: req.params.id } });
   if (!thread) return res.status(404).json({ error: "Thread not found" });
 
@@ -346,6 +391,71 @@ threadsRouter.post("/:id/lock", requireAuth, requireAdmin, async (req, res) => {
     where: { id: thread.id },
     data: { locked: !thread.locked },
   });
+  await logModeration({
+    actorId: req.user!.id,
+    action: updated.locked ? "thread_locked" : "thread_unlocked",
+    targetType: "thread",
+    targetId: thread.id,
+    targetLabel: contentLabel(thread.title),
+    reason: parsed.data.reason ?? null,
+  });
 
   res.json({ locked: updated.locked });
+});
+
+/**
+ * Pin a thread above the feed. Capped at MAX_PINNED_THREADS and enforced here,
+ * not in the UI — the whole point of the cap is that the feed can't be buried,
+ * and a client that skips the check shouldn't be able to bury it.
+ */
+threadsRouter.post("/:id/pin", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const parsed = pinThreadSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
+  const thread = await prisma.thread.findUnique({ where: { id: req.params.id } });
+  if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+  if (thread.pinnedAt) {
+    return res.json({ pinnedAt: thread.pinnedAt.toISOString() });
+  }
+
+  const pinned = await prisma.thread.count({ where: { pinnedAt: { not: null }, deletedAt: null } });
+  if (pinned >= MAX_PINNED_THREADS) {
+    return res.status(409).json({
+      error: `${MAX_PINNED_THREADS} threads are already pinned — unpin one first so the feed stays readable.`,
+    });
+  }
+
+  const updated = await prisma.thread.update({
+    where: { id: thread.id },
+    data: { pinnedAt: new Date() },
+  });
+  await logModeration({
+    actorId: req.user!.id,
+    action: "thread_pinned",
+    targetType: "thread",
+    targetId: thread.id,
+    targetLabel: contentLabel(thread.title),
+    reason: parsed.data.reason ?? null,
+  });
+
+  res.json({ pinnedAt: updated.pinnedAt!.toISOString() });
+});
+
+threadsRouter.delete("/:id/pin", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const thread = await prisma.thread.findUnique({ where: { id: req.params.id } });
+  if (!thread) return res.status(404).json({ error: "Thread not found" });
+  if (!thread.pinnedAt) return res.json({ pinnedAt: null });
+
+  await prisma.thread.update({ where: { id: thread.id }, data: { pinnedAt: null } });
+  await logModeration({
+    actorId: req.user!.id,
+    action: "thread_unpinned",
+    targetType: "thread",
+    targetId: thread.id,
+    targetLabel: contentLabel(thread.title),
+  });
+
+  res.json({ pinnedAt: null });
 });

@@ -97,12 +97,197 @@ export const ReportTargetType = {
 } as const;
 export type ReportTargetType = (typeof ReportTargetType)[keyof typeof ReportTargetType];
 
+/**
+ * Structured report reasons. The category is required so the admin queue can
+ * be filtered and triaged; the note stays optional free text. Reports filed
+ * before categories existed were migrated to OTHER with their original text
+ * preserved as the note.
+ */
+export const ReportCategory = {
+  HARASSMENT: "harassment",
+  SPAM: "spam",
+  OFF_TOPIC: "off_topic",
+  MISINFORMATION: "misinformation",
+  IMPERSONATION: "impersonation",
+  OTHER: "other",
+} as const;
+export type ReportCategory = (typeof ReportCategory)[keyof typeof ReportCategory];
+
+/** Display order in the report form and the admin filter. */
+export const REPORT_CATEGORIES: ReportCategory[] = [
+  "harassment",
+  "spam",
+  "off_topic",
+  "misinformation",
+  "impersonation",
+  "other",
+];
+
+export const REPORT_CATEGORY_LABELS: Record<ReportCategory, string> = {
+  harassment: "Harassment or abuse",
+  spam: "Spam or advertising",
+  off_topic: "Off-topic",
+  misinformation: "Misinformation",
+  impersonation: "Impersonation",
+  other: "Other",
+};
+
+export const ReportStatus = {
+  OPEN: "open",
+  RESOLVED: "resolved",
+  DISMISSED: "dismissed",
+} as const;
+export type ReportStatus = (typeof ReportStatus)[keyof typeof ReportStatus];
+
+export const REPORT_NOTE_MAX_LENGTH = 1000;
+
 export const createReportSchema = z.object({
   targetType: z.enum(["thread", "post", "message", "user"]),
   targetId: z.string(),
-  reason: z.string().min(3).max(1000),
+  category: z.enum(
+    ["harassment", "spam", "off_topic", "misinformation", "impersonation", "other"],
+    { errorMap: () => ({ message: "Choose a reason for this report" }) },
+  ),
+  note: z.string().max(REPORT_NOTE_MAX_LENGTH).optional(),
 });
 export type CreateReportInput = z.infer<typeof createReportSchema>;
+
+/**
+ * What an admin did about a report. Resolving performs the action and closes
+ * the report in one call, so a report can never be marked handled without the
+ * action it claims having actually run.
+ */
+export const ReportAction = {
+  NO_ACTION: "no_action",
+  DELETE_CONTENT: "delete_content",
+  WARN_AUTHOR: "warn_author",
+  BAN_AUTHOR: "ban_author",
+  LOCK_THREAD: "lock_thread",
+} as const;
+export type ReportAction = (typeof ReportAction)[keyof typeof ReportAction];
+
+export const REPORT_ACTION_LABELS: Record<ReportAction, string> = {
+  no_action: "Resolve with no action",
+  delete_content: "Delete the content",
+  warn_author: "Warn the author",
+  ban_author: "Ban the author",
+  lock_thread: "Lock the thread",
+};
+
+/** Reasons are mandatory on resolve: the moderation log is the accountability record. */
+export const MODERATION_REASON_MAX_LENGTH = 500;
+const moderationReason = z
+  .string()
+  .min(3, "Say why — this goes in the moderation log")
+  .max(MODERATION_REASON_MAX_LENGTH);
+
+export const resolveReportSchema = z.object({
+  action: z.enum(["no_action", "delete_content", "warn_author", "ban_author", "lock_thread"]),
+  // For warn_author this text is also what the member is shown, so write it
+  // as something a person should read.
+  reason: moderationReason,
+});
+export type ResolveReportInput = z.infer<typeof resolveReportSchema>;
+
+export const dismissReportSchema = z.object({
+  reason: z.string().max(MODERATION_REASON_MAX_LENGTH).optional(),
+});
+export type DismissReportInput = z.infer<typeof dismissReportSchema>;
+
+export const banUserSchema = z.object({ reason: moderationReason });
+export type BanUserInput = z.infer<typeof banUserSchema>;
+
+/** Unbanning restores access rather than removing it, so the note is optional. */
+export const unbanUserSchema = z.object({
+  reason: z.string().max(MODERATION_REASON_MAX_LENGTH).optional(),
+});
+export type UnbanUserInput = z.infer<typeof unbanUserSchema>;
+
+export const warnUserSchema = z.object({
+  // Delivered to the member verbatim as a notification.
+  reason: moderationReason,
+});
+export type WarnUserInput = z.infer<typeof warnUserSchema>;
+
+export const setUserRoleSchema = z.object({
+  role: z.enum(["user", "admin"]),
+  reason: moderationReason,
+});
+export type SetUserRoleInput = z.infer<typeof setUserRoleSchema>;
+
+export const setSupporterSchema = z.object({
+  isSupporter: z.boolean(),
+  reason: moderationReason,
+});
+export type SetSupporterInput = z.infer<typeof setSupporterSchema>;
+
+/** Admin deletion of someone else's content — the reason is recorded, not shown to readers. */
+export const adminDeleteSchema = z.object({ reason: moderationReason });
+export type AdminDeleteInput = z.infer<typeof adminDeleteSchema>;
+
+export const toggleLockSchema = z.object({
+  reason: z.string().max(MODERATION_REASON_MAX_LENGTH).optional(),
+});
+export type ToggleLockInput = z.infer<typeof toggleLockSchema>;
+
+export const pinThreadSchema = z.object({
+  reason: z.string().max(MODERATION_REASON_MAX_LENGTH).optional(),
+});
+export type PinThreadInput = z.infer<typeof pinThreadSchema>;
+
+/**
+ * How many threads may sit above the feed at once. Enforced by the API, not
+ * just the UI — a buried feed is the failure mode this cap exists to prevent.
+ */
+export const MAX_PINNED_THREADS = 3;
+
+/**
+ * The moderation log's vocabulary. Every admin mutation writes exactly one of
+ * these through the API's logModeration() helper; the log is append-only and
+ * has no edit or delete path anywhere in the product.
+ */
+export const ModerationAction = {
+  REPORT_RESOLVED: "report_resolved",
+  REPORT_DISMISSED: "report_dismissed",
+  CONTENT_DELETED: "content_deleted",
+  USER_WARNED: "user_warned",
+  USER_BANNED: "user_banned",
+  USER_UNBANNED: "user_unbanned",
+  THREAD_LOCKED: "thread_locked",
+  THREAD_UNLOCKED: "thread_unlocked",
+  THREAD_PINNED: "thread_pinned",
+  THREAD_UNPINNED: "thread_unpinned",
+  ROLE_GRANTED: "role_granted",
+  ROLE_REVOKED: "role_revoked",
+  SUPPORTER_GRANTED: "supporter_granted",
+  SUPPORTER_REVOKED: "supporter_revoked",
+} as const;
+export type ModerationAction = (typeof ModerationAction)[keyof typeof ModerationAction];
+
+export const MODERATION_ACTION_LABELS: Record<ModerationAction, string> = {
+  report_resolved: "Resolved report",
+  report_dismissed: "Dismissed report",
+  content_deleted: "Deleted content",
+  user_warned: "Warned member",
+  user_banned: "Banned member",
+  user_unbanned: "Unbanned member",
+  thread_locked: "Locked thread",
+  thread_unlocked: "Unlocked thread",
+  thread_pinned: "Pinned thread",
+  thread_unpinned: "Unpinned thread",
+  role_granted: "Promoted to admin",
+  role_revoked: "Demoted to member",
+  supporter_granted: "Granted supporter",
+  supporter_revoked: "Revoked supporter",
+};
+
+/** Actions that take something away — the UI renders these in --danger. */
+export const DESTRUCTIVE_MODERATION_ACTIONS: ModerationAction[] = [
+  "content_deleted",
+  "user_banned",
+  "role_revoked",
+  "supporter_revoked",
+];
 
 export const redeemCodeSchema = z.object({
   code: z.string().min(1),
@@ -158,6 +343,8 @@ export const NotificationType = {
   LIKE_POST: "like_post",
   MENTION: "mention",
   MESSAGE: "message",
+  /** A moderation warning. Deliberately has no preference key — see below. */
+  WARNING: "warning",
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 
@@ -171,7 +358,10 @@ export const NotificationPrefKey = {
 export type NotificationPrefKey =
   (typeof NotificationPrefKey)[keyof typeof NotificationPrefKey];
 
-export function prefKeyForNotificationType(type: NotificationType): NotificationPrefKey {
+/** Null for types a member cannot switch off — a moderation warning must land. */
+export function prefKeyForNotificationType(
+  type: NotificationType,
+): NotificationPrefKey | null {
   switch (type) {
     case "reply_thread":
     case "reply_post":
@@ -183,6 +373,8 @@ export function prefKeyForNotificationType(type: NotificationType): Notification
       return "mentions";
     case "message":
       return "messages";
+    case "warning":
+      return null;
   }
 }
 

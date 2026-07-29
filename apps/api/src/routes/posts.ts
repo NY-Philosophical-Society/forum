@@ -1,10 +1,12 @@
 import { Router } from "express";
-import { createPostSchema, updatePostSchema } from "@nyps-forum/shared";
+import { adminDeleteSchema, createPostSchema, updatePostSchema } from "@nyps-forum/shared";
 import { prisma } from "../db";
 import { requireAuth, requireVerified } from "../middleware/auth";
 import { recomputeThreadHotScore } from "../lib/ranking";
 import { writeLimiter } from "../lib/rate-limit";
 import { syncMentions } from "../lib/mentions";
+import { contentLabel, logModeration } from "../lib/moderation-log";
+import { softDeletePost } from "../lib/moderation";
 import { notify, toSnippet } from "../lib/notifications";
 
 export const postsRouter = Router();
@@ -117,15 +119,37 @@ postsRouter.delete("/:id", requireAuth, writeLimiter, async (req, res) => {
   if (!post || post.deletedAt) return res.status(404).json({ error: "Post not found" });
 
   const isAdmin = req.user!.role === "admin";
-  if (!isAdmin && post.authorId !== req.user!.id) {
+  const isAuthor = post.authorId === req.user!.id;
+  if (!isAdmin && !isAuthor) {
     return res.status(403).json({ error: "You can only delete your own replies" });
+  }
+
+  // An admin removing someone else's reply owes the log a reason; an author
+  // deleting their own doesn't.
+  const moderating = isAdmin && !isAuthor;
+  let reason: string | null = null;
+  if (moderating) {
+    const parsed = adminDeleteSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message });
+    }
+    reason = parsed.data.reason;
   }
 
   // Soft delete: if replies exist below it, GET /threads/:id serializes this
   // post as a "[deleted]" tombstone instead of orphaning them.
-  await prisma.post.update({ where: { id: post.id }, data: { deletedAt: new Date() } });
-  await syncMentions({ authorId: post.authorId, body: "", postId: post.id });
-  await recomputeThreadHotScore(post.threadId);
+  await softDeletePost(post.id, post.authorId, post.threadId);
+  if (moderating) {
+    await logModeration({
+      actorId: req.user!.id,
+      action: "content_deleted",
+      targetType: "post",
+      targetId: post.id,
+      targetLabel: contentLabel(post.body),
+      reason,
+      detail: { authorId: post.authorId, threadId: post.threadId },
+    });
+  }
 
   res.json({ deleted: true });
 });

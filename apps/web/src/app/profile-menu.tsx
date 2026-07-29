@@ -79,7 +79,7 @@ export function ProfileMenu() {
           </Link>
           {user.role === "admin" && (
             <Link href="/admin/reports" onClick={() => setOpen(false)}>
-              Reports (admin)
+              Moderation
             </Link>
           )}
           <button className="danger" onClick={logout}>

@@ -2,12 +2,22 @@ import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import express, { Router } from "express";
 import sharp from "sharp";
-import { deleteAccountSchema, updateProfileSchema } from "@nyps-forum/shared";
+import {
+  banUserSchema,
+  deleteAccountSchema,
+  setSupporterSchema,
+  setUserRoleSchema,
+  unbanUserSchema,
+  updateProfileSchema,
+  warnUserSchema,
+} from "@nyps-forum/shared";
 import { prisma } from "../db";
 import { optionalAuth, requireAdmin, requireAuth } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
 import { storageProvider } from "../lib/storage-provider";
-import { authLimiter, writeLimiter } from "../lib/rate-limit";
+import { adminLimiter, authLimiter, writeLimiter } from "../lib/rate-limit";
+import { logModeration } from "../lib/moderation-log";
+import { notify } from "../lib/notifications";
 
 export const usersRouter = Router();
 
@@ -75,6 +85,7 @@ usersRouter.get("/:id/profile", optionalAuth, async (req, res) => {
       myLiked: t.likes.length > 0,
       postCount: t._count.posts,
       locked: t.locked,
+      pinnedAt: t.pinnedAt?.toISOString() ?? null,
     })),
     hasMoreThreads: !previewOnly && threadsOffset + threads.length < threadCount,
     replies: replies.map((p) => ({
@@ -365,19 +376,168 @@ usersRouter.get("/:id/block", requireAuth, async (req, res) => {
   res.json({ blocked: Boolean(block) });
 });
 
-/** Admin-only. No admin dashboard yet — promote an account via direct DB access (see README). */
-usersRouter.post("/:id/ban", requireAuth, requireAdmin, async (req, res) => {
+/* ---- Moderation (admin) -------------------------------------------------- */
+
+/**
+ * Ban a member. Takes effect on their existing session immediately, not just
+ * at next login — requireAuth re-reads the row and 403s on bannedAt, so no
+ * token revocation is needed. Reversible via unban below; the reason is
+ * mandatory and lands in the moderation log.
+ */
+usersRouter.post("/:id/ban", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const parsed = banUserSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  if (req.params.id === req.user!.id) {
+    return res.status(400).json({ error: "You can't ban yourself" });
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target || target.deletedAt) return res.status(404).json({ error: "User not found" });
+
   const user = await prisma.user.update({
-    where: { id: req.params.id },
-    data: { bannedAt: new Date() },
+    where: { id: target.id },
+    data: { bannedAt: target.bannedAt ?? new Date() },
   });
+  await logModeration({
+    actorId: req.user!.id,
+    action: "user_banned",
+    targetType: "user",
+    targetId: user.id,
+    targetLabel: user.displayName,
+    reason: parsed.data.reason,
+  });
+
   res.json({ user: toPublicUser(user) });
 });
 
-usersRouter.post("/:id/unban", requireAuth, requireAdmin, async (req, res) => {
-  const user = await prisma.user.update({
-    where: { id: req.params.id },
-    data: { bannedAt: null },
+usersRouter.post("/:id/unban", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const parsed = unbanUserSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target || target.deletedAt) return res.status(404).json({ error: "User not found" });
+
+  const user = await prisma.user.update({ where: { id: target.id }, data: { bannedAt: null } });
+  await logModeration({
+    actorId: req.user!.id,
+    action: "user_unbanned",
+    targetType: "user",
+    targetId: user.id,
+    targetLabel: user.displayName,
+    reason: parsed.data.reason ?? null,
   });
+
+  res.json({ user: toPublicUser(user) });
+});
+
+/** A warning is a notification the member cannot switch off (see lib/notifications.ts). */
+usersRouter.post("/:id/warn", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const parsed = warnUserSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target || target.deletedAt) return res.status(404).json({ error: "User not found" });
+  if (target.id === req.user!.id) {
+    return res.status(400).json({ error: "You can't warn yourself" });
+  }
+
+  await notify({
+    type: "warning",
+    recipientId: target.id,
+    actorId: req.user!.id,
+    snippet: parsed.data.reason,
+  });
+  await logModeration({
+    actorId: req.user!.id,
+    action: "user_warned",
+    targetType: "user",
+    targetId: target.id,
+    targetLabel: target.displayName,
+    reason: parsed.data.reason,
+  });
+
+  res.json({ warned: true });
+});
+
+/**
+ * Promote to admin / demote to member. The last admin can't be demoted — not
+ * by anyone, themselves included — because an empty admin role locks the
+ * Society out of its own moderation tools with no in-product way back.
+ */
+usersRouter.post("/:id/role", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const parsed = setUserRoleSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  const { role, reason } = parsed.data;
+
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target || target.deletedAt) return res.status(404).json({ error: "User not found" });
+  if (target.role === role) {
+    return res.json({ user: toPublicUser(target) });
+  }
+
+  if (role === "user") {
+    const adminCount = await prisma.user.count({ where: { role: "admin", deletedAt: null } });
+    if (adminCount <= 1) {
+      return res.status(400).json({
+        error:
+          "This is the last admin account — promote someone else first, or the forum is left with no moderators.",
+      });
+    }
+  }
+
+  const user = await prisma.user.update({ where: { id: target.id }, data: { role } });
+  await logModeration({
+    actorId: req.user!.id,
+    action: role === "admin" ? "role_granted" : "role_revoked",
+    targetType: "user",
+    targetId: user.id,
+    targetLabel: user.displayName,
+    reason,
+    detail: { from: target.role, to: role },
+  });
+
+  res.json({ user: toPublicUser(user) });
+});
+
+/**
+ * Grant or revoke supporter status by hand. The Society needs this for people
+ * who donate outside whatever payment integration eventually exists — the
+ * WISDOMKEY code path stays as it is.
+ */
+usersRouter.post("/:id/supporter", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const parsed = setSupporterSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  const { isSupporter, reason } = parsed.data;
+
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target || target.deletedAt) return res.status(404).json({ error: "User not found" });
+
+  const user = await prisma.user.update({
+    where: { id: target.id },
+    data: {
+      isSupporter,
+      // Keep the original date on a re-grant; clear it when revoking.
+      supporterSince: isSupporter ? target.supporterSince ?? new Date() : null,
+    },
+  });
+  await logModeration({
+    actorId: req.user!.id,
+    action: isSupporter ? "supporter_granted" : "supporter_revoked",
+    targetType: "user",
+    targetId: user.id,
+    targetLabel: user.displayName,
+    reason,
+  });
+
   res.json({ user: toPublicUser(user) });
 });

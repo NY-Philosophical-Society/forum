@@ -587,6 +587,11 @@ async function seedTags() {
 async function wipeThreads() {
   await prisma.postLike.deleteMany();
   await prisma.threadLike.deleteMany();
+  // Reports carry a bare targetId rather than a foreign key, so ones pointing
+  // at the threads/replies about to be deleted would linger as "gone" rows in
+  // the admin queue. The ModerationLog is deliberately never touched here —
+  // nothing in this codebase deletes an audit entry.
+  await prisma.report.deleteMany({ where: { targetType: { in: ["thread", "post"] } } });
   await prisma.post.deleteMany();
   await prisma.thread.deleteMany();
   console.log("Cleared existing threads, replies and likes.");
@@ -649,6 +654,45 @@ async function main() {
     },
   });
   console.log("Seeded demo admin (admin@demo.nyphilosophy.org / demo-password-123).");
+  await seedDemoReports();
+}
+
+/**
+ * Two open reports so /admin/reports isn't an empty page on a fresh database.
+ * Both are filed by a seeded member against another seeded member's content,
+ * which is what the queue is actually for.
+ */
+async function seedDemoReports() {
+  const [thread, post] = await Promise.all([
+    prisma.thread.findFirst({ orderBy: { createdAt: "desc" } }),
+    prisma.post.findFirst({ orderBy: { createdAt: "desc" } }),
+  ]);
+  if (!thread || !post) return;
+
+  const reporter = await prisma.user.findFirst({
+    where: { role: "user", deletedAt: null, id: { notIn: [thread.authorId, post.authorId] } },
+  });
+  if (!reporter) return;
+
+  await prisma.report.createMany({
+    data: [
+      {
+        reporterId: reporter.id,
+        targetType: "thread",
+        targetId: thread.id,
+        category: "off_topic",
+        reason: "This reads more like a political argument than a philosophical one.",
+      },
+      {
+        reporterId: reporter.id,
+        targetType: "post",
+        targetId: post.id,
+        category: "harassment",
+        reason: null,
+      },
+    ],
+  });
+  console.log("Seeded 2 open demo reports for the admin queue.");
 }
 
 main()

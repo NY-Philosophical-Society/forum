@@ -50,6 +50,7 @@ bookmarksRouter.get("/", requireAuth, async (req, res) => {
     myLiked: t.likes.length > 0,
     postCount: t._count.posts,
     locked: t.locked,
+    pinnedAt: t.pinnedAt?.toISOString() ?? null,
     myBookmarked: true,
   }));
 

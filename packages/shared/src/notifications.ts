@@ -24,5 +24,7 @@ export function describeNotification(n: Pick<NotificationItem, "type" | "count">
       return "mentioned you";
     case "message":
       return n.count > 1 ? `sent you ${n.count} messages` : "sent you a message";
+    case "warning":
+      return "sent you a moderation warning";
   }
 }
