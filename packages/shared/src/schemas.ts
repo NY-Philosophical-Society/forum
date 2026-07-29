@@ -97,6 +97,42 @@ export const redeemCodeSchema = z.object({
 });
 export type RedeemCodeInput = z.infer<typeof redeemCodeSchema>;
 
+export const BIO_MAX_LENGTH = 500;
+
+export const updateProfileSchema = z.object({
+  // Plain text only — markdown in bios lands in brief 03.
+  bio: z.string().max(BIO_MAX_LENGTH, `Bio must be ${BIO_MAX_LENGTH} characters or fewer`).nullable().optional(),
+  // The display name is the legal name tied to ID verification; the API
+  // rejects this field for VERIFIED users (see routes/users.ts).
+  displayName: z.string().min(2, "Enter your real first and last name").max(80).optional(),
+});
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export const changePasswordSchema = z.object({
+  // Absent for OAuth-created accounts (passwordHash === null), which are
+  // *setting* a first password rather than changing one.
+  currentPassword: z.string().min(1).optional(),
+  newPassword: z.string().min(8, "Password must be at least 8 characters"),
+});
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+export const changeEmailSchema = z.object({
+  email: z.string().email(),
+  // Required by the API whenever the account has a password.
+  password: z.string().min(1).optional(),
+});
+export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
+
+export const deleteAccountSchema = z.object({
+  // Required by the API whenever the account has a password; OAuth-only
+  // accounts rely on the typed confirmation alone.
+  password: z.string().min(1).optional(),
+  confirm: z.literal("DELETE", {
+    errorMap: () => ({ message: 'Type "DELETE" to confirm' }),
+  }),
+});
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
+
 export const requestPasswordResetSchema = z.object({
   email: z.string().email(),
 });

@@ -3,10 +3,53 @@ import type { VerificationStatus } from "./schemas";
 export interface PublicUser {
   id: string;
   displayName: string;
+  /** Public photo URL from the storage provider; null renders as initials. */
+  avatarUrl: string | null;
+  bio: string | null;
   verificationStatus: VerificationStatus;
   role: "user" | "admin";
   isSupporter: boolean;
   createdAt: string;
+}
+
+/** A user's reply as shown on their profile page, with enough thread context to link to. */
+export interface ProfileReply {
+  id: string;
+  threadId: string;
+  threadTitle: string;
+  body: string;
+  createdAt: string;
+  likeCount: number;
+}
+
+export interface UserProfileResponse {
+  user: PublicUser;
+  threadCount: number;
+  replyCount: number;
+  threads: ThreadSummary[];
+  hasMoreThreads: boolean;
+  replies: ProfileReply[];
+  hasMoreReplies: boolean;
+  /** True for anonymous (not-logged-in) web visitors — profile header only, no content lists. */
+  previewOnly: boolean;
+}
+
+export interface DataExport {
+  exportedAt: string;
+  account: {
+    id: string;
+    email: string;
+    displayName: string;
+    bio: string | null;
+    avatarUrl: string | null;
+    verificationStatus: string;
+    isSupporter: boolean;
+    createdAt: string;
+  };
+  threads: { id: string; title: string; body: string; createdAt: string }[];
+  posts: { id: string; threadId: string; body: string; createdAt: string }[];
+  messagesSent: { id: string; recipientId: string; body: string; createdAt: string }[];
+  messagesReceived: { id: string; senderId: string; body: string; createdAt: string }[];
 }
 
 export interface AuthResponse {

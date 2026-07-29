@@ -56,7 +56,7 @@ authRouter.post("/login", authLimiter, async (req, res) => {
   const { email, password } = parsed.data;
 
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user) {
+  if (!user || user.deletedAt) {
     return res.status(401).json({ error: "Invalid email or password" });
   }
   if (user.bannedAt) {

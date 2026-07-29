@@ -10,13 +10,33 @@ declare global {
         id: string;
         email: string;
         displayName: string;
+        avatarUrl: string | null;
+        bio: string | null;
         verificationStatus: string;
         role: string;
         isSupporter: boolean;
+        passwordHash: string | null;
         createdAt: Date;
       };
     }
   }
+}
+
+type DbUser = NonNullable<Awaited<ReturnType<typeof prisma.user.findUnique>>>;
+
+function toRequestUser(user: DbUser): NonNullable<Request["user"]> {
+  return {
+    id: user.id,
+    email: user.email,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    bio: user.bio,
+    verificationStatus: user.verificationStatus,
+    role: user.role,
+    isSupporter: user.isSupporter,
+    passwordHash: user.passwordHash,
+    createdAt: user.createdAt,
+  };
 }
 
 export async function requireAuth(
@@ -36,22 +56,16 @@ export async function requireAuth(
   }
 
   const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (!user) {
+  // A deleted account's row still exists (its content is anonymized, not
+  // removed), but as far as sessions are concerned the user is gone.
+  if (!user || user.deletedAt) {
     return res.status(401).json({ error: "User no longer exists" });
   }
   if (user.bannedAt) {
     return res.status(403).json({ error: "This account has been suspended." });
   }
 
-  req.user = {
-    id: user.id,
-    email: user.email,
-    displayName: user.displayName,
-    verificationStatus: user.verificationStatus,
-    role: user.role,
-    isSupporter: user.isSupporter,
-    createdAt: user.createdAt,
-  };
+  req.user = toRequestUser(user);
   next();
 }
 
@@ -74,16 +88,8 @@ export async function optionalAuth(
   if (!payload) return next();
 
   const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && !user.bannedAt) {
-    req.user = {
-      id: user.id,
-      email: user.email,
-      displayName: user.displayName,
-      verificationStatus: user.verificationStatus,
-      role: user.role,
-      isSupporter: user.isSupporter,
-      createdAt: user.createdAt,
-    };
+  if (user && !user.bannedAt && !user.deletedAt) {
+    req.user = toRequestUser(user);
   }
   next();
 }

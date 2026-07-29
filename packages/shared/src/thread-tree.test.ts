@@ -5,6 +5,8 @@ import type { Post, PublicUser } from "./types";
 const author: PublicUser = {
   id: "u1",
   displayName: "Test Author",
+  avatarUrl: null,
+  bio: null,
   verificationStatus: "VERIFIED",
   role: "user",
   isSupporter: false,

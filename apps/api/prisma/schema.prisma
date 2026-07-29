@@ -18,6 +18,11 @@ model User {
   googleId            String?   @unique
   appleId             String?   @unique
   displayName         String
+  // Public URL served by the configured StorageProvider (see
+  // src/lib/storage-provider.ts). Null = no photo, clients fall back to
+  // initials.
+  avatarUrl           String?
+  bio                 String?
   verificationStatus  String    @default("UNVERIFIED")
   // "user" | "admin". No bootstrap admin UI yet — promote via direct DB
   // access (see README) until one exists.
@@ -28,6 +33,10 @@ model User {
   // this forum is gated as a member perk.
   isSupporter         Boolean   @default(false)
   supporterSince      DateTime?
+  // Account deletion anonymizes rather than cascade-deletes (threads/replies
+  // keep rendering under "[deleted]" so other people's conversations stay
+  // whole). A non-null deletedAt means the account can never log in again.
+  deletedAt           DateTime?
   createdAt           DateTime  @default(now())
 
   verificationSessions VerificationSession[]
