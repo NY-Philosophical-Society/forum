@@ -28,6 +28,11 @@ export function ProfileScreen({ navigation }: Props) {
       label: "View public profile",
       onPress: () => navigation.navigate("UserProfile", { userId: user.id }),
     },
+    {
+      icon: "create-outline",
+      label: "Edit profile",
+      onPress: () => navigation.navigate("EditProfile"),
+    },
     { icon: "shield-checkmark-outline", label: "Verification", onPress: () => navigation.navigate("Verify") },
     {
       icon: "text-outline",

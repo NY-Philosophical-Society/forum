@@ -38,6 +38,7 @@ import { MockOAuthScreen } from "./src/screens/MockOAuthScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { UserProfileScreen } from "./src/screens/UserProfileScreen";
+import { EditProfileScreen } from "./src/screens/EditProfileScreen";
 import { FormattingScreen } from "./src/screens/FormattingScreen";
 import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
 import { AdminReportsScreen } from "./src/screens/AdminReportsScreen";
@@ -136,6 +137,11 @@ function ProfileStack() {
         name="UserProfile"
         component={UserProfileScreen}
         options={{ title: "Profile" }}
+      />
+      <ProfileStackNav.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={{ title: "Edit Profile" }}
       />
       <ProfileStackNav.Screen
         name="Verify"

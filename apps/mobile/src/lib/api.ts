@@ -36,5 +36,13 @@ export const api = {
   get: <T>(path: string, token?: string | null) => request<T>(path, { token }),
   post: <T>(path: string, body: unknown, token?: string | null) =>
     request<T>(path, { method: "POST", body: JSON.stringify(body), token }),
+  patch: <T>(path: string, body: unknown, token?: string | null) =>
+    request<T>(path, { method: "PATCH", body: JSON.stringify(body), token }),
   delete: <T>(path: string, token?: string | null) => request<T>(path, { method: "DELETE", token }),
+  /** DELETE with a JSON body (account deletion sends password + confirmation). */
+  deleteWithBody: <T>(path: string, body: unknown, token?: string | null) =>
+    request<T>(path, { method: "DELETE", body: JSON.stringify(body), token }),
+  /** Raw binary upload (avatars). RN blobs often lack a type, so it's explicit. */
+  upload: <T>(path: string, body: Blob, contentType: string, token?: string | null) =>
+    request<T>(path, { method: "POST", body, headers: { "Content-Type": contentType }, token }),
 };

@@ -27,7 +27,14 @@
     "plugins": [
       "expo-web-browser",
       "expo-apple-authentication",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Lets you choose a profile photo from your library.",
+          "cameraPermission": "Lets you take a profile photo."
+        }
+      ]
     ]
   }
 }
