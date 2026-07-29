@@ -23,6 +23,7 @@ beforeAll(async () => {
   await prisma.mention.deleteMany();
   await prisma.passwordResetToken.deleteMany();
   await prisma.block.deleteMany();
+  await prisma.moderationLog.deleteMany();
   await prisma.report.deleteMany();
   await prisma.message.deleteMany();
   await prisma.postLike.deleteMany();

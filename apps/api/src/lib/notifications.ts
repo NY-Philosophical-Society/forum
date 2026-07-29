@@ -57,6 +57,12 @@ export async function notify(event: NotifyEvent): Promise<void> {
     const { type, recipientId, actorId, threadId, postId } = event;
     if (recipientId === actorId) return;
 
+    // A moderation warning is the one notification the recipient has no say
+    // over: it is not suppressed by preferences, by a block against the admin
+    // who sent it, or by the recipient already being banned — they need to be
+    // able to read why once they're back.
+    const isModeration = type === "warning";
+
     const recipient = await prisma.user.findUnique({
       where: { id: recipientId },
       include: {
@@ -64,10 +70,14 @@ export async function notify(event: NotifyEvent): Promise<void> {
         blockedBy: { where: { blockerId: actorId } },
       },
     });
-    if (!recipient || recipient.deletedAt || recipient.bannedAt) return;
-    if (recipient.blocking.length > 0 || recipient.blockedBy.length > 0) return;
-    if (!(await prefsAllow(recipientId, prefKeyForNotificationType(type)))) return;
-    if (!(await canRecipientSee(recipientId, threadId))) return;
+    if (!recipient || recipient.deletedAt) return;
+    if (!isModeration) {
+      if (recipient.bannedAt) return;
+      if (recipient.blocking.length > 0 || recipient.blockedBy.length > 0) return;
+      const prefKey = prefKeyForNotificationType(type);
+      if (prefKey && !(await prefsAllow(recipientId, prefKey))) return;
+      if (!(await canRecipientSee(recipientId, threadId))) return;
+    }
 
     if (type === "like_thread" || type === "like_post") {
       // Collapse onto an existing unread row for the same target.
@@ -149,6 +159,8 @@ function pushTitle(type: NotificationType, actorName: string): string {
       return `${actorName} mentioned you`;
     case "message":
       return `New message from ${actorName}`;
+    case "warning":
+      return "A moderation warning from the Society";
   }
 }
 

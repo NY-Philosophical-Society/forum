@@ -28,3 +28,18 @@ export const writeLimiter = rateLimit({
   skip: disabledForTests,
   handler: json("You're doing that too much — slow down and try again shortly."),
 });
+
+/**
+ * Admin mutations (ban, delete, pin, role changes). Generous for a human
+ * working a report queue, far below what a stolen admin token would need to
+ * mass-delete at machine speed. Read-only admin listing isn't limited — the
+ * dashboard polls it.
+ */
+export const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: disabledForTests,
+  handler: json("Too many moderation actions in a row — pause and try again shortly."),
+});
