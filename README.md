@@ -43,6 +43,15 @@ missing before launch" below before you show this to real users.
   `apps/api/src/lib/oauth.ts`. Neither works without real credentials from Google Cloud Console /
   Apple Developer, which only you can create — see "Going to production" below. Until then, both
   buttons fall back to a local mock sign-in screen so the UX can be built and demoed today.
+- **Profiles and photos.** The founding requirement was a real name *and* a photo. Every author
+  name links to a profile (`/u/[userId]` on web, a matching screen on mobile) showing avatar, bio,
+  badges, and paginated threads/replies. Avatars upload from web (canvas crop/resize) and mobile
+  (camera or library); the server independently validates format/dimensions/size, square-crops to
+  512px, and strips EXIF metadata — embedded GPS coordinates are a real privacy leak on a
+  real-name forum. Image storage follows the same provider pattern as verification
+  (`apps/api/src/lib/storage-provider.ts`): a zero-credential local-disk stub in dev, S3/R2 gated
+  behind env vars for production. Account management (change/set password, change email, JSON data
+  export, anonymizing account deletion) lives in Settings on both platforms.
 - **Per-user display settings** (date format MM/DD/YYYY vs. DD/MM/YYYY, light/dark mode) live
   entirely client-side — `apps/web/src/lib/settings-context.tsx` (localStorage) and
   `apps/mobile/src/lib/settings-context.tsx` (AsyncStorage). Dates are formatted with
@@ -159,7 +168,7 @@ post.
 
 ## Going to production
 
-Four things need real decisions before this goes live — flagged here rather than guessed at:
+Five things need real decisions before this goes live — flagged here rather than guessed at:
 
 1. **Identity verification vendor.** Create a Stripe Identity (or Persona / Veriff) account,
    set `VERIFICATION_PROVIDER=stripe` + `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` in
@@ -179,7 +188,13 @@ Four things need real decisions before this goes live — flagged here rather th
    Services ID (with your web domain + redirect URL registered) for web, and enable the "Sign In
    with Apple" capability on the app's Bundle ID for mobile. Set `APPLE_SERVICES_ID` /
    `APPLE_BUNDLE_ID` in `apps/api/.env`. Full detail in `apps/api/src/lib/oauth.ts`.
-3. **Real database + hosting.** Swap `apps/api/prisma/schema.prisma`'s datasource from `sqlite`
+3. **Image storage bucket.** Avatars (and post images, once brief 03 lands) are stored via the
+   provider in `apps/api/src/lib/storage-provider.ts`. Locally they sit on disk under
+   `apps/api/uploads/` and are served by the API itself — fine for one dev machine, not for
+   production. Create an S3 or Cloudflare R2 bucket, set `STORAGE_PROVIDER=s3` plus the
+   `STORAGE_S3_*` variables in `apps/api/.env`, and implement `S3StorageProvider` (the file's top
+   comment has the exact steps). The local stub refuses to run once real credentials are set.
+4. **Real database + hosting.** Swap `apps/api/prisma/schema.prisma`'s datasource from `sqlite`
    to `postgresql`, point `DATABASE_URL` at a real Postgres instance, and host the API somewhere
    that runs a long-lived Node process (Railway, Render, Fly.io — not Vercel serverless, which
    doesn't suit a stateful Express app well). Ship `apps/mobile` via EAS Build once the API has a
@@ -194,7 +209,7 @@ Four things need real decisions before this goes live — flagged here rather th
    - Any page using `useSearchParams()` must sit inside a `<Suspense>` boundary or `next build`
      fails at static prerender (`next dev` won't catch this). Run `npx next build` locally before
      pushing.
-4. **Legal/compliance review.** Storing real names + verification status (even without raw ID
+5. **Legal/compliance review.** Storing real names + verification status (even without raw ID
    images, which the vendor should hold) still means handling PII under state/international
    privacy law. Get a privacy policy and ToS reviewed before launch, and decide who is the legal
    data controller (the Society itself, or a separate entity) for this application.
@@ -219,11 +234,16 @@ Four things need real decisions before this goes live — flagged here rather th
 - **Mobile is behind web.** Reporting, blocking, pagination, password reset, thread locking,
   supporter redemption, and the admin report list exist on web only. Closed by
   `docs/prompts/01-foundation.md`.
-- No user profile pages, no avatars — the "real name **and a photo**" requirement is only half
-  built. See `docs/prompts/02-profiles-accounts.md`.
-- No post editing or deletion, no markdown, no notifications, no search.
-- Uploaded images (once briefs 02/03 land) will have **no moderation path** — decide on a policy
-  before enabling them.
+- **User-uploaded avatar photos have no moderation path.** Uploads are validated (type, size,
+  dimensions) and EXIF-stripped, but nothing reviews what the picture *shows* — an offensive
+  avatar stays up until an admin hears about it via a user report. Decide on a review policy (and
+  ideally an automated screen) before launch; post-image embeds in brief 03 widen this surface.
+- Avatar files uploaded via the local storage stub live in `apps/api/uploads/` and die with the
+  machine — see "Image storage bucket" above before pointing real users at this.
+- Account deletion anonymizes to "[deleted]" rather than erasing content. A deleted author's
+  threads/replies/messages remain readable; whether that satisfies a legal erasure request is a
+  question for the compliance review above.
+- No post editing or deletion, no notifications, no search.
 - iOS app has not been run in a Simulator in this environment (Xcode is installed but not selected
   as the active developer directory — run
   `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`) — it typechecks cleanly and
