@@ -1,0 +1,122 @@
+// Local prototype uses SQLite for zero-setup dev. Swap provider to "postgresql"
+// and set DATABASE_URL to a real connection string for production.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  // Null for accounts created via Google/Apple sign-in, which have no password.
+  passwordHash        String?
+  // Set only for accounts created via that provider's sign-in.
+  googleId            String?  @unique
+  appleId             String?  @unique
+  displayName         String
+  verificationStatus  String   @default("UNVERIFIED")
+  createdAt           DateTime @default(now())
+
+  verificationSessions VerificationSession[]
+  threads              Thread[]
+  posts                Post[]
+  threadLikes          ThreadLike[]
+  postLikes            PostLike[]
+  sentMessages         Message[] @relation("SentMessages")
+  receivedMessages     Message[] @relation("ReceivedMessages")
+}
+
+model VerificationSession {
+  id                 String   @id @default(cuid())
+  userId             String
+  provider           String   @default("stub")
+  providerSessionId  String
+  status             String   @default("PENDING")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+// Optional labels on a thread (Ethics, Metaphysics, ...). Not boards — every
+// thread lives in one single feed regardless of tags; tags are just an
+// optional filter on that feed.
+model Tag {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  createdAt   DateTime @default(now())
+
+  threads Thread[]
+}
+
+model Thread {
+  id         String   @id @default(cuid())
+  authorId   String
+  title      String
+  body       String
+  createdAt  DateTime @default(now())
+
+  author User         @relation(fields: [authorId], references: [id])
+  tags   Tag[]
+  posts  Post[]
+  likes  ThreadLike[]
+}
+
+model ThreadLike {
+  id        String   @id @default(cuid())
+  threadId  String
+  userId    String
+  createdAt DateTime @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([threadId, userId])
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  threadId  String
+  authorId  String
+  parentId  String?
+  body      String
+  createdAt DateTime @default(now())
+
+  thread Thread     @relation(fields: [threadId], references: [id])
+  author User       @relation(fields: [authorId], references: [id])
+  likes  PostLike[]
+}
+
+model PostLike {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId])
+}
+
+// Direct messages. Deliberately no separate "Conversation" table — a
+// conversation between two users is just their messages to each other,
+// queried by (senderId, recipientId) pairs. Simpler for a 1:1-only prototype;
+// revisit if group DMs are ever needed.
+model Message {
+  id          String    @id @default(cuid())
+  senderId    String
+  recipientId String
+  body        String
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+
+  sender    User @relation("SentMessages", fields: [senderId], references: [id])
+  recipient User @relation("ReceivedMessages", fields: [recipientId], references: [id])
+}
