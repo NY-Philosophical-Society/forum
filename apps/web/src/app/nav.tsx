@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "~/lib/auth-context";
+import { NotificationBell } from "./notification-bell";
 import { ProfileMenu } from "./profile-menu";
 
 export function Nav() {
@@ -16,7 +17,15 @@ export function Nav() {
           <span>New York Philosophy Club</span>
         </Link>
         <div className="nav-links">
-          {!loading && user && <ProfileMenu />}
+          {!loading && user && (
+            <>
+              <Link className="nav-link" href="/search">
+                Search
+              </Link>
+              <NotificationBell />
+              <ProfileMenu />
+            </>
+          )}
           {!loading && !user && (
             <>
               <Link className="nav-link" href="/settings">

@@ -19,6 +19,16 @@ import { ReportButton } from "../../report-button";
 import { Avatar, PostSkeleton, Skeleton } from "../../ui";
 
 const REPLIES_PAGE = 20;
+// Notification deep links (#post-...) may point past the first page of
+// replies, so those arrivals load with the maximum window instead.
+const DEEP_LINK_REPLIES = 100;
+
+/** The #post-<id> fragment this page was opened at, if any. */
+function anchoredPostId(): string | null {
+  if (typeof window === "undefined") return null;
+  const m = window.location.hash.match(/^#post-(.+)$/);
+  return m ? m[1] : null;
+}
 
 export default function ThreadPage() {
   const { id } = useParams<{ id: string }>();
@@ -30,7 +40,9 @@ export default function ThreadPage() {
   const [replyBody, setReplyBody] = useState("");
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [repliesWindow, setRepliesWindow] = useState(REPLIES_PAGE);
+  const [repliesWindow, setRepliesWindow] = useState(() =>
+    anchoredPostId() ? DEEP_LINK_REPLIES : REPLIES_PAGE,
+  );
   const [loadingMore, setLoadingMore] = useState(false);
   const [locking, setLocking] = useState(false);
 
@@ -64,6 +76,15 @@ export default function ThreadPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, token]);
 
+  // Replies render after an async load, so the browser's native
+  // scroll-to-fragment fires too early — repeat it once the content exists.
+  useEffect(() => {
+    const postId = anchoredPostId();
+    if (!thread || !postId) return;
+    document.getElementById(`post-${postId}`)?.scrollIntoView({ block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread === null]);
+
   async function loadMoreReplies() {
     setLoadingMore(true);
     const nextWindow = repliesWindow + REPLIES_PAGE;
@@ -76,6 +97,18 @@ export default function ThreadPage() {
     if (!token) return;
     await api.post(`/api/threads/${id}/like`, {}, token);
     load(repliesWindow);
+  }
+
+  async function toggleBookmark() {
+    if (!token || !thread) return;
+    const wasBookmarked = Boolean(thread.myBookmarked);
+    setThread({ ...thread, myBookmarked: !wasBookmarked });
+    try {
+      if (wasBookmarked) await api.delete(`/api/bookmarks/${id}`, token);
+      else await api.post("/api/bookmarks", { threadId: id }, token);
+    } catch {
+      setThread({ ...thread, myBookmarked: wasBookmarked });
+    }
   }
 
   async function togglePostLike(postId: string) {
@@ -341,6 +374,14 @@ export default function ThreadPage() {
               >
                 ♥ {thread.likeCount}
               </button>
+              {user && (
+                <button
+                  className={`bookmark-button ${thread.myBookmarked ? "bookmark-button-active" : ""}`}
+                  onClick={toggleBookmark}
+                >
+                  {thread.myBookmarked ? "❧ Saved" : "❧ Save"}
+                </button>
+              )}
               <ReportButton targetType="thread" targetId={thread.id} />
             </div>
           )}
@@ -378,7 +419,12 @@ export default function ThreadPage() {
             {thread.postCount} {thread.postCount === 1 ? "Reply" : "Replies"}
           </h3>
           {orderedPosts.map((p) => (
-            <div className="post" key={p.id} style={{ marginLeft: `${p.depth * 1.5}rem` }}>
+            <div
+              className="post"
+              key={p.id}
+              id={`post-${p.id}`}
+              style={{ marginLeft: `${p.depth * 1.5}rem` }}
+            >
               {p.deleted ? (
                 <>
                   <p className="tombstone">[deleted]</p>

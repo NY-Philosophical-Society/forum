@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { DataExport, PublicUser } from "@nyps-forum/shared";
+import type { DataExport, NotificationPreferences, PublicUser } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
@@ -79,6 +79,8 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {user && <NotificationSection />}
+
       {user && <AccountSections />}
 
       {user && (
@@ -108,6 +110,76 @@ export default function SettingsPage() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+const PREF_ROWS: { key: keyof Omit<NotificationPreferences, "master">; label: string; hint: string }[] = [
+  { key: "replies", label: "Replies", hint: "Someone replies to your thread or your reply" },
+  { key: "likes", label: "Likes", hint: "Someone likes your thread or reply" },
+  { key: "mentions", label: "Mentions", hint: "Someone @mentions you" },
+  { key: "messages", label: "Messages", hint: "A new direct message arrives" },
+];
+
+/** Per-type notification switches with a master toggle; covers in-app and push alike. */
+function NotificationSection() {
+  const { token } = useAuth();
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    api
+      .get<{ preferences: NotificationPreferences }>("/api/notifications/preferences", token)
+      .then((res) => setPrefs(res.preferences))
+      .catch(() => {});
+  }, [token]);
+
+  async function toggle(key: keyof NotificationPreferences) {
+    if (!token || !prefs) return;
+    const next = { ...prefs, [key]: !prefs[key] };
+    setPrefs(next); // optimistic — reverted below if the save fails
+    setError(null);
+    try {
+      const res = await api.put<{ preferences: NotificationPreferences }>(
+        "/api/notifications/preferences",
+        { [key]: next[key] },
+        token,
+      );
+      setPrefs(res.preferences);
+    } catch (err: any) {
+      setPrefs(prefs);
+      setError(err.message ?? "Could not save that preference");
+    }
+  }
+
+  if (!prefs) return null;
+
+  return (
+    <div className="card settings-section">
+      <h3>Notifications</h3>
+      <label className="pref-row pref-row-master">
+        <span>
+          <span className="pref-label">All notifications</span>
+          <span className="meta">Master switch — turns everything off at once, push included.</span>
+        </span>
+        <input type="checkbox" checked={prefs.master} onChange={() => toggle("master")} />
+      </label>
+      {PREF_ROWS.map((row) => (
+        <label className="pref-row" key={row.key}>
+          <span>
+            <span className="pref-label">{row.label}</span>
+            <span className="meta">{row.hint}</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={prefs[row.key]}
+            disabled={!prefs.master}
+            onChange={() => toggle(row.key)}
+          />
+        </label>
+      ))}
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }
