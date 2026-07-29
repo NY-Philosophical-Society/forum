@@ -101,6 +101,22 @@ function HomeFeed() {
     );
   }
 
+  async function toggleBookmark(thread: ThreadSummary) {
+    if (!token) return;
+    const wasBookmarked = Boolean(thread.myBookmarked);
+    setThreads((prev) =>
+      prev.map((t) => (t.id === thread.id ? { ...t, myBookmarked: !wasBookmarked } : t)),
+    );
+    try {
+      if (wasBookmarked) await api.delete(`/api/bookmarks/${thread.id}`, token);
+      else await api.post("/api/bookmarks", { threadId: thread.id }, token);
+    } catch {
+      setThreads((prev) =>
+        prev.map((t) => (t.id === thread.id ? { ...t, myBookmarked: wasBookmarked } : t)),
+      );
+    }
+  }
+
   const activeTagName = tags?.find((t) => t.slug === activeTag)?.name;
 
   return (
@@ -217,6 +233,14 @@ function HomeFeed() {
             <span className="meta">
               {t.postCount} {t.postCount === 1 ? "reply" : "replies"}
             </span>
+            {user && (
+              <button
+                className={`bookmark-button ${t.myBookmarked ? "bookmark-button-active" : ""}`}
+                onClick={() => toggleBookmark(t)}
+              >
+                {t.myBookmarked ? "❧ Saved" : "❧ Save"}
+              </button>
+            )}
           </div>
         </article>
       ))}
