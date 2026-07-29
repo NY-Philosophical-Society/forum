@@ -33,6 +33,11 @@ export function ProfileScreen({ navigation }: Props) {
       label: "Edit profile",
       onPress: () => navigation.navigate("EditProfile"),
     },
+    {
+      icon: "key-outline",
+      label: "Account",
+      onPress: () => navigation.navigate("Account"),
+    },
     { icon: "shield-checkmark-outline", label: "Verification", onPress: () => navigation.navigate("Verify") },
     {
       icon: "text-outline",
