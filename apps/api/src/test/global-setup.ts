@@ -19,6 +19,8 @@ export default function globalSetup() {
   process.env.JWT_SECRET = "test-only-secret";
   process.env.DISABLE_RATE_LIMIT = "1";
   delete process.env.VERIFICATION_PROVIDER; // default to the stub
+  // Point the local storage stub's writes at the same throwaway directory.
+  process.env.UPLOADS_DIR = path.join(dir, "uploads");
 
   execSync("npx prisma migrate deploy", {
     cwd: path.join(__dirname, "..", ".."),

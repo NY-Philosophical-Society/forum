@@ -10,4 +10,6 @@ build/
 .env.local
 apps/api/prisma/dev.db
 apps/api/prisma/dev.db-journal
+# Local storage-provider stub writes uploaded images here
+apps/api/uploads/
 .DS_Store

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
+import { LOCAL_UPLOADS_DIR, storageProvider } from "./lib/storage-provider";
 import { authRouter } from "./routes/auth";
 import { messagesRouter } from "./routes/messages";
 import { postsRouter } from "./routes/posts";
@@ -18,6 +19,16 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// The local storage stub keeps uploads on disk and the API serves them
+// itself; a real S3/R2 bucket serves its own URLs, so this only mounts for
+// the stub.
+if (storageProvider.name === "local") {
+  app.use(
+    "/uploads",
+    express.static(LOCAL_UPLOADS_DIR, { maxAge: "365d", immutable: true, fallthrough: false }),
+  );
+}
 
 app.use("/api/auth", authRouter);
 app.use("/api/verification", verificationRouter);
