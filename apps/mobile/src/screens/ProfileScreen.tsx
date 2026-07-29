@@ -23,6 +23,11 @@ export function ProfileScreen({ navigation }: Props) {
     onPress: () => void;
   }[] = [
     { icon: "shield-checkmark-outline", label: "Verification", onPress: () => navigation.navigate("Verify") },
+    {
+      icon: "text-outline",
+      label: "Formatting guide",
+      onPress: () => navigation.navigate("Formatting"),
+    },
     { icon: "settings-outline", label: "Settings", onPress: () => navigation.navigate("Settings") },
   ];
   if (user.role === "admin") {

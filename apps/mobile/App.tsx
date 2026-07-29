@@ -37,6 +37,7 @@ import { ConversationScreen } from "./src/screens/ConversationScreen";
 import { MockOAuthScreen } from "./src/screens/MockOAuthScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
+import { FormattingScreen } from "./src/screens/FormattingScreen";
 import { ForgotPasswordScreen } from "./src/screens/ForgotPasswordScreen";
 import { AdminReportsScreen } from "./src/screens/AdminReportsScreen";
 
@@ -129,6 +130,11 @@ function ProfileStack() {
         name="VerifyMock"
         component={VerifyMockScreen}
         options={{ title: "Mock Verification" }}
+      />
+      <ProfileStackNav.Screen
+        name="Formatting"
+        component={FormattingScreen}
+        options={{ title: "Formatting guide" }}
       />
       <ProfileStackNav.Screen
         name="Settings"

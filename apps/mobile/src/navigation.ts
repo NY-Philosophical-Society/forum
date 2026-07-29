@@ -13,6 +13,7 @@ export type ProfileStackParamList = {
   Profile: undefined;
   Verify: undefined;
   VerifyMock: { sessionId: string };
+  Formatting: undefined;
   Settings: undefined;
   AdminReports: undefined;
 };

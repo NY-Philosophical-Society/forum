@@ -6,27 +6,11 @@ const prisma = new PrismaClient();
 
 const TAGS = [
   { slug: "logic", name: "Logic", description: "Formal and informal reasoning, argumentation, paradoxes." },
-  {
-    slug: "mind",
-    name: "Mind",
-    description: "Consciousness, personal identity, the mind-body problem.",
-  },
-  {
-    slug: "science",
-    name: "Science",
-    description: "Scientific method, causation, theory-choice, demarcation.",
-  },
+  { slug: "mind", name: "Mind", description: "Consciousness, personal identity, the mind-body problem." },
+  { slug: "science", name: "Science", description: "Scientific method, causation, theory-choice, demarcation." },
   { slug: "aesthetics", name: "Aesthetics", description: "Art, beauty, taste, and the meaning of art." },
-  {
-    slug: "religion",
-    name: "Religion",
-    description: "God, faith and reason, the problem of evil.",
-  },
-  {
-    slug: "language",
-    name: "Language",
-    description: "Meaning, reference, and the nature of truth in language.",
-  },
+  { slug: "religion", name: "Religion", description: "God, faith and reason, the problem of evil." },
+  { slug: "language", name: "Language", description: "Meaning, reference, and the nature of truth in language." },
   { slug: "epistemology", name: "Epistemology", description: "Knowledge, belief, justification, skepticism." },
   { slug: "ethics", name: "Ethics", description: "Normative ethics, metaethics, applied ethics." },
   { slug: "metaphysics", name: "Metaphysics", description: "Existence, identity, causation, free will." },
@@ -49,11 +33,30 @@ const TAGS = [
 
 const DEMO_PASSWORD = "demo-password-123";
 
-async function upsertUser(email: string, displayName: string) {
+/** Ordinary club members — not the canon. */
+const MEMBERS: Record<string, string> = {
+  marguerite: "Marguerite Okonkwo",
+  daniel: "Daniel Reiss",
+  priya: "Priya Raghunathan",
+  tomas: "Tomás Delgado",
+  hannah: "Hannah Feldstein",
+  wenli: "Wen-Li Chen",
+  owen: "Owen Brannigan",
+  adaora: "Adaora Nwosu",
+  julian: "Julian Castellanos",
+  ruth: "Ruth Abramowitz",
+  samir: "Samir Haddad",
+  clare: "Clare Whitfield",
+};
+
+async function upsertUser(handle: string) {
+  const displayName = MEMBERS[handle];
+  if (!displayName) throw new Error(`Unknown seed member: ${handle}`);
+  const email = `${handle}@demo.nyphilosophy.org`;
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
   return prisma.user.upsert({
     where: { email },
-    update: {},
+    update: { displayName },
     create: { email, displayName, passwordHash, verificationStatus: "VERIFIED" },
   });
 }
@@ -62,8 +65,7 @@ const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
 interface ReplySeed {
-  authorEmail: string;
-  authorName: string;
+  author: string;
   body: string;
   /** Index into this thread's replies array — makes this a reply-to-a-reply. */
   replyToIndex?: number;
@@ -72,8 +74,7 @@ interface ReplySeed {
 
 interface ThreadSeed {
   tagSlug: (typeof TAGS)[number]["slug"];
-  authorEmail: string;
-  authorName: string;
+  author: string;
   title: string;
   body: string;
   daysAgo: number;
@@ -82,257 +83,485 @@ interface ThreadSeed {
 
 const THREADS: ThreadSeed[] = [
   {
-    tagSlug: "ethics",
-    authorEmail: "kant@demo.nyphilosophy.org",
-    authorName: "Immanuel Kant",
-    title: "Is moral luck a coherent concept?",
-    body: "Bernard Williams and Thomas Nagel both argued that our ordinary moral judgments are shot through with 'moral luck' — we blame the drunk driver who kills a pedestrian more than the equally drunk driver who, by sheer chance, makes it home safely. But if morality is supposed to track what's within our control, shouldn't the two drivers be equally culpable? Is moral luck a real phenomenon, or a sign that our ordinary moral intuitions are simply confused?",
-    daysAgo: 6,
+    tagSlug: "logic",
+    author: "wenli",
+    title: "Consequentia mirabilis: can a claim be proved by the failure of its own denial?",
+    body: `Clavius gave us the strangest inference rule in the book. In modern notation:
+
+\`\`\`
+(¬P → P) → P
+\`\`\`
+
+If assuming a proposition's *falsity* forces you to conclude its **truth**, then the proposition is true outright. Medieval logicians called it the **consequentia mirabilis** — the marvellous consequence — and it has an air of getting something for nothing.
+
+It is also exactly the shape of the Liar. Let \`L\` be the sentence "*L is false*." Suppose \`L\` is false. Then what it says is the case — so \`L\` is true. We have \`¬L → L\`, and the marvellous consequence hands us \`L\`. But \`L\` says it is false.
+
+So which do we give up?
+
+1. The marvellous consequence itself
+2. Bivalence — that every sentence is true or false
+3. The assumption that \`L\` expresses a proposition at all
+
+I want to hear the strongest case for each. Come at this hard.`,
+    daysAgo: 3,
     replies: [
       {
-        authorEmail: "hume@demo.nyphilosophy.org",
-        authorName: "David Hume",
-        body: "Intuitions aren't confused here — they're doing exactly what they should. We don't just judge intentions, we judge outcomes because outcomes are what we actually live with. The driver who kills someone owes a different kind of repair to the world than the one who doesn't, regardless of what was 'in their control.'",
+        author: "daniel",
+        body: `Give up nothing. The **consequentia mirabilis** is not a curiosity, it is just *reductio* wearing a hat.
+
+> If assuming a proposition's falsity forces you to conclude its truth...
+
+That "forces" is doing all the work, and it is perfectly ordinary work. \`¬P → P\` together with \`¬P\` yields \`P ∧ ¬P\`. A contradiction refutes the assumption. Therefore \`¬¬P\`, therefore \`P\`. Every step is one you already accept.
+
+The rule is fine. The Liar is where the fault is, and pretending otherwise is scapegoating an innocent inference.`,
         hoursAfterThread: 2,
       },
       {
-        authorEmail: "hegel@demo.nyphilosophy.org",
-        authorName: "G.W.F. Hegel",
-        body: "This is why any ethics built purely on the isolated individual's will struggles here. Actions only become determinate — become what they actually are — through their outcomes in the world. There's no 'pure' culpability that floats free of consequence.",
-        hoursAfterThread: 5,
-      },
-      {
-        authorEmail: "weil@demo.nyphilosophy.org",
-        authorName: "Simone Weil",
-        body: "I'd push back gently, David — if we let outcome alone dictate blame, we collapse the distinction between misfortune and wrongdoing. The driver who makes it home is still someone who chose to drive drunk. Luck shouldn't change what kind of person they revealed themselves to be.",
+        author: "adaora",
+        body: `Daniel's derivation smuggles in double negation elimination, and that is precisely the step an intuitionist declines.
+
+Drop it and the marvellous consequence stops being derivable in general. That is not a technicality — it is the whole point. The rule *looks* miraculous because it lets you conjure a positive result out of a purely negative one, and constructively that is exactly what you are not entitled to do.
+
+I would say the miracle is the tell. **Miracles do not happen in logic.** When an inference feels like it is producing content from nothing, the honest response is suspicion, not admiration.`,
         replyToIndex: 0,
-        hoursAfterThread: 9,
+        hoursAfterThread: 6,
       },
       {
-        authorEmail: "mill@demo.nyphilosophy.org",
-        authorName: "John Stuart Mill",
-        body: "From a purely practical standpoint, punishing based on outcome makes sense even if it's not 'fair' in some cosmic sense — it's what actually deters reckless behavior and compensates victims. Maybe moral luck is uncomfortable precisely because morality has to do real work in the world, not just track abstract desert.",
-        hoursAfterThread: 27,
+        author: "priya",
+        body: `Both of you are arguing about the engine while the wheels are off.
+
+The problem is not the inference rule, it is that \`L\` never manages to say anything. Compare:
+
+> This sentence is false.
+
+with
+
+> This sentence is in English.
+
+The second has content you can check. The first has the *grammar* of a claim and none of the substance — it is an instruction to evaluate a result that does not exist yet. There is nothing there for "true" or "false" to attach to, so option 3, and the marvellous consequence walks away clean.`,
+        hoursAfterThread: 11,
       },
       {
-        authorEmail: "hume@demo.nyphilosophy.org",
-        authorName: "David Hume",
-        body: "Fair — I'll concede that much, Simone. Perhaps there are two separate questions tangled together here: how much someone deserves blame, and how much they owe in restitution. Luck might legitimately affect the second without touching the first.",
+        author: "wenli",
+        body: `Priya, I do not think you can hold that line, and here is why.
+
+Take Yablo's sequence: an infinite list where each sentence says "*every sentence below me is false*." No sentence refers to itself. Each one is a perfectly ordinary claim about *other* sentences. And the paradox arises anyway.
+
+If meaninglessness is your diagnosis, you now owe us an account on which none of infinitely many non-self-referential sentences means anything. That is a very expensive bill.`,
         replyToIndex: 2,
-        hoursAfterThread: 30,
+        hoursAfterThread: 18,
       },
       {
-        authorEmail: "aquinas@demo.nyphilosophy.org",
-        authorName: "Thomas Aquinas",
-        body: "Isn't this just Aristotle's point about hitting a target versus intending to? An archer who is skilled and still misses due to a gust of wind is judged differently from a reckless amateur who happens to hit the bullseye. Luck was already baked into virtue ethics from the start.",
-        hoursAfterThread: 50,
+        author: "owen",
+        body: `Option 2, and I do not think it should be controversial.
+
+Bivalence is an assumption, not a discovery. We adopted it because it is convenient for the sentences we usually care about, and the Liar is simply a case where the convenience runs out. Say \`L\` is neither true nor false and the derivation stops at the first step — you never get \`¬L\`, so you never get \`¬L → L\`.
+
+The cost is real: you lose excluded middle in full generality. But that is a *smaller* loss than telling me the rules of inference are unreliable, or that a grammatical English sentence is noise.`,
+        hoursAfterThread: 26,
+      },
+      {
+        author: "ruth",
+        body: `Owen, this is where the strengthened Liar eats you alive.
+
+> Say \`L\` is neither true nor false...
+
+Very well. Now consider:
+
+> This sentence is not true.
+
+If it is neither true nor false, then it is *not true* — which is exactly what it says, so it is true. Your third truth value bought you one round and the paradox reformulated itself in the time it took to sit down.
+
+Every "solution" of this shape faces the same problem: whatever category you invent to put the Liar in, the Liar just talks about that category instead.`,
+        replyToIndex: 4,
+        hoursAfterThread: 33,
+      },
+      {
+        author: "marguerite",
+        body: `Two thousand four hundred years, and the pattern is remarkably consistent: every proposal pays in a currency its author happens to find cheap.
+
+Daniel keeps classical logic and pays with the Liar being *someone else's problem*. Adaora keeps consistency and pays with mathematics she would otherwise want. Priya keeps bivalence and pays with meaning. Owen pays with excluded middle and Ruth just showed the receipt bounced.
+
+I do not offer a way out. But I would gently suggest the marvellous consequence is not the villain here. It is the *instrument* — the thing sensitive enough to detect that something in our concept of truth was already broken before it arrived.`,
+        hoursAfterThread: 44,
       },
     ],
   },
   {
-    tagSlug: "religion",
-    authorEmail: "aquinas@demo.nyphilosophy.org",
-    authorName: "Thomas Aquinas",
-    title: "Does the problem of evil actually refute theism?",
-    body: "Epicurus's classic formulation: 'Is God willing to prevent evil, but not able? Then he is not omnipotent. Is he able, but not willing? Then he is malevolent. Is he both able and willing? Then whence evil?' The free will defense answers the moral-evil half of this, but what about natural evil — earthquakes, disease, a child born with a genetic disorder? Does suffering that no free choice caused settle the question against theism?",
+    tagSlug: "epistemology",
+    author: "hannah",
+    title: "Can observation alone ever reveal necessity?",
+    body: `Every experiment I have ever run tells me what *did* happen. None of them tells me what *had* to.
+
+If every event might, in principle, fail to repeat — if the next dropped stone might hang in the air — then how do we ever move from *seeing what has happened* to *knowing what must happen*?
+
+The usual answer is that the regularity is so vast, so unbroken, that denying it becomes absurd. But vastness is still just more of the same kind of evidence. A thousand confirmations of a rule and one confirmation of a rule differ in degree, not in kind, and neither is a demonstration.
+
+So: is necessity something we **observe**, something we **impose**, or something we have simply agreed to stop asking about?`,
     daysAgo: 5,
     replies: [
       {
-        authorEmail: "hume@demo.nyphilosophy.org",
-        authorName: "David Hume",
-        body: "Natural evil is exactly where the free will defense runs out of road. You can blame human choice for war, but not for childhood leukemia. If this is the best of all possible worlds, the architect has some explaining to do.",
+        author: "tomas",
+        body: `Necessity is not in the world, it is in the *structure we bring to it*. You do not see causation; you see one thing and then another thing, and supply the connection yourself.
+
+That is not a defect. Without that supplied structure there is no experience at all, only succession.`,
         hoursAfterThread: 3,
       },
       {
-        authorEmail: "aquinas@demo.nyphilosophy.org",
-        authorName: "Thomas Aquinas",
-        body: "The 'soul-making' response holds up better here than people give it credit for: a world with real stakes, real fragility, and real risk is what makes courage, compassion, and growth possible at all. Remove all natural evil and you remove the conditions for most of what we consider virtue.",
+        author: "samir",
+        body: `The pragmatic answer: we do not need necessity, we need reliability, and reliability is something observation can absolutely deliver.
+
+Bridges stand up. Vaccines work. The demand for something stronger than "this has held without exception and we understand the mechanism" strikes me as a demand for a kind of certainty that would not do any additional work if we had it.`,
+        hoursAfterThread: 9,
+      },
+      {
+        author: "hannah",
+        body: `Samir — I grant that reliability is enough for engineering. My question is whether it is enough for *understanding*.
+
+There seems to be a real difference between "the stone has always fallen" and "the stone falls **because** mass curves spacetime." The second feels like it explains. If all we ever have is the first, then explanation is an illusion we permit ourselves.`,
+        replyToIndex: 1,
+        hoursAfterThread: 15,
+      },
+      {
+        author: "clare",
+        body: `Some necessity is observable, but only the boring kind — the kind we built in ourselves.
+
+> No bachelor is married.
+
+I do not need a survey. But that is because the necessity lives in the *definition*, not the world. The moment you ask about stones and spacetime you are outside the reach of that trick, and Hannah's problem returns untouched.`,
+        hoursAfterThread: 22,
+      },
+      {
+        author: "julian",
+        body: `Inference to the best explanation does more here than people credit.
+
+We are not merely counting instances. We are asking which underlying structure would make the instances unsurprising, and often exactly one candidate survives. That is not deduction, but it is not brute enumeration either — it is a third thing, and dismissing it as "still just observation" flattens a real distinction.`,
+        replyToIndex: 3,
+        hoursAfterThread: 30,
+      },
+      {
+        author: "priya",
+        body: `Julian, "best" is carrying the weight, and the criteria are ours: simplicity, elegance, unifying power.
+
+Those are aesthetic virtues. Lovely ones. But an argument that the universe must obey our sense of elegance is an argument that needs its own defence, and I have never seen it given.`,
+        replyToIndex: 4,
+        hoursAfterThread: 38,
+      },
+    ],
+  },
+  {
+    tagSlug: "ethics",
+    author: "adaora",
+    title: "What does it mean to love someone well?",
+    body: `We talk about loving *more* or *less*, but rarely about loving **well** — as though love were a quantity rather than a skill.
+
+Suppose we try to measure it. Three candidates:
+
+1. **Intensity** — how strongly you feel it
+2. **Honesty** — whether you see the person as they are rather than as you need them to be
+3. **Benefit** — whether the person's life actually goes better for your loving them
+
+Each fails on its own. The most intense love can be suffocating. Perfect clear-sightedness can be cold. And love aimed purely at someone's improvement stops treating them as a person and starts treating them as a project.
+
+So what is the measure? Or is asking for one already the mistake?`,
+    daysAgo: 6,
+    replies: [
+      {
+        author: "ruth",
+        body: `Honesty, and it is not close.
+
+Intensity without accurate sight is infatuation with a figure you invented. Benefit without accurate sight is condescension. Seeing the person clearly is the precondition for the other two meaning anything at all — it is not one option among three, it is the ground the others stand on.`,
+        hoursAfterThread: 4,
+      },
+      {
+        author: "owen",
+        body: `Ruth, I think you have described *respect*, which is admirable and not the same thing.
+
+I can see a colleague with total clarity and wish them well without anything I would call love. Something has to make this person matter to you disproportionately, beyond what impartial assessment warrants. That excess is not a flaw in love — it is the thing itself.`,
+        replyToIndex: 0,
         hoursAfterThread: 8,
       },
       {
-        authorEmail: "weil@demo.nyphilosophy.org",
-        authorName: "Simone Weil",
-        body: "I've always found soul-making theodicies morally uncomfortable rather than reassuring — they risk treating a child's suffering as instrumentally useful to someone else's spiritual development. That's a steep price to ask an innocent third party to pay without consent.",
-        replyToIndex: 1,
+        author: "marguerite",
+        body: `The question has a hidden assumption I would like to pull out: that loving well is something you do *to* or *for* another person, and can therefore be scored.
+
+But love is a relation, and relations are not performances. Asking how well I love you is a bit like asking how well I am adjacent to you. Some of the answer is not mine to give.`,
         hoursAfterThread: 14,
       },
       {
-        authorEmail: "aquinas@demo.nyphilosophy.org",
-        authorName: "Thomas Aquinas",
-        body: "That's fair, and it's the strongest objection to soul-making theodicies I know of. I don't think it's fully answerable without appeal to some further good the sufferer themselves receives — which is where an afterlife has to do a lot of load-bearing work in the theory.",
-        replyToIndex: 2,
+        author: "tomas",
+        body: `Attention. That is the measure, and it is nearly the whole of it.
+
+> Attention is the rarest and purest form of generosity.
+
+The capacity to actually notice another person — not the version of them convenient to your own story — is difficult, unglamorous, and where love usually fails. Not in a shortage of feeling. In a shortage of noticing.`,
         hoursAfterThread: 20,
       },
       {
-        authorEmail: "zhuangzi@demo.nyphilosophy.org",
-        authorName: "Zhuangzi",
-        body: "Worth noting this whole framing assumes a God who is a moral agent judged by human standards of goodness in the first place. Not every tradition treats divinity that way — plenty are comfortable with a cosmos indifferent to human welfare without concluding anything is 'wrong.'",
-        hoursAfterThread: 33,
+        author: "clare",
+        body: `Attention is beautiful and insufficient. A skilled manipulator attends closely. A stalker attends obsessively.
+
+Attention *plus* good will, maybe. Which suggests the answer is a cluster rather than a criterion — and I suspect Adaora's closing question is the right one. We want a single measure because measures are tidy, not because love is.`,
+        replyToIndex: 3,
+        hoursAfterThread: 27,
       },
       {
-        authorEmail: "wollstonecraft@demo.nyphilosophy.org",
-        authorName: "Mary Wollstonecraft",
-        body: "Sure, but then you've just relocated the problem rather than solved it — if divinity isn't good in any recognizable sense, why call it worthy of worship rather than merely powerful?",
+        author: "daniel",
+        body: `Practical test that has served me better than any theory: does the person become **more themselves** around you, or less?
+
+It is not a definition. But it catches the failure modes — the suffocating love, the cold love, the improving love — without requiring us to first settle what love is. Sometimes a diagnostic beats an analysis.`,
+        hoursAfterThread: 36,
+      },
+      {
+        author: "adaora",
+        body: `Daniel, that is the most useful thing said here, and I notice it is not a measure at all. It is a *symptom*.
+
+Perhaps that is the shape of the answer. Loving well is not a quantity we score but a condition we detect — the way you diagnose health mostly by the absence of specific illnesses rather than by any positive test.`,
+        replyToIndex: 5,
+        hoursAfterThread: 45,
+      },
+    ],
+  },
+  {
+    tagSlug: "ethics",
+    author: "julian",
+    title: "How should we recognize what is truly valuable and what only appears so?",
+    body: `Almost everything that has ever wasted my time announced itself as important at the moment I chose it.
+
+The difficulty is not that we pursue things we know to be worthless. It is that *appearing* valuable is precisely what worthless things are good at — and the appearance is often more vivid than the reality.
+
+Some proposed tests:
+
+- **The deathbed test** — will this matter at the end?
+- **The reversal test** — if I did not already have it, would I seek it out?
+- **The substitution test** — would something else serve just as well?
+
+Each has a hole in it. The deathbed test overweights the perspective of someone exhausted and afraid. The reversal test discounts things whose value only appears after long acquaintance. The substitution test cannot see what is valuable *precisely because* it is irreplaceable to me in particular.
+
+Is there a better instrument, or only better judgement?`,
+    daysAgo: 4,
+    replies: [
+      {
+        author: "clare",
+        body: `Time. Not a test you apply but a test you *undergo*.
+
+Things that only appear valuable stop appearing so, given long enough. The trouble is that "long enough" is often longer than the decision you needed to make, which makes it excellent for retrospect and nearly useless for choosing.`,
+        hoursAfterThread: 3,
+      },
+      {
+        author: "samir",
+        body: `The question presumes value is out there waiting to be recognized, like a coin in the grass.
+
+If it is instead something we *confer*, then there is nothing to be mistaken about — only choices we later regret or endorse. That reframing dissolves the problem rather than solving it, which I admit is a slightly cheap victory.`,
+        hoursAfterThread: 7,
+      },
+      {
+        author: "hannah",
+        body: `Samir, regret is doing suspicious work in your account.
+
+If value is purely conferred, regret should be impossible — you conferred it, so what is there to regret? The fact that we *can* be wrong about what we valued seems like evidence that there was something to be wrong about.`,
+        replyToIndex: 1,
+        hoursAfterThread: 13,
+      },
+      {
+        author: "wenli",
+        body: `A test the original post missed, and I think it is the strongest one: **does pursuing it make you want more of it, or does it satisfy?**
+
+Merely apparent goods reliably generate appetite. Real ones tend to produce a kind of settling. It is not infallible, but unlike the deathbed test you can run it now.`,
+        hoursAfterThread: 19,
+      },
+      {
+        author: "marguerite",
+        body: `Wen-Li, that cleanly disqualifies philosophy, which has never once satisfied anyone and reliably produces appetite for more of itself.
+
+I say this with affection, and I am not entirely joking. Any test this crisp should be checked against the activity we are currently performing.`,
+        replyToIndex: 3,
+        hoursAfterThread: 25,
+      },
+      {
+        author: "julian",
+        body: `Marguerite — that may be the real finding. Perhaps the good things divide into the ones that *satisfy* and the ones that *sustain*, and we have been trying to force both through one instrument.
+
+Food satisfies. Enquiry sustains. Insatiability is a defect in the first category and the entire point of the second.`,
         replyToIndex: 4,
-        hoursAfterThread: 40,
+        hoursAfterThread: 34,
+      },
+    ],
+  },
+  {
+    tagSlug: "ethics",
+    author: "ruth",
+    title: "Reading group: Aristotle, Nicomachean Ethics, Books I–III",
+    body: `We are taking the first three books over the coming weeks. Any edition is fine — I will cite Bekker numbers so we can stay in step.
+
+**Book I** — the human good, *eudaimonia*, the function argument (1097b22–1098a20)
+**Book II** — virtue as a state of character, habituation, the doctrine of the mean
+**Book III** — voluntary and involuntary action, choice, deliberation, courage
+
+Questions to hold onto as you read:
+
+1. The function argument infers what is *good for* a human from what is *distinctive of* humans. Is that a valid move, or does it slide from a fact about our species to a claim about our welfare?
+2. Aristotle insists virtue is acquired by practice, not teaching. If that is right, what exactly is a book like this one *for*?
+3. Book III makes voluntariness a condition of praise and blame — but character itself is formed by habits laid down before you could choose them. Are we responsible for the person doing the choosing?
+
+Newcomers very welcome. This is the best possible place to read Aristotle for the first time.`,
+    daysAgo: 2,
+    replies: [
+      {
+        author: "owen",
+        body: `On (1) — I think the function argument is weaker than its reputation.
+
+That reason is distinctive of us establishes only that it is *distinctive*, not that it is **good**. Deceit at scale is also fairly distinctive of humans. The inference needs a premise Aristotle never quite supplies: that fulfilling your characteristic activity constitutes flourishing rather than merely defining you.`,
+        hoursAfterThread: 5,
       },
       {
-        authorEmail: "mill@demo.nyphilosophy.org",
-        authorName: "John Stuart Mill",
-        body: "I tend to think this whole debate proves less than either side wants. At best it shows classical omni-theism is harder to square with the world than its defenders admit; at best for the theist, it shows the atheist's certainty is overstated. Rarely does either side walk away actually refuted.",
-        hoursAfterThread: 55,
+        author: "priya",
+        body: `Owen, that reads *ergon* too thinly. Aristotle is not saying "whatever humans uniquely do." He means the activity that, performed excellently, constitutes the thing being fully what it is — as a knife's *ergon* is cutting, not sitting in a drawer.
+
+Deceit is a *failure* of reason's excellent operation, not a rival candidate for it. That does not make the argument airtight, but it is not the crude inference you are describing.`,
+        replyToIndex: 0,
+        hoursAfterThread: 10,
+      },
+      {
+        author: "tomas",
+        body: `On (2), the answer is in II.4: you become just by doing just acts, *as the just person does them* — knowingly, from a settled state, chosen for their own sake.
+
+The book cannot install the state. What it can do is tell you which acts to practise and what the target looks like, so your habituation is aimed at something rather than accumulated at random. Reading it is preparation, not achievement.`,
+        hoursAfterThread: 16,
+      },
+      {
+        author: "hannah",
+        body: `Question (3) is the one that troubles me most, and III.5 does not fully escape it.
+
+Aristotle concedes character is formed by habit and then insists we are responsible because the *individual acts* forming it were voluntary. But the child performing those acts already has whatever character their upbringing gave them. The regress does not obviously terminate anywhere comfortable.`,
+        hoursAfterThread: 23,
+      },
+      {
+        author: "marguerite",
+        body: `Hannah, I think Aristotle's answer is that he is not doing metaphysics here — he is doing politics.
+
+The point of locating responsibility where he does is that praise and blame *work*: they shape the habits of people still forming. Whether the regress terminates is, for his purposes, beside the point. It is a practical doctrine wearing metaphysical clothes.`,
+        replyToIndex: 3,
+        hoursAfterThread: 31,
+      },
+      {
+        author: "samir",
+        body: `Practical note for newcomers: **do not** start with Book I's methodology and expect rigour. Aristotle says outright (1094b) that ethics admits only the precision its subject allows.
+
+People arrive expecting geometry, find something closer to seasoned advice, and conclude he is being sloppy. He is not. He told you the standard in advance.`,
+        hoursAfterThread: 40,
       },
     ],
   },
   {
     tagSlug: "aesthetics",
-    authorEmail: "hume@demo.nyphilosophy.org",
-    authorName: "David Hume",
+    author: "clare",
     title: "Can AI-generated art be beautiful in the same sense as human art?",
-    body: "Suppose a model produces a painting that, by every formal measure, is indistinguishable from a celebrated human masterpiece — composition, color, technique, even a plausible 'meaning' if you ask it to explain the piece. Does it lack something essential that a human-made equivalent has, or is our resistance to calling it beautiful just sentimentality about authorship?",
-    daysAgo: 4,
+    body: `Suppose a model produces a painting that, by every formal measure, is indistinguishable from a celebrated human work — composition, colour, technique, even a plausible account of its own meaning if you ask.
+
+Does it lack something essential? Or is our resistance to calling it beautiful just sentimentality about authorship?
+
+I am genuinely undecided, and I would rather hear the strongest version of each side than the popular version.`,
+    daysAgo: 7,
     replies: [
       {
-        authorEmail: "kant@demo.nyphilosophy.org",
-        authorName: "Immanuel Kant",
-        body: "Beauty for me was always about the judgment, not the object's origin — a disinterested pleasure that claims universal validity. If a viewer has that experience in front of the AI piece with no knowledge of its origin, the aesthetic judgment has already happened, origin be damned.",
+        author: "daniel",
+        body: `Beauty is in the *judgement*, not the object's provenance — a disinterested pleasure that claims universal validity.
+
+If a viewer has that experience standing in front of the work, knowing nothing of its origin, the aesthetic judgement has already occurred. Learning the origin afterwards can change how you feel about the *situation*. I do not see how it reaches back and unmakes the experience.`,
         hoursAfterThread: 4,
       },
       {
-        authorEmail: "hegel@demo.nyphilosophy.org",
-        authorName: "G.W.F. Hegel",
-        body: "I'd resist that. Art is Spirit's self-expression through a particular historical moment — a made thing is always in dialogue with a tradition, an artist's struggle, their moment in history. A generative model has no history to be in dialogue with; it's an average, not a position.",
+        author: "adaora",
+        body: `I resist that. A made thing is always in dialogue with a tradition, with the maker's struggle, with their moment. That dialogue is not decoration on top of the object — it is a good part of what we are responding to.
+
+A generative model has no position to speak from. It has an **average**.`,
         hoursAfterThread: 10,
       },
       {
-        authorEmail: "kant@demo.nyphilosophy.org",
-        authorName: "Immanuel Kant",
-        body: "But couldn't you say the same about a human artist heavily imitating a style — are they always in a 'meaningful' historical dialogue, or just producing skilled pastiche? I'm not sure the line is as clean as 'made by a person' vs. 'not.'",
+        author: "daniel",
+        body: `But say the same about a skilled human working deliberately in an established style. Are they in "meaningful historical dialogue," or producing accomplished pastiche?
+
+I do not think the line is where you want it to be. It certainly is not simply "made by a person."`,
         replyToIndex: 1,
         hoursAfterThread: 15,
       },
       {
-        authorEmail: "wollstonecraft@demo.nyphilosophy.org",
-        authorName: "Mary Wollstonecraft",
-        body: "There's also a question of what we owe the artists whose labor trained the model in the first place — even bracketing metaphysics, there's a real ethical wrinkle in calling something 'beautiful' when it was built by absorbing thousands of uncredited human works.",
+        author: "priya",
+        body: `There is also the question of what we owe the artists whose work trained the model. Bracketing metaphysics entirely, there is an ethical wrinkle in calling something beautiful when it was assembled by absorbing thousands of uncredited works.`,
         hoursAfterThread: 24,
       },
       {
-        authorEmail: "mill@demo.nyphilosophy.org",
-        authorName: "John Stuart Mill",
-        body: "That's an important point but a separate one from the aesthetic question — we can condemn the process while still asking honestly whether the output produces the aesthetic response we're interested in.",
+        author: "owen",
+        body: `Important, but a *different* question. We can condemn the process and still ask honestly whether the output produces the response we are interested in. Collapsing the two lets us avoid the harder one.`,
         replyToIndex: 3,
         hoursAfterThread: 29,
       },
       {
-        authorEmail: "zhuangzi@demo.nyphilosophy.org",
-        authorName: "Zhuangzi",
-        body: "The cook Ding cut up oxen so skillfully because he'd stopped seeing 'an ox' and moved with the natural grain of things after years of practice — skill was inseparable from a certain kind of attention built over time. I'm skeptical anything without that history of attention can produce more than a clever simulacrum of what attention produces.",
+        author: "tomas",
+        body: `The cook Ding carved oxen so well because after years he had stopped seeing "an ox" and moved with the grain of the thing. Skill was inseparable from a particular quality of attention built over time.
+
+I am sceptical that anything without that history produces more than a convincing simulacrum of what attention produces. Though I concede I could not always tell them apart.`,
         hoursAfterThread: 40,
       },
     ],
   },
   {
-    tagSlug: "science",
-    authorEmail: "turing@demo.nyphilosophy.org",
-    authorName: "Alan Turing",
-    title: "Is Kuhn's notion of paradigm shifts compatible with scientific realism?",
-    body: "Kuhn argued that scientific revolutions replace one paradigm with an incommensurable successor — not a straightforward accumulation of truth but something closer to a Gestalt shift. If paradigms are genuinely incommensurable, in what sense can we say science is converging on a truer picture of reality rather than just cycling through different useful frameworks?",
-    daysAgo: 3,
+    tagSlug: "religion",
+    author: "samir",
+    title: "Does the problem of evil actually refute theism?",
+    body: `Epicurus's formulation, in the usual shape:
+
+> Is God willing to prevent evil, but not able? Then he is not omnipotent.
+> Is he able, but not willing? Then he is malevolent.
+> Is he both able and willing? Then whence evil?
+
+The free will defence answers the moral half. But what about *natural* evil — earthquakes, disease, a child born with a genetic disorder? Does suffering that no free choice caused settle the matter?`,
+    daysAgo: 8,
     replies: [
       {
-        authorEmail: "hegel@demo.nyphilosophy.org",
-        authorName: "G.W.F. Hegel",
-        body: "Incommensurability doesn't have to mean 'no rational continuity' — it can mean successive frameworks are related dialectically, each an advance that both preserves and negates what came before. Convergence needn't look linear to still be convergence.",
+        author: "hannah",
+        body: `Natural evil is exactly where the free will defence runs out of road. You can attribute war to human choice. You cannot attribute childhood leukaemia to it.
+
+If this is the best of all possible worlds, the architect has some explaining to do.`,
         hoursAfterThread: 3,
       },
       {
-        authorEmail: "mill@demo.nyphilosophy.org",
-        authorName: "John Stuart Mill",
-        body: "Practically speaking, whatever you call it philosophically, a modern engineer's bridge stands up and a medieval one didn't stand up nearly as reliably. That track record of increasing predictive and technological success is hard to explain if theories are genuinely incommensurable rather than progressively better approximations.",
-        hoursAfterThread: 9,
+        author: "marguerite",
+        body: `The soul-making response holds up better than it is usually given credit for. A world with real stakes, real fragility and real risk is what makes courage, compassion and growth possible at all. Remove every natural evil and you remove the conditions for most of what we call virtue.`,
+        hoursAfterThread: 8,
       },
       {
-        authorEmail: "turing@demo.nyphilosophy.org",
-        authorName: "Alan Turing",
-        body: "That's the 'no miracles' argument in a nutshell, and I find it fairly persuasive — but Laudan's pessimistic meta-induction still nags at me. Plenty of past theories were also empirically successful in their day and later turned out to be flatly false: phlogiston, the luminiferous ether. Why think ours are different?",
+        author: "ruth",
+        body: `I have always found soul-making theodicies morally uncomfortable rather than reassuring. They risk treating a child's suffering as instrumentally useful to *someone else's* spiritual development.
+
+That is a steep price to charge an innocent third party without their consent.`,
         replyToIndex: 1,
-        hoursAfterThread: 16,
+        hoursAfterThread: 14,
       },
       {
-        authorEmail: "hume@demo.nyphilosophy.org",
-        authorName: "David Hume",
-        body: "Because the alternative — that our current theories are also probably false in ways we can't currently detect — is unfalsifiable pessimism dressed up as humility. It's not an argument for anything, just a permanent asterisk.",
+        author: "marguerite",
+        body: `Fair, and it is the strongest objection I know of. I do not think it is answerable without appeal to some further good the sufferer *themselves* receives — which is where an afterlife ends up doing a great deal of load-bearing work.`,
         replyToIndex: 2,
-        hoursAfterThread: 22,
+        hoursAfterThread: 20,
       },
       {
-        authorEmail: "zhuangzi@demo.nyphilosophy.org",
-        authorName: "Zhuangzi",
-        body: "I notice both sides assume there's a single 'reality' theories are converging on or failing to converge on. Depending how seriously you take instrumentalism, the paradigms could just be increasingly useful tools for prediction without there being a fact of the matter about which one 'really' describes the world.",
-        hoursAfterThread: 30,
+        author: "wenli",
+        body: `Worth noticing that the whole framing assumes a God who is a moral agent judged by human standards of goodness. Not every tradition takes that on. Plenty are content with a cosmos indifferent to human welfare without concluding anything has gone *wrong*.`,
+        hoursAfterThread: 33,
       },
       {
-        authorEmail: "aquinas@demo.nyphilosophy.org",
-        authorName: "Thomas Aquinas",
-        body: "But surely something explains why the tools keep getting more useful rather than randomly fluctuating — and 'the world actually has a structure the tools are tracking' is a far simpler explanation than 'it's a coincidence that keeps compounding.'",
+        author: "julian",
+        body: `Then you have relocated the problem rather than solved it. If divinity is not good in any sense we recognise, why is it an object of worship rather than merely of fear?`,
         replyToIndex: 4,
-        hoursAfterThread: 36,
-      },
-    ],
-  },
-  {
-    tagSlug: "logic",
-    authorEmail: "wittgenstein@demo.nyphilosophy.org",
-    authorName: "Ludwig Wittgenstein",
-    title: "Does the Liar's Paradox show that truth is inherently unstable?",
-    body: "'This sentence is false.' If it's true, it's false; if it's false, it's true. Tarski's response was to banish natural languages from having a consistent truth predicate for their own sentences, requiring a hierarchy of meta-languages instead. Graham Priest and the dialetheists take the paradox at face value instead: some contradictions are just true. Which response actually solves the problem rather than just relabeling it?",
-    daysAgo: 2,
-    replies: [
-      {
-        authorEmail: "kant@demo.nyphilosophy.org",
-        authorName: "Immanuel Kant",
-        body: "Tarski's hierarchy always struck me as a technical fix rather than a philosophical one — it tells you how to build a language that avoids the paradox, not why natural language, which clearly does allow self-reference, isn't simply broken in a deep way.",
-        hoursAfterThread: 2,
+        hoursAfterThread: 40,
       },
       {
-        authorEmail: "hegel@demo.nyphilosophy.org",
-        authorName: "G.W.F. Hegel",
-        body: "Dialetheism has always seemed to me the more honest option — contradiction is not automatically the sign of a broken system, it can be the sign of a system rich enough to talk about itself. Rejecting that outright is a metaphysical prejudice, not a proof.",
-        hoursAfterThread: 6,
-      },
-      {
-        authorEmail: "wittgenstein@demo.nyphilosophy.org",
-        authorName: "Ludwig Wittgenstein",
-        body: "I'm more sympathetic to a third option: the sentence isn't true or false because it isn't really saying anything determinate in the first place — it's a piece of language that looks grammatical but is doing no genuine work, the way 'colorless green ideas sleep furiously' is grammatical without expressing a thought.",
-        replyToIndex: 1,
-        hoursAfterThread: 11,
-      },
-      {
-        authorEmail: "hume@demo.nyphilosophy.org",
-        authorName: "David Hume",
-        body: "That feels like it dodges rather than resolves — plenty of paradoxical sentences seem to be saying something perfectly determinate right up until the contradiction bites. Why single out the Liar as 'meaningless' rather than any other true-looking sentence?",
-        replyToIndex: 2,
-        hoursAfterThread: 18,
-      },
-      {
-        authorEmail: "mill@demo.nyphilosophy.org",
-        authorName: "John Stuart Mill",
-        body: "From where I sit this matters enormously for anything built on classical logic — if some sentences are neither true nor false, or worse, both, entire proof systems relying on excluded middle or non-contradiction need patching before you can trust anything downstream.",
-        hoursAfterThread: 25,
-      },
-      {
-        authorEmail: "turing@demo.nyphilosophy.org",
-        authorName: "Alan Turing",
-        body: "Which is exactly why computer science cares — a programming language or proof assistant that admits self-referential 'this statement is false' style constructions without a type hierarchy to block them can be made to prove anything at all. Practically, Tarski's fix, or something equivalent, is unavoidable if you want a system you can trust for real work.",
-        replyToIndex: 4,
-        hoursAfterThread: 31,
-      },
-      {
-        authorEmail: "aquinas@demo.nyphilosophy.org",
-        authorName: "Thomas Aquinas",
-        body: "I'd only add that this problem is far older than Tarski or Russell — the Liar goes back to Eubulides in the 4th century BC. That it has survived over two thousand years of serious attention without full resolution should itself tell us something about how deep the problem runs, whichever response you prefer.",
-        hoursAfterThread: 48,
+        author: "clare",
+        body: `My honest read: this debate proves less than either side wants. At best it shows classical omni-theism is harder to square with the world than its defenders concede. At best for the theist, it shows the atheist's confidence is overstated.
+
+Rarely does anyone actually walk away refuted.`,
+        hoursAfterThread: 55,
       },
     ],
   },
@@ -351,14 +580,20 @@ async function seedTags() {
   return bySlug;
 }
 
-async function seedThread(spec: ThreadSeed, tagsBySlug: Record<string, { id: string }>) {
-  const existing = await prisma.thread.findFirst({ where: { title: spec.title } });
-  if (existing) {
-    console.log(`Skipping "${spec.title}" — already seeded.`);
-    return;
-  }
+/**
+ * Seed content is demo material, so it is fully replaceable — drop the old
+ * threads (and everything hanging off them) before writing the new set.
+ */
+async function wipeThreads() {
+  await prisma.postLike.deleteMany();
+  await prisma.threadLike.deleteMany();
+  await prisma.post.deleteMany();
+  await prisma.thread.deleteMany();
+  console.log("Cleared existing threads, replies and likes.");
+}
 
-  const author = await upsertUser(spec.authorEmail, spec.authorName);
+async function seedThread(spec: ThreadSeed, tagsBySlug: Record<string, { id: string }>) {
+  const author = await upsertUser(spec.author);
   const createdAt = new Date(Date.now() - spec.daysAgo * DAY);
 
   const thread = await prisma.thread.create({
@@ -374,7 +609,7 @@ async function seedThread(spec: ThreadSeed, tagsBySlug: Record<string, { id: str
 
   const createdPosts: { id: string }[] = [];
   for (const r of spec.replies) {
-    const replyAuthor = await upsertUser(r.authorEmail, r.authorName);
+    const replyAuthor = await upsertUser(r.author);
     const parentId = r.replyToIndex !== undefined ? createdPosts[r.replyToIndex].id : null;
     const post = await prisma.post.create({
       data: {
@@ -389,11 +624,12 @@ async function seedThread(spec: ThreadSeed, tagsBySlug: Record<string, { id: str
   }
   await recomputeThreadHotScore(thread.id);
 
-  console.log(`Seeded thread "${spec.title}" with ${spec.replies.length} replies.`);
+  console.log(`Seeded "${spec.title.slice(0, 56)}…" (${spec.replies.length} replies)`);
 }
 
 async function main() {
   const tagsBySlug = await seedTags();
+  await wipeThreads();
   for (const spec of THREADS) {
     await seedThread(spec, tagsBySlug);
   }
@@ -406,20 +642,13 @@ async function main() {
     update: { role: "admin" },
     create: {
       email: "admin@demo.nyphilosophy.org",
-      displayName: "Society Admin",
+      displayName: "Eleanor Vance",
       passwordHash: await bcrypt.hash(DEMO_PASSWORD, 10),
       verificationStatus: "VERIFIED",
       role: "admin",
     },
   });
-  console.log("Seeded demo admin account (admin@demo.nyphilosophy.org / demo-password-123).");
-
-  // Backfill hotScore for any thread that predates this field (e.g. created
-  // via the API directly during earlier manual testing).
-  const allThreads = await prisma.thread.findMany({ select: { id: true } });
-  for (const t of allThreads) {
-    await recomputeThreadHotScore(t.id);
-  }
+  console.log("Seeded demo admin (admin@demo.nyphilosophy.org / demo-password-123).");
 }
 
 main()

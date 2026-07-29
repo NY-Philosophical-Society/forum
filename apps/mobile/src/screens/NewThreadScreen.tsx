@@ -2,6 +2,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { TagWithCount } from "@nyps-forum/shared";
+import { MarkdownHint } from "../components/MarkdownHint";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
@@ -67,6 +68,7 @@ export function NewThreadScreen({ route, navigation }: Props) {
         placeholder="State your position, or lay out the question..."
         placeholderTextColor={colors.muted}
       />
+      <MarkdownHint />
       <Text style={styles.label}>Tags (optional)</Text>
       <View style={styles.tagWrap}>
         {tags?.map((t) => (

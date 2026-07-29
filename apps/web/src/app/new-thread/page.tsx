@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 import type { TagWithCount } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
+import { MarkdownEditor } from "../markdown";
 
 function NewThreadForm() {
   const { user, token, loading } = useAuth();
@@ -86,11 +87,11 @@ function NewThreadForm() {
         </label>
         <label>
           Opening post
-          <textarea
+          <MarkdownEditor
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={setBody}
             placeholder="State your position, or lay out the question..."
-            style={{ minHeight: "180px" }}
+            minHeight="200px"
             required
           />
         </label>

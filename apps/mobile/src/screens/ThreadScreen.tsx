@@ -13,6 +13,8 @@ import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { FeedStackParamList } from "../navigation";
+import { Markdown } from "../components/Markdown";
+import { MarkdownHint } from "../components/MarkdownHint";
 import { ReportButton } from "../components/ReportButton";
 
 type Props = NativeStackScreenProps<FeedStackParamList, "Thread">;
@@ -161,7 +163,7 @@ export function ThreadScreen({ route }: Props) {
             </Pressable>
           )}
           <View style={styles.card}>
-            <Text style={styles.body}>{thread.body}</Text>
+            <Markdown>{thread.body}</Markdown>
             <View style={styles.likeRow}>
               <Pressable
                 style={[styles.likeButton, thread.myLiked && styles.likeButtonActive]}
@@ -205,6 +207,7 @@ export function ThreadScreen({ route }: Props) {
                 value={replyBody}
                 onChangeText={setReplyBody}
               />
+              <MarkdownHint />
               <Pressable style={styles.button} onPress={submitReply} disabled={submitting}>
                 <Text style={styles.buttonText}>{submitting ? "Posting..." : "Post reply"}</Text>
               </Pressable>
@@ -234,7 +237,7 @@ function PostItem({
 
   return (
     <View style={[styles.post, { marginLeft: post.depth * spacing.lg }]}>
-      <Text style={styles.body}>{post.body}</Text>
+      <Markdown>{post.body}</Markdown>
       <View style={styles.byline}>
         <View style={styles.miniAvatar}>
           <Text style={styles.miniAvatarText}>

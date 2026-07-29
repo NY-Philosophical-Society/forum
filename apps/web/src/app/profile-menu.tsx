@@ -65,6 +65,9 @@ export function ProfileMenu() {
               </span>
             )}
           </Link>
+          <Link href="/formatting" onClick={() => setOpen(false)}>
+            Formatting guide
+          </Link>
           <Link href="/settings" onClick={() => setOpen(false)}>
             Settings
           </Link>

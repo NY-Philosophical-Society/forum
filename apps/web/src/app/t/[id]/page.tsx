@@ -7,6 +7,7 @@ import { flattenPostTree, formatDateTime, type ThreadDetail } from "@nyps-forum/
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
+import { Markdown, MarkdownEditor } from "../../markdown";
 import { ReportButton } from "../../report-button";
 import { Avatar, PostSkeleton, Skeleton } from "../../ui";
 
@@ -152,7 +153,7 @@ export default function ThreadPage() {
       )}
 
       <div className="card">
-        <p className="prose">{thread.body}</p>
+        <Markdown>{thread.body}</Markdown>
         <div className="like-row">
           <button
             className={`like-button ${thread.myLiked ? "like-button-active" : ""}`}
@@ -195,7 +196,7 @@ export default function ThreadPage() {
           </h3>
           {orderedPosts.map((p) => (
             <div className="post" key={p.id} style={{ marginLeft: `${p.depth * 1.5}rem` }}>
-              <p className="prose">{p.body}</p>
+              <Markdown>{p.body}</Markdown>
               <div className="row" style={{ marginTop: "0.6rem" }}>
                 <Avatar name={p.author.displayName} size={22} />
                 <p className="meta">
@@ -239,10 +240,11 @@ export default function ThreadPage() {
                     </button>
                   )}
                 </span>
-                <textarea
+                <MarkdownEditor
                   value={replyBody}
-                  onChange={(e) => setReplyBody(e.target.value)}
+                  onChange={setReplyBody}
                   placeholder="Make your case..."
+                  minHeight="120px"
                   required
                 />
               </label>
