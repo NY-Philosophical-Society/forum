@@ -1,13 +1,124 @@
 import { randomUUID } from "crypto";
 import express, { Router } from "express";
 import sharp from "sharp";
+import { updateProfileSchema } from "@nyps-forum/shared";
 import { prisma } from "../db";
-import { requireAdmin, requireAuth } from "../middleware/auth";
+import { optionalAuth, requireAdmin, requireAuth } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
 import { storageProvider } from "../lib/storage-provider";
 import { writeLimiter } from "../lib/rate-limit";
 
 export const usersRouter = Router();
+
+const PROFILE_PAGE_LIMIT = 10;
+
+/**
+ * Public profile: header info plus the user's threads and replies, each
+ * independently paginated. Mirrors the read-access model of GET /threads/:id:
+ * anonymous web visitors get the header only (previewOnly), any account
+ * reads the content lists in full.
+ */
+usersRouter.get("/:id/profile", optionalAuth, async (req, res) => {
+  const profileUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!profileUser || profileUser.deletedAt) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  const viewerId = req.user?.id;
+  const previewOnly = !viewerId;
+  const threadsLimit = Math.min(Number(req.query.threadsLimit) || PROFILE_PAGE_LIMIT, 50);
+  const threadsOffset = Math.max(Number(req.query.threadsOffset) || 0, 0);
+  const repliesLimit = Math.min(Number(req.query.repliesLimit) || PROFILE_PAGE_LIMIT, 50);
+  const repliesOffset = Math.max(Number(req.query.repliesOffset) || 0, 0);
+
+  const [threadCount, replyCount, threads, replies] = await Promise.all([
+    prisma.thread.count({ where: { authorId: profileUser.id } }),
+    prisma.post.count({ where: { authorId: profileUser.id } }),
+    previewOnly
+      ? []
+      : prisma.thread.findMany({
+          where: { authorId: profileUser.id },
+          orderBy: { createdAt: "desc" },
+          skip: threadsOffset,
+          take: threadsLimit,
+          include: {
+            tags: true,
+            likes: { where: { userId: viewerId } },
+            _count: { select: { posts: true, likes: true } },
+          },
+        }),
+    previewOnly
+      ? []
+      : prisma.post.findMany({
+          where: { authorId: profileUser.id },
+          orderBy: { createdAt: "desc" },
+          skip: repliesOffset,
+          take: repliesLimit,
+          include: { thread: { select: { title: true } }, _count: { select: { likes: true } } },
+        }),
+  ]);
+
+  res.json({
+    user: toPublicUser(profileUser),
+    threadCount,
+    replyCount,
+    previewOnly,
+    threads: threads.map((t) => ({
+      id: t.id,
+      title: t.title,
+      author: toPublicUser(profileUser),
+      createdAt: t.createdAt.toISOString(),
+      tags: t.tags.map((tag) => ({ id: tag.id, slug: tag.slug, name: tag.name, description: tag.description })),
+      likeCount: t._count.likes,
+      myLiked: t.likes.length > 0,
+      postCount: t._count.posts,
+      locked: t.locked,
+    })),
+    hasMoreThreads: !previewOnly && threadsOffset + threads.length < threadCount,
+    replies: replies.map((p) => ({
+      id: p.id,
+      threadId: p.threadId,
+      threadTitle: p.thread.title,
+      body: p.body,
+      createdAt: p.createdAt.toISOString(),
+      likeCount: p._count.likes,
+    })),
+    hasMoreReplies: !previewOnly && repliesOffset + replies.length < replyCount,
+  });
+});
+
+/**
+ * Edit your own profile (bio, display name — avatar has its own route).
+ * The display name is the legal name tied to ID verification, so a VERIFIED
+ * user changing it would invalidate that link; we block the edit with an
+ * explanation rather than silently resetting them to UNVERIFIED and
+ * stripping posting rights.
+ */
+usersRouter.patch("/me", requireAuth, writeLimiter, async (req, res) => {
+  const parsed = updateProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  const { bio, displayName } = parsed.data;
+
+  const data: { bio?: string | null; displayName?: string } = {};
+  if (bio !== undefined) {
+    const trimmed = bio?.trim() ?? "";
+    data.bio = trimmed === "" ? null : trimmed;
+  }
+  if (displayName !== undefined && displayName !== req.user!.displayName) {
+    if (req.user!.verificationStatus === "VERIFIED") {
+      return res.status(403).json({
+        error:
+          "Your display name is the legal name your identity was verified against, so it can't be changed while verified. Contact the Society if your legal name has changed.",
+      });
+    }
+    data.displayName = displayName.trim();
+  }
+
+  const user = await prisma.user.update({ where: { id: req.user!.id }, data });
+  res.json({ user: toPublicUser(user) });
+});
 
 /* ---- Avatar upload ------------------------------------------------------ */
 
@@ -97,6 +208,7 @@ usersRouter.get("/", requireAuth, async (req, res) => {
     where: {
       displayName: { contains: search },
       id: { not: req.user!.id },
+      deletedAt: null,
     },
     take: 20,
   });
