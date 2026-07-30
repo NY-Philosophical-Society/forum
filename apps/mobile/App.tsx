@@ -58,6 +58,9 @@ import { AdminReportsScreen } from "./src/screens/AdminReportsScreen";
 import { NotificationsScreen } from "./src/screens/NotificationsScreen";
 import { SearchScreen } from "./src/screens/SearchScreen";
 import { SavedScreen } from "./src/screens/SavedScreen";
+import { ChaptersScreen } from "./src/screens/ChaptersScreen";
+import { ChapterFeedScreen } from "./src/screens/ChapterFeedScreen";
+import { DirectoryScreen } from "./src/screens/DirectoryScreen";
 
 const FeedStackNav = createNativeStackNavigator<FeedStackParamList>();
 const MessagesStackNav = createNativeStackNavigator<MessagesStackParamList>();
@@ -134,6 +137,16 @@ function FeedStack() {
         options={{ title: "Profile" }}
       />
       <FeedStackNav.Screen name="Search" component={SearchScreen} options={{ title: "Search" }} />
+      <FeedStackNav.Screen
+        name="Chapters"
+        component={ChaptersScreen}
+        options={{ title: "Chapters" }}
+      />
+      <FeedStackNav.Screen
+        name="Chapter"
+        component={ChapterFeedScreen}
+        options={{ title: "Chapter" }}
+      />
     </FeedStackNav.Navigator>
   );
 }
@@ -187,6 +200,11 @@ function ProfileStack() {
         name="Saved"
         component={SavedScreen}
         options={{ title: "Saved threads" }}
+      />
+      <ProfileStackNav.Screen
+        name="Directory"
+        component={DirectoryScreen}
+        options={{ title: "Member directory" }}
       />
       <ProfileStackNav.Screen
         name="UserProfile"

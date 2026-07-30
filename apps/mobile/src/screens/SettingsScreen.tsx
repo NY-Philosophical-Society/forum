@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
-import type { NotificationPreferences, PublicUser } from "@nyps-forum/shared";
+import {
+  DIRECTORY_BIO_MAX_LENGTH,
+  type DirectorySettings,
+  type NotificationPreferences,
+  type PublicUser,
+} from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
@@ -27,6 +32,13 @@ export function SettingsScreen() {
   const [redeemed, setRedeemed] = useState(false);
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [prefsError, setPrefsError] = useState<string | null>(null);
+  const [directory, setDirectory] = useState<DirectorySettings | null>(null);
+  const [dirBioDraft, setDirBioDraft] = useState("");
+  const [dirBioSaved, setDirBioSaved] = useState(false);
+  const [dirSaving, setDirSaving] = useState(false);
+  const [dirError, setDirError] = useState<string | null>(null);
+
+  const isMember = Boolean(user && (user.isSupporter || user.role === "admin"));
 
   // This screen also sits in the logged-out stack; no token, no section.
   useEffect(() => {
@@ -35,7 +47,43 @@ export function SettingsScreen() {
       .get<{ preferences: NotificationPreferences }>("/api/notifications/preferences", token)
       .then((res) => setPrefs(res.preferences))
       .catch(() => {});
+    api
+      .get<{ directory: DirectorySettings }>("/api/auth/account", token)
+      .then((res) => {
+        setDirectory(res.directory);
+        setDirBioDraft(res.directory.directoryBio ?? "");
+      })
+      .catch(() => {});
   }, [token]);
+
+  async function saveDirectory(patch: Partial<DirectorySettings>) {
+    if (!token || !directory) return;
+    const next = { ...directory, ...patch };
+    setDirectory(next); // optimistic — reverted below if the save fails
+    setDirError(null);
+    try {
+      await api.patch("/api/users/me", patch, token);
+    } catch (err: any) {
+      setDirectory(directory);
+      setDirError(err.message ?? "Could not save that");
+    }
+  }
+
+  async function saveDirectoryBio() {
+    if (!token) return;
+    setDirSaving(true);
+    setDirBioSaved(false);
+    setDirError(null);
+    try {
+      await api.patch("/api/users/me", { directoryBio: dirBioDraft.trim() || null }, token);
+      setDirectory((prev) => (prev ? { ...prev, directoryBio: dirBioDraft.trim() || null } : prev));
+      setDirBioSaved(true);
+    } catch (err: any) {
+      setDirError(err.message ?? "Could not save your interests");
+    } finally {
+      setDirSaving(false);
+    }
+  }
 
   async function togglePref(key: keyof NotificationPreferences) {
     if (!token || !prefs) return;
@@ -160,24 +208,86 @@ export function SettingsScreen() {
         </View>
       )}
 
+      {user && directory && (
+        <View style={styles.section}>
+          <Text style={styles.h2}>Member directory</Text>
+          {!isMember && (
+            <Text style={styles.meta}>
+              The directory is a member space — these settings take effect once you&apos;re a
+              member (redeem a code below).
+            </Text>
+          )}
+          <View style={styles.prefRow}>
+            <View style={styles.prefText}>
+              <Text style={styles.prefLabel}>List me in the member directory</Text>
+              <Text style={styles.prefHint}>
+                Other members will see your photo, name, chapters, and the interests below —
+                nothing else, and never outside the membership. Off by default.
+              </Text>
+            </View>
+            <Switch
+              value={directory.directoryVisible}
+              onValueChange={() => saveDirectory({ directoryVisible: !directory.directoryVisible })}
+              trackColor={{ false: colors.border, true: colors.accent }}
+            />
+          </View>
+          <View style={styles.prefRow}>
+            <View style={styles.prefText}>
+              <Text style={[styles.prefLabel, !directory.directoryVisible && styles.prefDisabled]}>
+                Open to a reading partner or study group
+              </Text>
+              <Text style={styles.prefHint}>
+                Adds a &ldquo;⇄ partners&rdquo; mark to your entry and puts you in that filter.
+                People reach out by direct message.
+              </Text>
+            </View>
+            <Switch
+              value={directory.openToPartners}
+              disabled={!directory.directoryVisible}
+              onValueChange={() => saveDirectory({ openToPartners: !directory.openToPartners })}
+              trackColor={{ false: colors.border, true: colors.accent }}
+            />
+          </View>
+          <TextInput
+            style={[styles.input, { marginTop: spacing.sm, minHeight: 64 }]}
+            value={dirBioDraft}
+            onChangeText={(t) => {
+              setDirBioDraft(t);
+              setDirBioSaved(false);
+            }}
+            placeholder="Interests — what you're reading, what you want to argue about"
+            placeholderTextColor={colors.muted}
+            maxLength={DIRECTORY_BIO_MAX_LENGTH}
+            multiline
+          />
+          {dirError && <Text style={styles.error}>{dirError}</Text>}
+          <Pressable style={styles.button} onPress={saveDirectoryBio} disabled={dirSaving}>
+            <Text style={styles.buttonText}>
+              {dirSaving ? "Saving..." : dirBioSaved ? "Saved" : "Save interests"}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
       {user && (
         <View style={styles.section}>
-          <Text style={styles.h2}>Supporter access</Text>
+          <Text style={styles.h2}>Membership</Text>
           {user.isSupporter || redeemed ? (
             <Text style={styles.success}>
-              You have supporter access — thank you for sustaining the Society&apos;s events and
-              journal.
+              You&apos;re a member of the Society — thank you for sustaining its events and
+              journal. Chapters, the member directory, and event discussions are open to you.
             </Text>
           ) : (
             <>
               <Text style={styles.meta}>
-                Have an access code from a donation or journal subscription? Redeem it here.
+                Membership opens the member spaces — chapters, the directory, posting in event
+                threads. Have a code from a donation or journal subscription? Redeem it here.
               </Text>
               <TextInput
                 style={styles.input}
                 value={code}
                 onChangeText={setCode}
-                placeholder="Access code"
+                placeholder="Membership code"
                 placeholderTextColor={colors.muted}
                 autoCapitalize="characters"
               />

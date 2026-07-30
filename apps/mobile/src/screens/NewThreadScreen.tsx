@@ -12,7 +12,7 @@ import type { FeedStackParamList } from "../navigation";
 type Props = NativeStackScreenProps<FeedStackParamList, "NewThread">;
 
 export function NewThreadScreen({ route, navigation }: Props) {
-  const { tagId } = route.params;
+  const { tagId, chapterId, chapterName } = route.params;
   const { token } = useAuth();
   const { colors } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -37,7 +37,7 @@ export function NewThreadScreen({ route, navigation }: Props) {
     try {
       const { thread } = await api.post<{ thread: { id: string } }>(
         "/api/threads",
-        { title, body, tagIds: selectedTagIds },
+        { title, body, tagIds: selectedTagIds, ...(chapterId ? { chapterId } : {}) },
         token,
       );
       navigation.replace("Thread", { threadId: thread.id });
@@ -50,7 +50,11 @@ export function NewThreadScreen({ route, navigation }: Props) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ padding: spacing.lg }}>
-      <Text style={styles.meta}>Pose the question well and the discussion will follow.</Text>
+      <Text style={styles.meta}>
+        {chapterName
+          ? `Posting in the ${chapterName} chapter — visible to its members only.`
+          : "Pose the question well and the discussion will follow."}
+      </Text>
       <Text style={styles.label}>Title</Text>
       <TextInput
         style={styles.input}

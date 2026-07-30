@@ -34,6 +34,11 @@ export function ProfileScreen({ navigation }: Props) {
       onPress: () => navigation.navigate("Saved"),
     },
     {
+      icon: "people-outline",
+      label: "Member directory",
+      onPress: () => navigation.navigate("Directory"),
+    },
+    {
       icon: "create-outline",
       label: "Edit profile",
       onPress: () => navigation.navigate("EditProfile"),

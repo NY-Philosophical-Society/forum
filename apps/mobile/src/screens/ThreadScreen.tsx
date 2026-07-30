@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import {
   flattenPostTree,
   formatDate,
@@ -44,6 +44,11 @@ export function ThreadScreen({ route, navigation }: Props) {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState("");
   const [saving, setSaving] = useState(false);
+  // Event attendance: "I was there" code redemption.
+  const [attendCode, setAttendCode] = useState("");
+  const [attendOpen, setAttendOpen] = useState(false);
+  const [attending, setAttending] = useState(false);
+  const [attendError, setAttendError] = useState<string | null>(null);
 
   const load = useCallback(
     (window: number) => {
@@ -187,6 +192,22 @@ export function ThreadScreen({ route, navigation }: Props) {
     }
   }
 
+  async function redeemAttendance() {
+    if (!token || !attendCode.trim()) return;
+    setAttending(true);
+    setAttendError(null);
+    try {
+      await api.post(`/api/threads/${threadId}/attend`, { code: attendCode }, token);
+      setAttendCode("");
+      setAttendOpen(false);
+      load(repliesWindow);
+    } catch (err: any) {
+      setAttendError(err.message ?? "Could not record your attendance");
+    } finally {
+      setAttending(false);
+    }
+  }
+
   async function submitReply() {
     if (!token || !replyBody.trim()) return;
     setSubmitting(true);
@@ -225,7 +246,12 @@ export function ThreadScreen({ route, navigation }: Props) {
 
   const isAdmin = user?.role === "admin";
   const canLike = user?.verificationStatus === "VERIFIED";
-  const canPost = canLike && !thread.locked && !thread.deleted;
+  const isEvent = thread.kind === "event";
+  // Event threads: reading is open, posting is member-only — thread.canPost
+  // is the server's verdict (and the server enforces it again on POST).
+  const memberGated = isEvent && thread.canPost === false;
+  const canPost = canLike && !thread.locked && !thread.deleted && !memberGated;
+  const eventUpcoming = thread.eventDate ? Date.parse(thread.eventDate) > Date.now() : false;
   const canEditThread =
     !thread.deleted &&
     Boolean(user) &&
@@ -269,13 +295,82 @@ export function ThreadScreen({ route, navigation }: Props) {
               <Text style={styles.editedNote}>edited {formatDate(thread.editedAt, dateFormat)}</Text>
             )}
           </View>
-          {thread.tags.length > 0 && (
+          {(thread.tags.length > 0 || thread.chapter) && (
             <View style={styles.tagRow}>
+              {thread.chapter && (
+                <View style={[styles.tagPill, styles.chapterPill]}>
+                  <Text style={[styles.tagPillText, { color: colors.accent }]}>
+                    {thread.chapter.name.toUpperCase()} CHAPTER
+                  </Text>
+                </View>
+              )}
               {thread.tags.map((t) => (
                 <View key={t.id} style={styles.tagPill}>
                   <Text style={styles.tagPillText}>{t.name.toUpperCase()}</Text>
                 </View>
               ))}
+            </View>
+          )}
+          {isEvent && (
+            <View style={styles.eventPanel}>
+              <Text style={styles.eventLabel}>
+                ◆ {eventUpcoming ? "UPCOMING EVENT" : "EVENT"}
+                {thread.eventDate ? ` · ${formatDate(thread.eventDate, dateFormat)}` : ""}
+              </Text>
+              <Text style={styles.meta}>
+                {thread.attendeeCount ?? 0}{" "}
+                {(thread.attendeeCount ?? 0) === 1 ? "person was" : "people were"} there · reading
+                is open, posting is for members
+              </Text>
+              {isAdmin && thread.eventCode ? (
+                <Text style={styles.meta}>
+                  Attendance code (admins only): {thread.eventCode}
+                </Text>
+              ) : null}
+              {user && thread.myAttended ? (
+                <Text style={styles.wasThere}>◆ You were there — your posts carry the mark.</Text>
+              ) : user && !eventUpcoming ? (
+                attendOpen ? (
+                  <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
+                    <TextInput
+                      style={styles.attendInput}
+                      value={attendCode}
+                      onChangeText={setAttendCode}
+                      placeholder="Event code"
+                      placeholderTextColor={colors.muted}
+                      autoCapitalize="characters"
+                    />
+                    {attendError && <Text style={styles.error}>{attendError}</Text>}
+                    <View style={styles.actionRow}>
+                      <Pressable
+                        style={styles.actionButton}
+                        onPress={redeemAttendance}
+                        disabled={attending}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {attending ? "Checking..." : "Confirm"}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.actionButton}
+                        onPress={() => {
+                          setAttendOpen(false);
+                          setAttendError(null);
+                        }}
+                      >
+                        <Text style={styles.actionButtonText}>Cancel</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <Pressable
+                    style={[styles.actionButton, { marginTop: spacing.sm }]}
+                    onPress={() => setAttendOpen(true)}
+                  >
+                    <Text style={styles.actionButtonText}>I was there — enter the event code</Text>
+                  </Pressable>
+                )
+              ) : null}
             </View>
           )}
           {(canEditThread || isAdmin) && (
@@ -409,6 +504,11 @@ export function ThreadScreen({ route, navigation }: Props) {
                 <Text style={styles.buttonText}>{submitting ? "Posting..." : "Post reply"}</Text>
               </Pressable>
             </>
+          ) : memberGated ? (
+            <Text style={styles.notice}>
+              Posting in event threads is for members of the Society — redeem a membership code in
+              Settings. Reading stays free.
+            </Text>
           ) : (
             <Text style={styles.notice}>
               Verify your identity from the Profile tab to reply and like.
@@ -471,6 +571,7 @@ function PostItem({
           <Avatar name={post.author.displayName} uri={post.author.avatarUrl} size={22} />
           <Text style={styles.meta}>{post.author.displayName}</Text>
         </Pressable>
+        {post.wasThere && <Text style={styles.wasThere}>◆ WAS THERE</Text>}
         <Text style={styles.meta}>· {formatDate(post.createdAt, dateFormat)}</Text>
         {post.editedAt && (
           <Text style={styles.editedNote}>edited {formatDate(post.editedAt, dateFormat)}</Text>
@@ -548,6 +649,37 @@ function makeStyles(colors: ThemeColors) {
       fontSize: type.xs,
       color: colors.inkSoft,
       letterSpacing: 0.5,
+    },
+    chapterPill: { backgroundColor: colors.accentBg, borderColor: colors.supporterBorder },
+    // Event header block — accent hairline on the left, like a pull-quote.
+    eventPanel: {
+      borderLeftWidth: 2,
+      borderLeftColor: colors.accent,
+      paddingLeft: spacing.md,
+      marginTop: spacing.md,
+      gap: spacing.xs,
+    },
+    eventLabel: {
+      color: colors.accent,
+      fontFamily: fonts.displaySemi,
+      fontSize: type.xs,
+      letterSpacing: 1,
+    },
+    wasThere: {
+      color: colors.accent,
+      fontFamily: fonts.displaySemi,
+      fontSize: type.xs,
+      letterSpacing: 0.5,
+    },
+    attendInput: {
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      borderRadius: radius.sm,
+      padding: spacing.md,
+      backgroundColor: colors.surface,
+      color: colors.ink,
+      fontFamily: fonts.sans,
+      fontSize: type.base,
     },
     actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md, flexWrap: "wrap" },
     actionButton: {

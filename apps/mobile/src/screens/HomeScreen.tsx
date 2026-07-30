@@ -4,6 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
   formatDate,
+  type ChapterSummary,
   type TagWithCount,
   type ThreadFeedResponse,
   type ThreadSummary,
@@ -13,7 +14,7 @@ import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { FeedStackParamList } from "../navigation";
-import { Avatar } from "../components/Avatar";
+import { ThreadCard } from "../components/ThreadCard";
 
 type Props = NativeStackScreenProps<FeedStackParamList, "Home">;
 
@@ -31,8 +32,11 @@ export function HomeScreen({ navigation }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAllTags, setShowAllTags] = useState(false);
+  const [myChapters, setMyChapters] = useState<ChapterSummary[]>([]);
+  const [events, setEvents] = useState<ThreadSummary[]>([]);
 
   const VISIBLE_TAG_COUNT = 6;
+  const isMemberViewer = Boolean(user && (user.isSupporter || user.role === "admin"));
 
   const loadThreads = useCallback(() => {
     const qs = new URLSearchParams({ sort, limit: String(PAGE_SIZE), offset: "0" });
@@ -52,8 +56,20 @@ export function HomeScreen({ navigation }: Props) {
         .get<{ tags: TagWithCount[] }>("/api/tags")
         .then((res) => setTags(res.tags))
         .catch((e) => setError(e.message));
+      // The Events grouping rides above the feed; failures stay quiet — the
+      // feed is the page, the strip is garnish.
+      api
+        .get<ThreadFeedResponse>("/api/threads?kind=event&limit=4", token)
+        .then((res) => setEvents(res.threads))
+        .catch(() => {});
+      if (isMemberViewer) {
+        api
+          .get<{ chapters: ChapterSummary[] }>("/api/chapters", token)
+          .then((res) => setMyChapters(res.chapters.filter((c) => c.myMembership === "active")))
+          .catch(() => {});
+      }
       loadThreads();
-    }, [loadThreads]),
+    }, [loadThreads, token, isMemberViewer]),
   );
 
   async function loadMore() {
@@ -116,6 +132,49 @@ export function HomeScreen({ navigation }: Props) {
             Signed in — this provider was linked to your existing account. Tap to dismiss.
           </Text>
         </Pressable>
+      )}
+
+      {isMemberViewer && (
+        <View style={styles.chapterStrip}>
+          <Text style={styles.chapterStripLabel}>CHAPTERS</Text>
+          {myChapters.map((c) => (
+            <Pressable key={c.id} onPress={() => navigation.navigate("Chapter", { slug: c.slug })}>
+              <Text style={styles.chapterLink}>{c.name}</Text>
+            </Pressable>
+          ))}
+          <Pressable onPress={() => navigation.navigate("Chapters")}>
+            <Text style={styles.chapterLinkAll}>
+              {myChapters.length > 0 ? "All ›" : "Browse ›"}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+
+      {events.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginBottom: spacing.md, flexGrow: 0 }}
+        >
+          {events.map((t) => {
+            const upcoming = t.eventDate ? Date.parse(t.eventDate) > Date.now() : false;
+            return (
+              <Pressable
+                key={t.id}
+                style={styles.eventCard}
+                onPress={() => navigation.navigate("Thread", { threadId: t.id })}
+              >
+                <Text style={styles.eventCardDate}>
+                  {upcoming ? "UPCOMING · " : "EVENT · "}
+                  {t.eventDate ? formatDate(t.eventDate, dateFormat) : ""}
+                </Text>
+                <Text style={styles.eventCardTitle} numberOfLines={2}>
+                  {t.title}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       )}
 
       <View style={styles.controls}>
@@ -205,56 +264,13 @@ export function HomeScreen({ navigation }: Props) {
         data={threads ?? []}
         keyExtractor={(t) => t.id}
         renderItem={({ item }) => (
-          <View style={[styles.card, item.pinnedAt ? styles.cardPinned : null]}>
-            {item.pinnedAt ? <Text style={styles.pinnedLabel}>❖ PINNED</Text> : null}
-            <Pressable onPress={() => navigation.navigate("Thread", { threadId: item.id })}>
-              <Text style={styles.cardTitle}>
-                {item.title}
-                {item.locked ? " 🔒" : ""}
-              </Text>
-            </Pressable>
-            <View style={styles.byline}>
-              <Pressable
-                style={[styles.byline, { marginTop: 0 }]}
-                onPress={() => navigation.navigate("UserProfile", { userId: item.author.id })}
-              >
-                <Avatar name={item.author.displayName} uri={item.author.avatarUrl} size={22} />
-                <Text style={styles.meta}>{item.author.displayName}</Text>
-              </Pressable>
-              <Text style={styles.meta}>· {formatDate(item.createdAt, dateFormat)}</Text>
-            </View>
-            {item.tags.length > 0 && (
-              <View style={styles.tagRow}>
-                {item.tags.map((t) => (
-                  <View key={t.id} style={styles.tagPill}>
-                    <Text style={styles.tagPillText}>{t.name.toUpperCase()}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-            <View style={styles.likeRow}>
-              <Pressable
-                style={[styles.likeButton, item.myLiked && styles.likeButtonActive]}
-                disabled={!canPost}
-                onPress={() => toggleLike(item.id)}
-              >
-                <Text style={item.myLiked ? styles.likeTextActive : styles.likeText}>
-                  ♥ {item.likeCount}
-                </Text>
-              </Pressable>
-              <Text style={styles.meta}>
-                {item.postCount} {item.postCount === 1 ? "reply" : "replies"}
-              </Text>
-              <Pressable
-                style={{ marginLeft: "auto" }}
-                onPress={() => toggleBookmark(item.id, Boolean(item.myBookmarked))}
-              >
-                <Text style={item.myBookmarked ? styles.saveTextActive : styles.saveText}>
-                  {item.myBookmarked ? "❧ Saved" : "❧ Save"}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+          <ThreadCard
+            thread={item}
+            onPress={() => navigation.navigate("Thread", { threadId: item.id })}
+            onAuthorPress={() => navigation.navigate("UserProfile", { userId: item.author.id })}
+            onLike={() => toggleLike(item.id)}
+            onBookmark={() => toggleBookmark(item.id, Boolean(item.myBookmarked))}
+          />
         )}
         ListFooterComponent={
           hasMore ? (
@@ -318,59 +334,48 @@ function makeStyles(colors: ThemeColors) {
     chipText: { color: colors.ink, fontFamily: fonts.displayMedium, fontSize: type.sm },
     chipTextActive: { color: colors.solidText, fontFamily: fonts.displayMedium, fontSize: type.sm },
     error: { color: colors.danger, fontFamily: fonts.sans },
-    card: {
-      backgroundColor: colors.surface,
+    meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
+    // Members' chapter row — one quiet line above the feed, never burying it.
+    chapterStrip: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "baseline",
+      gap: spacing.md,
+      paddingBottom: spacing.md,
+      marginBottom: spacing.md,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    chapterStripLabel: {
+      color: colors.muted,
+      fontFamily: fonts.sans,
+      fontSize: type.xs,
+      letterSpacing: 2,
+    },
+    chapterLink: { color: colors.ink, fontFamily: fonts.displayMedium, fontSize: type.base },
+    chapterLinkAll: { color: colors.muted, fontFamily: fonts.displayMedium, fontSize: type.sm },
+    // The Events grouping.
+    eventCard: {
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: radius.md,
-      padding: spacing.lg,
-      marginBottom: spacing.md,
+      padding: spacing.md,
+      marginRight: spacing.sm,
+      width: 210,
+      gap: spacing.xs,
     },
-    // An admin pin: a terracotta kicker and a warmer border, never a fill.
-    cardPinned: { borderColor: colors.supporterBorder },
-    pinnedLabel: {
+    eventCardDate: {
       color: colors.accent,
       fontFamily: fonts.displaySemi,
       fontSize: type.xs,
       letterSpacing: 1,
-      marginBottom: spacing.xs,
     },
-    cardTitle: {
-      fontFamily: fonts.serifBold,
-      fontSize: type.md,
-      lineHeight: 24,
+    eventCardTitle: {
+      fontFamily: fonts.serif,
+      fontSize: type.base,
+      lineHeight: 20,
       color: colors.ink,
     },
-    byline: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
-    meta: { color: colors.muted, fontFamily: fonts.sans, fontSize: type.sm },
-    tagRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: spacing.md },
-    tagPill: {
-      backgroundColor: colors.stone2,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: radius.full,
-      paddingVertical: 2,
-      paddingHorizontal: spacing.sm,
-    },
-    tagPillText: {
-      fontFamily: fonts.displaySemi,
-      fontSize: type.xs,
-      color: colors.inkSoft,
-      letterSpacing: 0.5,
-    },
-    likeRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md },
-    likeButton: {
-      borderWidth: 1,
-      borderColor: colors.borderStrong,
-      borderRadius: radius.full,
-      paddingVertical: 3,
-      paddingHorizontal: spacing.md,
-    },
-    likeButtonActive: { backgroundColor: colors.accentBg, borderColor: colors.supporterBorder },
-    likeText: { color: colors.muted, fontFamily: fonts.displayMedium, fontSize: type.sm },
-    likeTextActive: { color: colors.accent, fontFamily: fonts.displaySemi, fontSize: type.sm },
-    saveText: { color: colors.muted, fontFamily: fonts.displayMedium, fontSize: type.sm },
-    saveTextActive: { color: colors.accent, fontFamily: fonts.displaySemi, fontSize: type.sm },
     loadMore: {
       borderWidth: 1,
       borderStyle: "dashed",
