@@ -252,12 +252,14 @@ Five things need real decisions before this goes live — flagged here rather th
   directly in the database — after that, admins promote each other from `/admin/users`. The seed
   script creates one demo admin (`admin@demo.nyphilosophy.org` / `demo-password-123`) plus two
   open demo reports so the queue isn't empty.
-- **Mobile moderation is the report queue only.** Member administration, content management, and
-  the moderation log are web-only.
-- **Chapters don't exist yet** (`docs/prompts/04-access-chapters.md`), so the admin dashboard has
-  no chapter management and pinning applies to the single main feed.
-- **Supporter status unlocks nothing yet.** `WISDOMKEY` marks an account as a supporter, but no
-  content is gated on it. `docs/prompts/04-access-chapters.md` is where that becomes real.
+- **Mobile moderation is the report queue only.** Member administration, content management,
+  chapter administration, event-thread creation/attendee marking, and the moderation log are
+  web-only.
+- **Membership is live, but the unlock is still `WISDOMKEY`.** Redeeming it makes an account a
+  Member, which opens chapters (member-only sub-forums with server-enforced visibility), the
+  opt-in member directory with reading-partner matching, and posting in event threads — see
+  `docs/MEMBERSHIP.md` for the decisions and `docs/API-CHANGES.md` for the endpoints. Reading is
+  never gated. Swap the code for a real donation/subscription check before this means anything.
 - **Mobile is behind web.** Reporting, blocking, pagination, password reset, thread locking,
   supporter redemption, and the admin report list exist on web only. Closed by
   `docs/prompts/01-foundation.md`.
