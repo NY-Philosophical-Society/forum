@@ -210,6 +210,23 @@ describe("read state", () => {
   });
 });
 
+describe("preferences", () => {
+  it("defaults every type to enabled for an account with no stored rows", async () => {
+    const fresh = await signupVerified("prefs-fresh");
+    const res = await request(app)
+      .get("/api/notifications/preferences")
+      .set("Authorization", `Bearer ${fresh.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.preferences).toEqual({
+      master: true,
+      replies: true,
+      likes: true,
+      mentions: true,
+      messages: true,
+    });
+  });
+});
+
 describe("message notifications", () => {
   it("collapses per sender and clears when the conversation is opened", async () => {
     const sender = await signupVerified("dm-sender");

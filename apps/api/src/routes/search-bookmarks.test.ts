@@ -61,6 +61,23 @@ describe("search", () => {
     expect(res.body.threads.items).toHaveLength(0);
   });
 
+  it("paginates a section with limit/offset and reports hasMore", async () => {
+    for (let i = 0; i < 3; i++) {
+      await createThread(author, { title: `Sorites paradox case ${i}` });
+    }
+    const page1 = await request(app)
+      .get("/api/search?q=sorites&type=threads&limit=2&offset=0")
+      .set("Authorization", `Bearer ${author.token}`);
+    expect(page1.body.threads.items).toHaveLength(2);
+    expect(page1.body.threads.hasMore).toBe(true);
+
+    const page2 = await request(app)
+      .get("/api/search?q=sorites&type=threads&limit=2&offset=2")
+      .set("Authorization", `Bearer ${author.token}`);
+    expect(page2.body.threads.items).toHaveLength(1);
+    expect(page2.body.threads.hasMore).toBe(false);
+  });
+
   it("rejects queries below the minimum length", async () => {
     const res = await request(app)
       .get("/api/search?q=a")
