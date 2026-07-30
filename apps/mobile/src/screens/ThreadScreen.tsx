@@ -1,5 +1,5 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import {
@@ -21,9 +21,12 @@ import { ReportButton } from "../components/ReportButton";
 type Props = NativeStackScreenProps<FeedStackParamList, "Thread">;
 
 const REPLIES_PAGE = 20;
+// Notification/search deep links may point past the first page of replies,
+// so those arrivals load with the maximum window instead (same as web).
+const DEEP_LINK_REPLIES = 100;
 
 export function ThreadScreen({ route, navigation }: Props) {
-  const { threadId } = route.params;
+  const { threadId, highlightPostId } = route.params;
   const { user, token } = useAuth();
   const { colors, dateFormat } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -31,7 +34,11 @@ export function ThreadScreen({ route, navigation }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [replyBody, setReplyBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [repliesWindow, setRepliesWindow] = useState(REPLIES_PAGE);
+  const [repliesWindow, setRepliesWindow] = useState(
+    highlightPostId ? DEEP_LINK_REPLIES : REPLIES_PAGE,
+  );
+  const listRef = useRef<FlatList<PostWithDepth>>(null);
+  const scrolledToHighlight = useRef(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [locking, setLocking] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
@@ -58,6 +65,20 @@ export function ThreadScreen({ route, navigation }: Props) {
     }, [load]),
   );
 
+  // Replies render after an async load, so scroll to the deep-linked reply
+  // once — after the list has had a moment to lay its rows out.
+  useEffect(() => {
+    if (!thread || !highlightPostId || scrolledToHighlight.current) return;
+    const index = flattenPostTree(thread.posts).findIndex((p) => p.id === highlightPostId);
+    if (index < 0) return;
+    scrolledToHighlight.current = true;
+    const timer = setTimeout(
+      () => listRef.current?.scrollToIndex({ index, viewPosition: 0.3, animated: false }),
+      300,
+    );
+    return () => clearTimeout(timer);
+  }, [thread, highlightPostId]);
+
   async function loadMoreReplies() {
     setLoadingMore(true);
     const nextWindow = repliesWindow + REPLIES_PAGE;
@@ -70,6 +91,20 @@ export function ThreadScreen({ route, navigation }: Props) {
     if (!token) return;
     await api.post(`/api/threads/${threadId}/like`, {}, token);
     load(repliesWindow);
+  }
+
+  // Optimistic, reverted on failure. Any account may save — it's a private
+  // reading aid, not a write action, so it isn't gated on verification.
+  async function toggleBookmark() {
+    if (!token || !thread) return;
+    const wasBookmarked = Boolean(thread.myBookmarked);
+    setThread({ ...thread, myBookmarked: !wasBookmarked });
+    try {
+      if (wasBookmarked) await api.delete(`/api/bookmarks/${threadId}`, token);
+      else await api.post("/api/bookmarks", { threadId }, token);
+    } catch {
+      setThread((prev) => (prev ? { ...prev, myBookmarked: wasBookmarked } : prev));
+    }
   }
 
   async function togglePostLike(postId: string) {
@@ -199,9 +234,18 @@ export function ThreadScreen({ route, navigation }: Props) {
 
   return (
     <FlatList
+      ref={listRef}
       style={styles.container}
       data={orderedPosts}
       keyExtractor={(p) => p.id}
+      // Far-down rows aren't measured yet — estimate, then retry precisely.
+      onScrollToIndexFailed={({ index, averageItemLength }) => {
+        listRef.current?.scrollToOffset({ offset: averageItemLength * index, animated: false });
+        setTimeout(
+          () => listRef.current?.scrollToIndex({ index, viewPosition: 0.3, animated: false }),
+          250,
+        );
+      }}
       ListHeaderComponent={
         <View>
           <Text style={styles.h1}>
@@ -283,6 +327,11 @@ export function ThreadScreen({ route, navigation }: Props) {
                       ♥ {thread.likeCount}
                     </Text>
                   </Pressable>
+                  <Pressable onPress={toggleBookmark}>
+                    <Text style={thread.myBookmarked ? styles.saveTextActive : styles.saveText}>
+                      {thread.myBookmarked ? "❧ Saved" : "❧ Save"}
+                    </Text>
+                  </Pressable>
                   <ReportButton targetType="thread" targetId={thread.id} />
                 </View>
               </>
@@ -317,6 +366,7 @@ export function ThreadScreen({ route, navigation }: Props) {
         ) : (
           <PostItem
             post={item}
+            highlighted={item.id === highlightPostId}
             canLike={canLike}
             canModify={Boolean(
               user &&
@@ -372,6 +422,7 @@ export function ThreadScreen({ route, navigation }: Props) {
 
 function PostItem({
   post,
+  highlighted,
   canLike,
   canModify,
   onLike,
@@ -380,6 +431,8 @@ function PostItem({
   onAuthorPress,
 }: {
   post: PostWithDepth;
+  /** The reply a notification/search deep link points at — accent hairline. */
+  highlighted: boolean;
   canLike: boolean;
   canModify: boolean;
   onLike: (postId: string) => void;
@@ -402,7 +455,13 @@ function PostItem({
   }
 
   return (
-    <View style={[styles.post, { marginLeft: post.depth * spacing.lg }]}>
+    <View
+      style={[
+        styles.post,
+        highlighted && styles.postHighlighted,
+        { marginLeft: post.depth * spacing.lg },
+      ]}
+    >
       <Markdown>{post.body}</Markdown>
       <View style={styles.byline}>
         <Pressable
@@ -515,6 +574,7 @@ function makeStyles(colors: ThemeColors) {
       paddingLeft: spacing.md,
       marginTop: spacing.lg,
     },
+    postHighlighted: { borderLeftColor: colors.accent },
     likeRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginTop: spacing.md, flexWrap: "wrap" },
     likeButton: {
       borderWidth: 1,
@@ -526,6 +586,8 @@ function makeStyles(colors: ThemeColors) {
     likeButtonActive: { backgroundColor: colors.accentBg, borderColor: colors.supporterBorder },
     likeText: { color: colors.muted, fontFamily: fonts.displayMedium, fontSize: type.sm },
     likeTextActive: { color: colors.accent, fontFamily: fonts.displaySemi, fontSize: type.sm },
+    saveText: { color: colors.muted, fontFamily: fonts.displayMedium, fontSize: type.sm },
+    saveTextActive: { color: colors.accent, fontFamily: fonts.displaySemi, fontSize: type.sm },
     loadMore: {
       borderWidth: 1,
       borderStyle: "dashed",

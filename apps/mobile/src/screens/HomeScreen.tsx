@@ -87,6 +87,24 @@ export function HomeScreen({ navigation }: Props) {
     );
   }
 
+  // Optimistic, like the like toggle — reverted if the request fails. Saving
+  // is a private reading aid, so any account may, verified or not.
+  async function toggleBookmark(threadId: string, wasBookmarked: boolean) {
+    if (!token) return;
+    const apply = (bookmarked: boolean) =>
+      setThreads(
+        (prev) =>
+          prev?.map((t) => (t.id === threadId ? { ...t, myBookmarked: bookmarked } : t)) ?? null,
+      );
+    apply(!wasBookmarked);
+    try {
+      if (wasBookmarked) await api.delete(`/api/bookmarks/${threadId}`, token);
+      else await api.post("/api/bookmarks", { threadId }, token);
+    } catch {
+      apply(wasBookmarked);
+    }
+  }
+
   const canPost = user?.verificationStatus === "VERIFIED";
   const activeTagName = tags?.find((t) => t.slug === activeTag)?.name;
 
@@ -227,6 +245,14 @@ export function HomeScreen({ navigation }: Props) {
               <Text style={styles.meta}>
                 {item.postCount} {item.postCount === 1 ? "reply" : "replies"}
               </Text>
+              <Pressable
+                style={{ marginLeft: "auto" }}
+                onPress={() => toggleBookmark(item.id, Boolean(item.myBookmarked))}
+              >
+                <Text style={item.myBookmarked ? styles.saveTextActive : styles.saveText}>
+                  {item.myBookmarked ? "❧ Saved" : "❧ Save"}
+                </Text>
+              </Pressable>
             </View>
           </View>
         )}
@@ -343,6 +369,8 @@ function makeStyles(colors: ThemeColors) {
     likeButtonActive: { backgroundColor: colors.accentBg, borderColor: colors.supporterBorder },
     likeText: { color: colors.muted, fontFamily: fonts.displayMedium, fontSize: type.sm },
     likeTextActive: { color: colors.accent, fontFamily: fonts.displaySemi, fontSize: type.sm },
+    saveText: { color: colors.muted, fontFamily: fonts.displayMedium, fontSize: type.sm },
+    saveTextActive: { color: colors.accent, fontFamily: fonts.displaySemi, fontSize: type.sm },
     loadMore: {
       borderWidth: 1,
       borderStyle: "dashed",

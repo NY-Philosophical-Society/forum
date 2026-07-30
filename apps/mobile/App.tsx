@@ -19,7 +19,7 @@ import {
   Newsreader_500Medium,
   Newsreader_600SemiBold,
 } from "@expo-google-fonts/newsreader";
-import { ActivityIndicator, Image, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, Text, View } from "react-native";
 import { useEffect } from "react";
 import type { PublicUser } from "@nyps-forum/shared";
 import { api } from "./src/lib/api";
@@ -94,6 +94,20 @@ function BrandTitle() {
   );
 }
 
+function SearchButton() {
+  const { colors } = useSettings();
+  const navigation = useNavigation<NavigationProp<FeedStackParamList>>();
+  return (
+    <Pressable
+      onPress={() => navigation.navigate("Search")}
+      hitSlop={8}
+      accessibilityLabel="Search"
+    >
+      <Ionicons name="search-outline" size={22} color={colors.ink} />
+    </Pressable>
+  );
+}
+
 function FeedStack() {
   const options = useHeaderOptions();
   return (
@@ -101,7 +115,7 @@ function FeedStack() {
       <FeedStackNav.Screen
         name="Home"
         component={HomeScreen}
-        options={{ headerTitle: () => <BrandTitle /> }}
+        options={{ headerTitle: () => <BrandTitle />, headerRight: () => <SearchButton /> }}
       />
       <FeedStackNav.Screen name="Thread" component={ThreadScreen} options={{ title: "Thread" }} />
       <FeedStackNav.Screen
@@ -168,6 +182,11 @@ function ProfileStack() {
         name="Profile"
         component={ProfileScreen}
         options={{ title: "Profile" }}
+      />
+      <ProfileStackNav.Screen
+        name="Saved"
+        component={SavedScreen}
+        options={{ title: "Saved threads" }}
       />
       <ProfileStackNav.Screen
         name="UserProfile"

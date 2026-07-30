@@ -29,6 +29,11 @@ export function ProfileScreen({ navigation }: Props) {
       onPress: () => navigation.navigate("UserProfile", { userId: user.id }),
     },
     {
+      icon: "bookmark-outline",
+      label: "Saved threads",
+      onPress: () => navigation.navigate("Saved"),
+    },
+    {
       icon: "create-outline",
       label: "Edit profile",
       onPress: () => navigation.navigate("EditProfile"),
