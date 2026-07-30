@@ -42,13 +42,29 @@ describe("reports", () => {
     expect(report.target.author.id).toBe(author.id);
   });
 
-  it("an unverified user cannot file a report", async () => {
-    const unverified = await signup("unverified-reporter");
+  it("an unverified user can file a report by default (honor system doesn't relax moderation reporting)", async () => {
+    const unverified = await signup("unverified-reporter-honor");
     const res = await request(app)
       .post("/api/reports")
       .set("Authorization", `Bearer ${unverified.token}`)
       .send({ targetType: "user", targetId: admin.id, category: "other" });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
+  });
+
+  it("an unverified user cannot file a report once REQUIRE_ID_VERIFICATION=true", async () => {
+    const original = process.env.REQUIRE_ID_VERIFICATION;
+    process.env.REQUIRE_ID_VERIFICATION = "true";
+    try {
+      const unverified = await signup("unverified-reporter");
+      const res = await request(app)
+        .post("/api/reports")
+        .set("Authorization", `Bearer ${unverified.token}`)
+        .send({ targetType: "user", targetId: admin.id, category: "other" });
+      expect(res.status).toBe(403);
+    } finally {
+      if (original === undefined) delete process.env.REQUIRE_ID_VERIFICATION;
+      else process.env.REQUIRE_ID_VERIFICATION = original;
+    }
   });
 
   it("rejects an invalid target type", async () => {

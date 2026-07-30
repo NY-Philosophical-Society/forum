@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../app";
 import { createPost, createThread, signup, signupVerified, TestUser } from "../test/helpers";
 
@@ -8,8 +8,9 @@ import { createPost, createThread, signup, signupVerified, TestUser } from "../t
  * to break it silently:
  *   anonymous  -> 220-char teaser, zero replies, previewOnly flag
  *   any account -> full body and replies
- *   unverified  -> cannot write anything (thread/reply/like/DM/report)
- *   verified    -> can write
+ *   unverified  -> can write by default (honor system); blocked only when
+ *                  REQUIRE_ID_VERIFICATION=true is set
+ *   verified    -> can always write
  */
 
 const LONG_BODY =
@@ -99,33 +100,59 @@ describe("write access tiers", () => {
     }
   });
 
-  it("rejects every write from an unverified account with 403", async () => {
-    const unverified = await signup("tier-unverified");
+  it("lets an unverified account write by default — the honor system", async () => {
+    const unverified = await signup("tier-unverified-honor");
     const auth = (r: request.Test) => r.set("Authorization", `Bearer ${unverified.token}`);
 
     const thread = await auth(request(app).post("/api/threads")).send({
-      title: "Unverified thread",
-      body: "Should be blocked.",
+      title: "Unverified thread, honor system",
+      body: "Allowed by default.",
       tagIds: [],
     });
-    expect(thread.status).toBe(403);
+    expect(thread.status).toBe(201);
 
-    const reply = await auth(request(app).post("/api/posts")).send({ threadId, body: "Blocked reply" });
-    expect(reply.status).toBe(403);
+    const reply = await auth(request(app).post("/api/posts")).send({ threadId, body: "Honor-system reply" });
+    expect(reply.status).toBe(201);
+  });
 
-    const threadLike = await auth(request(app).post(`/api/threads/${threadId}/like`));
-    expect(threadLike.status).toBe(403);
+  describe("with REQUIRE_ID_VERIFICATION=true", () => {
+    const original = process.env.REQUIRE_ID_VERIFICATION;
+    beforeAll(() => {
+      process.env.REQUIRE_ID_VERIFICATION = "true";
+    });
+    afterAll(() => {
+      if (original === undefined) delete process.env.REQUIRE_ID_VERIFICATION;
+      else process.env.REQUIRE_ID_VERIFICATION = original;
+    });
 
-    const postLike = await auth(request(app).post(`/api/posts/${postId}/like`));
-    expect(postLike.status).toBe(403);
+    it("rejects every write from an unverified account with 403", async () => {
+      const unverified = await signup("tier-unverified");
+      const auth = (r: request.Test) => r.set("Authorization", `Bearer ${unverified.token}`);
 
-    const dm = await auth(request(app).post("/api/messages")).send({ recipientId: author.id, body: "hi" });
-    expect(dm.status).toBe(403);
+      const thread = await auth(request(app).post("/api/threads")).send({
+        title: "Unverified thread",
+        body: "Should be blocked.",
+        tagIds: [],
+      });
+      expect(thread.status).toBe(403);
 
-    // And nothing was actually created/changed.
-    const detail = await auth(request(app).get(`/api/threads/${threadId}`));
-    expect(detail.body.thread.likeCount).toBe(0);
-    expect(detail.body.thread.posts.map((p: { body: string }) => p.body)).not.toContain("Blocked reply");
+      const reply = await auth(request(app).post("/api/posts")).send({ threadId, body: "Blocked reply" });
+      expect(reply.status).toBe(403);
+
+      const threadLike = await auth(request(app).post(`/api/threads/${threadId}/like`));
+      expect(threadLike.status).toBe(403);
+
+      const postLike = await auth(request(app).post(`/api/posts/${postId}/like`));
+      expect(postLike.status).toBe(403);
+
+      const dm = await auth(request(app).post("/api/messages")).send({ recipientId: author.id, body: "hi" });
+      expect(dm.status).toBe(403);
+
+      // And nothing was actually created/changed.
+      const detail = await auth(request(app).get(`/api/threads/${threadId}`));
+      expect(detail.body.thread.likeCount).toBe(0);
+      expect(detail.body.thread.posts.map((p: { body: string }) => p.body)).not.toContain("Blocked reply");
+    });
   });
 
   it("lets a verified account reply, like, and unlike", async () => {

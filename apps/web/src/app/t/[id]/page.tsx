@@ -264,12 +264,9 @@ export default function ThreadPage() {
   // Event threads: reading is open, posting is member-only — thread.canPost
   // is the server's verdict (and the server enforces it again on POST).
   const memberGated = isEvent && thread.canPost === false;
-  const canPost =
-    user?.verificationStatus === "VERIFIED" && !thread.locked && !thread.deleted && !memberGated;
+  const canPost = Boolean(user?.canWrite) && !thread.locked && !thread.deleted && !memberGated;
   const canEditThread =
-    !thread.deleted &&
-    Boolean(user) &&
-    (isAdmin || (user!.id === thread.author.id && user!.verificationStatus === "VERIFIED"));
+    !thread.deleted && Boolean(user) && (isAdmin || user!.id === thread.author.id);
   const orderedPosts = flattenPostTree(thread.posts);
 
   return (
@@ -437,7 +434,7 @@ export default function ThreadPage() {
             <div className="like-row">
               <button
                 className={`like-button ${thread.myLiked ? "like-button-active" : ""}`}
-                disabled={user?.verificationStatus !== "VERIFIED"}
+                disabled={!user?.canWrite}
                 onClick={toggleThreadLike}
               >
                 ♥ {thread.likeCount}
@@ -541,7 +538,7 @@ export default function ThreadPage() {
                   <div className="like-row">
                     <button
                       className={`like-button ${p.myLiked ? "like-button-active" : ""}`}
-                      disabled={user?.verificationStatus !== "VERIFIED"}
+                      disabled={!user?.canWrite}
                       onClick={() => togglePostLike(p.id)}
                     >
                       ♥ {p.likeCount}
@@ -551,9 +548,7 @@ export default function ThreadPage() {
                         Reply
                       </button>
                     )}
-                    {user &&
-                      (isAdmin ||
-                        (user.id === p.author.id && user.verificationStatus === "VERIFIED")) && (
+                    {user && (isAdmin || user.id === p.author.id) && (
                         <>
                           <button className="link-button" onClick={() => startPostEdit(p)}>
                             Edit

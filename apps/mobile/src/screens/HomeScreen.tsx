@@ -121,7 +121,7 @@ export function HomeScreen({ navigation }: Props) {
     }
   }
 
-  const canPost = user?.verificationStatus === "VERIFIED";
+  const canPost = Boolean(user?.canWrite);
   const activeTagName = tags?.find((t) => t.slug === activeTag)?.name;
 
   return (

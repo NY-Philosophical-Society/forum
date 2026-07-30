@@ -1,5 +1,5 @@
 import request from "supertest";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../app";
 import { prisma } from "../db";
 import { createThread, promoteToAdmin, signup, signupVerified, TestUser } from "../test/helpers";
@@ -68,7 +68,43 @@ describe("optionalAuth", () => {
   });
 });
 
-describe("requireVerified", () => {
+describe("requireVerified — honor system (default)", () => {
+  const original = process.env.REQUIRE_ID_VERIFICATION;
+  beforeAll(() => {
+    delete process.env.REQUIRE_ID_VERIFICATION;
+  });
+  afterAll(() => {
+    if (original === undefined) delete process.env.REQUIRE_ID_VERIFICATION;
+    else process.env.REQUIRE_ID_VERIFICATION = original;
+  });
+
+  it("lets an UNVERIFIED account post under the name it signed up with", async () => {
+    const user = await signup("honor-system-poster");
+    const res = await request(app)
+      .post("/api/threads")
+      .set("Authorization", `Bearer ${user.token}`)
+      .send({ title: "On the good life", body: "Posted on the honor system.", tagIds: [] });
+    expect(res.status).toBe(201);
+  });
+
+  it("still requires a signed-in account — anonymous posting stays blocked", async () => {
+    const res = await request(app)
+      .post("/api/threads")
+      .send({ title: "No account at all", body: "Blocked.", tagIds: [] });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("requireVerified — strict ID-verification mode (REQUIRE_ID_VERIFICATION=true)", () => {
+  const original = process.env.REQUIRE_ID_VERIFICATION;
+  beforeAll(() => {
+    process.env.REQUIRE_ID_VERIFICATION = "true";
+  });
+  afterAll(() => {
+    if (original === undefined) delete process.env.REQUIRE_ID_VERIFICATION;
+    else process.env.REQUIRE_ID_VERIFICATION = original;
+  });
+
   it("blocks an UNVERIFIED user from posting a thread", async () => {
     const user = await signup("unverified-poster");
     const res = await request(app)

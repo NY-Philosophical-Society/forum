@@ -219,7 +219,7 @@ export default function ChapterPage() {
                 New
               </button>
             </div>
-            {user?.verificationStatus === "VERIFIED" && (
+            {user?.canWrite && (
               <Link href={`/new-thread?chapter=${chapter.slug}`}>
                 <button>Start a thread</button>
               </Link>
@@ -240,7 +240,7 @@ export default function ChapterPage() {
               title="Nothing here yet"
               hint="The chapter's first thread is waiting to be written."
               action={
-                user?.verificationStatus === "VERIFIED" ? (
+                user?.canWrite ? (
                   <Link href={`/new-thread?chapter=${chapter.slug}`}>
                     <button>Start a thread</button>
                   </Link>

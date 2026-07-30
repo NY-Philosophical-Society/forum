@@ -185,7 +185,7 @@ export function ChapterFeedScreen({ route, navigation }: Props) {
             <Text style={sort === "new" ? styles.segmentTextActive : styles.segmentText}>New</Text>
           </Pressable>
         </View>
-        {user?.verificationStatus === "VERIFIED" && (
+        {user?.canWrite && (
           <Pressable
             style={styles.button}
             onPress={() =>

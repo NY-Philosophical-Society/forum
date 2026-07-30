@@ -207,6 +207,12 @@ const statusBadgeClass: Record<string, string> = {
 };
 
 export function StatusBadge({ status }: { status: string }) {
+  // UNVERIFIED is the default, permanent state for most members under the
+  // honor system — a red badge on nearly everyone would read as a warning
+  // about something that isn't wrong. Only show a badge when it says
+  // something worth noting: a completed check, one in progress, or a
+  // rejection.
+  if (status === "UNVERIFIED") return null;
   return (
     <span className={statusBadgeClass[status] ?? statusBadgeClass.UNVERIFIED}>
       {status.toLowerCase()}

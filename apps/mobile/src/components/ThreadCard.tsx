@@ -27,7 +27,7 @@ export function ThreadCard({
   const { user } = useAuth();
   const { colors, dateFormat } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const canLike = user?.verificationStatus === "VERIFIED";
+  const canLike = Boolean(user?.canWrite);
 
   return (
     <View style={[styles.card, item.pinnedAt ? styles.cardPinned : null]}>

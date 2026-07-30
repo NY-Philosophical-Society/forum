@@ -97,7 +97,7 @@ export default function ConversationPage() {
     );
   }
 
-  const canSend = user?.verificationStatus === "VERIFIED" && !blocked;
+  const canSend = user?.canWrite && !blocked;
 
   return (
     <div>

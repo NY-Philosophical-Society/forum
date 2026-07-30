@@ -15,6 +15,16 @@ export interface PublicUser {
   avatarUrl: string | null;
   bio: string | null;
   verificationStatus: VerificationStatus;
+  /**
+   * Whether this account may currently do write actions (post, reply, like,
+   * DM). Under the honor-system default this is true regardless of
+   * verificationStatus; once the club requires real ID verification
+   * (REQUIRE_ID_VERIFICATION=true on the API), it tracks
+   * `verificationStatus === "VERIFIED"`. Always check this rather than
+   * verificationStatus directly when gating a write action in the UI — the
+   * two are deliberately not the same thing.
+   */
+  canWrite: boolean;
   role: "user" | "admin";
   isSupporter: boolean;
   createdAt: string;

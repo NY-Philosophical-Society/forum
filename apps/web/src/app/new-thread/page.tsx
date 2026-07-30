@@ -50,7 +50,7 @@ function NewThreadForm() {
 
   if (loading) return <p className="meta">Loading...</p>;
   if (!user) return <p className="meta">Log in first.</p>;
-  if (user.verificationStatus !== "VERIFIED") {
+  if (!user.canWrite) {
     return (
       <p className="notice">
         You need to <a href="/verify">verify your identity</a> before starting a thread.

@@ -59,12 +59,22 @@ management, moderation log, thread pinning and locking.
 | Tier | Can |
 | --- | --- |
 | Anonymous | Feed and a 220-character teaser |
-| Free account | Read everything |
-| ID-verified | Post, reply, like, DM, start threads |
+| Free account | Read everything, **post, reply, like, DM, start threads** — see below |
 | Member (donor) | Chapters, directory, matching, event posting |
 
 Admins bypass member gating. `WISDOMKEY` is the member unlock until a donation
 API exists.
+
+**Posting runs on the honor system, not ID verification, as of 2026-07-30.**
+Any signed-up account posts under the name it gave at signup — no completed ID
+check is required. This was a deliberate change from the original
+"ID-verified only" design, made because ID verification is real friction and
+the club would rather grow the community first. The old requirement is not
+gone, just switched off: `REQUIRE_ID_VERIFICATION=true` on the API restores it
+exactly (every write route already gates through the same `requireVerified`
+middleware, so nothing else changes). Signup now also collects first and last
+name as two fields instead of one, and the real-name rationale is stated
+directly on the signup screen. `docs/API.md` documents the toggle.
 
 ### Surface area
 27 web routes · 25 mobile screens · 16 API routers · 20 Prisma models.

@@ -245,7 +245,7 @@ export function ThreadScreen({ route, navigation }: Props) {
   }
 
   const isAdmin = user?.role === "admin";
-  const canLike = user?.verificationStatus === "VERIFIED";
+  const canLike = Boolean(user?.canWrite);
   const isEvent = thread.kind === "event";
   // Event threads: reading is open, posting is member-only — thread.canPost
   // is the server's verdict (and the server enforces it again on POST).
@@ -253,9 +253,7 @@ export function ThreadScreen({ route, navigation }: Props) {
   const canPost = canLike && !thread.locked && !thread.deleted && !memberGated;
   const eventUpcoming = thread.eventDate ? Date.parse(thread.eventDate) > Date.now() : false;
   const canEditThread =
-    !thread.deleted &&
-    Boolean(user) &&
-    (isAdmin || (user!.id === thread.author.id && user!.verificationStatus === "VERIFIED"));
+    !thread.deleted && Boolean(user) && (isAdmin || user!.id === thread.author.id);
   const orderedPosts = flattenPostTree(thread.posts);
 
   return (
@@ -466,7 +464,7 @@ export function ThreadScreen({ route, navigation }: Props) {
             canModify={Boolean(
               user &&
                 !item.deleted &&
-                (isAdmin || (user.id === item.author.id && user.verificationStatus === "VERIFIED")),
+                (isAdmin || user.id === item.author.id),
             )}
             onLike={togglePostLike}
             onEdit={(p) => {

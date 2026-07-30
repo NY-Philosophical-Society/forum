@@ -228,7 +228,7 @@ function HomeFeed() {
             New
           </button>
         </div>
-        {user?.verificationStatus === "VERIFIED" && (
+        {user?.canWrite && (
           <Link href={activeTag ? `/new-thread?tag=${activeTag}` : "/new-thread"}>
             <button>Start a thread</button>
           </Link>
@@ -278,7 +278,7 @@ function HomeFeed() {
               : "Every great discussion starts with someone willing to ask first."
           }
           action={
-            user?.verificationStatus === "VERIFIED" ? (
+            user?.canWrite ? (
               <Link href={activeTag ? `/new-thread?tag=${activeTag}` : "/new-thread"}>
                 <button>Start a thread</button>
               </Link>

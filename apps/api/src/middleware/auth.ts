@@ -101,10 +101,25 @@ export async function optionalAuth(
 }
 
 /**
- * Real-name + ID-verification is a core requirement of this forum: only
- * verified users may create content. Must run after requireAuth.
+ * Real names are required to post here; a completed ID check is not, for now.
+ * This is the honor system — we trust the name a member gave at signup — and
+ * this constant is the single switch to end it: set REQUIRE_ID_VERIFICATION=true
+ * once the club is ready to require the real verification flow (every write
+ * route already gates through requireVerified, so nothing else changes).
+ * Read per-request rather than cached at module load, so it's togglable in
+ * tests without a restart.
  */
+export function idVerificationRequired(): boolean {
+  return process.env.REQUIRE_ID_VERIFICATION === "true";
+}
+
+/** Must run after requireAuth. */
 export function requireVerified(req: Request, res: Response, next: NextFunction) {
+  if (!idVerificationRequired()) {
+    // Honor system: any signed-in, non-banned account posts under the name
+    // they gave at signup. requireAuth already ran, so req.user is set.
+    return next();
+  }
   if (req.user?.verificationStatus !== "VERIFIED") {
     return res.status(403).json({
       error:

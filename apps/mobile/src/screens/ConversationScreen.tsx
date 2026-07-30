@@ -87,7 +87,7 @@ export function ConversationScreen({ route, navigation }: Props) {
     }
   }
 
-  const canSend = user?.verificationStatus === "VERIFIED" && !blocked;
+  const canSend = user?.canWrite && !blocked;
 
   return (
     <View style={styles.container}>

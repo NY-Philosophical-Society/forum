@@ -40,10 +40,23 @@ describe("POST /api/uploads/image", () => {
     expect(res.body.height).toBe(800);
   });
 
-  it("requires verification, same as any other write", async () => {
-    const user = await signup("img-unverified");
+  it("an unverified account can upload by default — the honor system", async () => {
+    const user = await signup("img-unverified-honor");
     const res = await upload(user.token, await testImage(400, 300));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
+  });
+
+  it("requires verification once REQUIRE_ID_VERIFICATION=true, same as any other write", async () => {
+    const original = process.env.REQUIRE_ID_VERIFICATION;
+    process.env.REQUIRE_ID_VERIFICATION = "true";
+    try {
+      const user = await signup("img-unverified");
+      const res = await upload(user.token, await testImage(400, 300));
+      expect(res.status).toBe(403);
+    } finally {
+      if (original === undefined) delete process.env.REQUIRE_ID_VERIFICATION;
+      else process.env.REQUIRE_ID_VERIFICATION = original;
+    }
   });
 
   it("rejects a non-image body claiming to be an image", async () => {

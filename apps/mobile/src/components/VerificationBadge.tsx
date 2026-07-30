@@ -14,6 +14,11 @@ function styleFor(colors: ThemeColors, status: string): { bg: string; fg: string
 
 export function VerificationBadge({ status }: { status: string }) {
   const { colors } = useSettings();
+  // UNVERIFIED is the default, permanent state for most members under the
+  // honor system — showing it as a red badge on nearly everyone would read
+  // as a warning about something that isn't wrong. Only render a badge when
+  // it says something worth noting.
+  if (status === "UNVERIFIED") return null;
   const s = styleFor(colors, status);
   return (
     <View style={[badgeStyles.badge, { backgroundColor: s.bg }]}>

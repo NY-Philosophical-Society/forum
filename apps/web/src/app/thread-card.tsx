@@ -65,7 +65,7 @@ export function ThreadCard({
       <div className="like-row">
         <button
           className={`like-button ${t.myLiked ? "like-button-active" : ""}`}
-          disabled={user?.verificationStatus !== "VERIFIED"}
+          disabled={!user?.canWrite}
           onClick={() => onToggleLike(t.id)}
         >
           ♥ {t.likeCount}

@@ -5,6 +5,69 @@ the backend engineer can rebuild it properly without reading diffs. Shapes are
 the source of truth in `packages/shared/src/types.ts` (responses) and
 `schemas.ts` (request validation); this file is the map.
 
+## 2026-07-30 — Posting moves to the honor system (ID verification made optional)
+
+**Owner decision:** posting no longer requires a completed ID-verification
+check. Any signed-up account posts under the name it gave at signup. ID
+verification still exists and is still available to members, but it is no
+longer a gate — it's a stronger, visible confirmation of identity a member
+can opt into.
+
+### The single toggle
+
+`apps/api/src/middleware/auth.ts` — `requireVerified` now calls a new
+`idVerificationRequired()` (exported), which reads
+`process.env.REQUIRE_ID_VERIFICATION === "true"` **per request**, not cached at
+module load. When false (the default), `requireVerified` becomes a pass-through
+that only requires `requireAuth` to have run. When true, behavior is unchanged
+from before — `verificationStatus !== "VERIFIED"` gets a 403. This is the only
+code path that changed; every route that already called `requireVerified`
+(threads, posts, messages, reports, uploads) needed zero changes.
+
+### New field: `PublicUser.canWrite`
+
+`packages/shared/src/types.ts` — `PublicUser` gained `canWrite: boolean`,
+computed server-side in `apps/api/src/lib/serialize.ts`'s `toPublicUser()` as
+`idVerificationRequired() ? verificationStatus === "VERIFIED" : true`. **Every
+client-side write gate now checks `user.canWrite`, never `verificationStatus`
+directly** — the two are deliberately decoupled so the client never has to
+know about the server's toggle. `DELETED_AUTHOR` sets `canWrite: false`
+(irrelevant in practice — deleted authors aren't gated on anything).
+
+Two exceptions, unchanged and deliberately still tied to real
+`verificationStatus === "VERIFIED"`:
+- **Display-name lock** (`settings/profile`, mobile `EditProfileScreen`) — a
+  name is only locked once it's been through the real ID check, honor-system
+  posting doesn't lock anything.
+- **The `/verify` page's own "you're ID-verified" display** — showing the
+  actual state is the entire point of that page.
+
+Edit/delete of your own thread/post was **also changed** — it now checks
+ownership (or admin) only, with no verification requirement at all, matching
+what the API already enforced (edit/delete routes were never gated by
+`requireVerified`, only by ownership — the client UI had been stricter than
+the server, which became a real bug once honor-system authors existed).
+
+### UI: the UNVERIFIED badge is now hidden
+
+`UNVERIFIED` is red on both platforms and is now the **permanent default state
+for most members** (nobody is forced through the real check). `StatusBadge`
+(web) and `VerificationBadge` (mobile) both return `null` for `UNVERIFIED` —
+badges only render for `PENDING`, `VERIFIED`, or `REJECTED`, states that
+actually say something.
+
+### Signup form
+
+First/last name are now two fields (joined into `displayName` on submit — no
+API shape change). Copy on signup and `/verify` rewritten to state the
+honor-system policy plainly instead of implying verification is mandatory.
+
+### To restore mandatory ID verification later
+
+Set `REQUIRE_ID_VERIFICATION=true` in the API's environment and restart.
+Nothing else needs to change — the same middleware, the same `canWrite` field,
+the same client gates. `docs/PROJECT.md` "Access tiers" section documents this.
+
 ## 2026-07-30 — Membership parts 2–4: member directory, partner matching, event threads
 
 ### Member directory + reading-partner matching

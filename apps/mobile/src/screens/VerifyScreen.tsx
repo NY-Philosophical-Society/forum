@@ -40,23 +40,29 @@ export function VerifyScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <View style={styles.statusRow}>
-          <Text style={styles.meta}>Current status</Text>
-          <VerificationBadge status={user.verificationStatus} />
-        </View>
+        {user.verificationStatus !== "UNVERIFIED" && (
+          <View style={styles.statusRow}>
+            <Text style={styles.meta}>Current status</Text>
+            <VerificationBadge status={user.verificationStatus} />
+          </View>
+        )}
 
         {user.verificationStatus === "VERIFIED" ? (
           <Text style={styles.success}>
-            You&apos;re verified — you can post, reply, like, and message under your real name.
+            You&apos;re ID-verified — a stronger confirmation than the honor system alone, and it
+            shows next to your name.
           </Text>
         ) : (
           <>
             <Text style={styles.copy}>
-              This forum asks every participant to stand behind their words with their real name.
-              In production this hands off to a hosted identity-verification provider: you
-              photograph a government ID and take a live selfie, the provider matches the two, and
-              we only ever store the pass/fail result — never the document itself. This prototype
-              simulates that step locally.
+              This forum runs on the honor system for now: you&apos;re already posting under the
+              real name you gave when you signed up, and no ID check is required for that.
+              Completing verification adds a stronger, confirmed badge next to your name — useful
+              if you&apos;d like your identity backed by more than your word. In production this
+              hands off to a hosted identity-verification provider: you photograph a government ID
+              and take a live selfie, the provider matches the two, and we only ever store the
+              pass/fail result — never the document itself. This prototype simulates that step
+              locally.
             </Text>
             {error && <Text style={styles.error}>{error}</Text>}
             <Pressable style={styles.button} onPress={startVerification} disabled={starting}>

@@ -91,11 +91,10 @@ export default function SignupPage() {
         <p className="auth-footer">
           We ask for your real name because we think philosophy is better when people stand behind
           their words. A name you'd say out loud in a seminar room changes how you argue and how
-          you listen — it's harder to be cruel, and easier to be taken seriously. Anyone can read
-          and sign up freely; posting under your name is what asks a little more of you, and
-          that's the point. If you'd like your identity confirmed rather than simply asserted, a
-          one-time ID verification is built in and available any time from your account — never
-          required to read, only if you choose to post.
+          you listen — it's harder to be cruel, and easier to be taken seriously. For now that
+          runs on the honor system: we trust the name you give us, and you can post as soon as you
+          sign up. If you'd like your identity confirmed rather than simply asserted, a one-time ID
+          verification is built in and available any time from your account.
         </p>
       </div>
     </div>
