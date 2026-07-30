@@ -90,7 +90,17 @@ authRouter.get("/me", requireAuth, async (req, res) => {
  * from "set a password" for accounts created via Google/Apple.
  */
 authRouter.get("/account", requireAuth, async (req, res) => {
-  res.json({ email: req.user!.email, hasPassword: req.user!.passwordHash !== null });
+  res.json({
+    email: req.user!.email,
+    hasPassword: req.user!.passwordHash !== null,
+    // Member-directory settings for the Settings screen (opt-in flags plus
+    // the interests text) — private to the caller, like the email.
+    directory: {
+      directoryVisible: req.user!.directoryVisible,
+      directoryBio: req.user!.directoryBio,
+      openToPartners: req.user!.openToPartners,
+    },
+  });
 });
 
 authRouter.post("/change-password", requireAuth, authLimiter, async (req, res) => {

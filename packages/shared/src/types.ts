@@ -92,6 +92,10 @@ export interface ThreadSummary {
   createdAt: string;
   /** Set only for chapter threads — responses carrying it are already access-checked. */
   chapter?: ChapterRef | null;
+  /** "event" for an event's afterlife thread; absent/"discussion" otherwise. */
+  kind?: "discussion" | "event";
+  /** The event's date — set exactly when kind === "event". */
+  eventDate?: string | null;
   tags: Tag[];
   likeCount: number;
   myLiked: boolean;
@@ -127,6 +131,8 @@ export interface Post {
   deleted: boolean;
   likeCount: number;
   myLiked: boolean;
+  /** In event threads: the author was at the event ("was there" marker). */
+  wasThere?: boolean;
 }
 
 export interface ThreadDetail extends ThreadSummary {
@@ -137,6 +143,14 @@ export interface ThreadDetail extends ThreadSummary {
   posts: Post[];
   /** True when this response is a truncated preview for an anonymous (not-logged-in) visitor. */
   previewOnly: boolean;
+  /** Event threads only: how many people were in the room. */
+  attendeeCount?: number;
+  /** Event threads only: the viewer has the "was there" marker. */
+  myAttended?: boolean;
+  /** Event threads, admins only: the per-event attendance code to share. */
+  eventCode?: string | null;
+  /** Event threads only: posting requires membership; true when the viewer may reply. */
+  canPost?: boolean;
   repliesTotal: number;
   repliesLimit: number;
   repliesOffset: number;
@@ -397,6 +411,31 @@ export interface ChapterMembersResponse {
   members: ChapterMemberItem[];
   /** Admin-only: pending join requests, oldest first. */
   pending?: ChapterMemberItem[];
+}
+
+/** One row of the member directory (opt-in, member-only). */
+export interface DirectoryEntry {
+  user: PublicUser;
+  /** Short free-text interests — plain text, not markdown. */
+  directoryBio: string | null;
+  openToPartners: boolean;
+  /** Chapters this member is an active member of. */
+  chapters: ChapterRef[];
+}
+
+export interface DirectoryResponse {
+  entries: DirectoryEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+/** The caller's own directory settings (Settings screen). */
+export interface DirectorySettings {
+  directoryVisible: boolean;
+  directoryBio: string | null;
+  openToPartners: boolean;
 }
 
 export interface ModerationLogResponse {

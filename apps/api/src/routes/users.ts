@@ -84,6 +84,8 @@ usersRouter.get("/:id/profile", optionalAuth, async (req, res) => {
       title: t.title,
       author: toPublicUser(profileUser),
       createdAt: t.createdAt.toISOString(),
+      kind: t.kind as "discussion" | "event",
+      eventDate: t.eventDate?.toISOString() ?? null,
       tags: t.tags.map((tag) => ({ id: tag.id, slug: tag.slug, name: tag.name, description: tag.description })),
       likeCount: t._count.likes,
       myLiked: t.likes.length > 0,
@@ -116,13 +118,28 @@ usersRouter.patch("/me", requireAuth, writeLimiter, async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  const { bio, displayName } = parsed.data;
+  const { bio, displayName, directoryVisible, directoryBio, openToPartners } = parsed.data;
 
-  const data: { bio?: string | null; displayName?: string } = {};
+  const data: {
+    bio?: string | null;
+    displayName?: string;
+    directoryVisible?: boolean;
+    directoryBio?: string | null;
+    openToPartners?: boolean;
+  } = {};
   if (bio !== undefined) {
     const trimmed = bio?.trim() ?? "";
     data.bio = trimmed === "" ? null : trimmed;
   }
+  // Directory settings can be saved by anyone (they're the user's own
+  // preferences); the directory itself only ever lists current members, so a
+  // lapsed membership hides the entry without erasing these choices.
+  if (directoryVisible !== undefined) data.directoryVisible = directoryVisible;
+  if (directoryBio !== undefined) {
+    const trimmed = directoryBio?.trim() ?? "";
+    data.directoryBio = trimmed === "" ? null : trimmed;
+  }
+  if (openToPartners !== undefined) data.openToPartners = openToPartners;
   if (displayName !== undefined && displayName !== req.user!.displayName) {
     if (req.user!.verificationStatus === "VERIFIED") {
       return res.status(403).json({
@@ -278,6 +295,9 @@ usersRouter.delete("/me", requireAuth, authLimiter, async (req, res) => {
       verificationStatus: "UNVERIFIED",
       isSupporter: false,
       role: "user",
+      directoryVisible: false,
+      directoryBio: null,
+      openToPartners: false,
       deletedAt: new Date(),
     },
   });

@@ -15,6 +15,9 @@ declare global {
         verificationStatus: string;
         role: string;
         isSupporter: boolean;
+        directoryVisible: boolean;
+        directoryBio: string | null;
+        openToPartners: boolean;
         passwordHash: string | null;
         createdAt: Date;
       };
@@ -34,6 +37,9 @@ function toRequestUser(user: DbUser): NonNullable<Request["user"]> {
     verificationStatus: user.verificationStatus,
     role: user.role,
     isSupporter: user.isSupporter,
+    directoryVisible: user.directoryVisible,
+    directoryBio: user.directoryBio,
+    openToPartners: user.openToPartners,
     passwordHash: user.passwordHash,
     createdAt: user.createdAt,
   };

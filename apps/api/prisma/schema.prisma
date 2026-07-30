@@ -33,6 +33,16 @@ model User {
   // this forum is gated as a member perk.
   isSupporter         Boolean   @default(false)
   supporterSince      DateTime?
+  // Member directory is strictly opt-in and member-only: a user appears only
+  // while directoryVisible AND isSupporter both hold, so lapsed members drop
+  // out automatically without losing their saved settings.
+  directoryVisible    Boolean   @default(false)
+  // Short free-text interests shown in the directory (distinct from the
+  // public profile bio, which stays markdown and public).
+  directoryBio        String?
+  // "Open to a reading partner / study group" — a directory filter, not a
+  // matching algorithm; members connect by DM.
+  openToPartners      Boolean   @default(false)
   // Account deletion anonymizes rather than cascade-deletes (threads/replies
   // keep rendering under "[deleted]" so other people's conversations stay
   // whole). A non-null deletedAt means the account can never log in again.
@@ -60,6 +70,7 @@ model User {
   pushTokens            PushToken[]
   bookmarks             Bookmark[]
   chapterMemberships    ChapterMembership[]
+  eventAttendance       EventAttendee[]
 }
 
 // A member-only sub-forum for one local group (the NYC chapter, ...). Not a
@@ -148,6 +159,17 @@ model Thread {
   // notifications, bookmarks, profiles, direct URL) to anyone who is not an
   // active member of that chapter; admins bypass.
   chapterId  String?
+  // "discussion" (default) or "event". An event thread is a club event's
+  // afterlife: admin-created with a date, collects questions before, receives
+  // topics/recording/transcript after. Reading follows normal rules (free
+  // accounts read main-feed events); POSTING in an event is member-only.
+  // If an event thread sits in a chapter, chapter visibility wins.
+  kind       String   @default("discussion")
+  eventDate  DateTime?
+  // Per-event attendance code (WISDOMKEY pattern): anyone at the event can
+  // redeem it to get the "was there" marker. Stored uppercase; null = no
+  // self-serve attendance for this event.
+  eventCode  String?
 
   chapter       Chapter?       @relation(fields: [chapterId], references: [id])
   author        User           @relation(fields: [authorId], references: [id])
@@ -157,6 +179,24 @@ model Thread {
   mentions      Mention[]
   notifications Notification[]
   bookmarks     Bookmark[]
+  attendees     EventAttendee[]
+}
+
+// Who was in the room for an event thread. Populated by an admin marking
+// attendees or by the user redeeming the event's code. Drives the "was
+// there" marker on that thread's posts.
+model EventAttendee {
+  id        String   @id @default(cuid())
+  threadId  String
+  userId    String
+  // "admin" or "code" — how the row came to exist.
+  source    String
+  createdAt DateTime @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([threadId, userId])
 }
 
 model ThreadLike {

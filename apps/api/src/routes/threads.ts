@@ -1,6 +1,8 @@
 import { Router } from "express";
 import {
+  addEventAttendeeSchema,
   adminDeleteSchema,
+  attendEventSchema,
   createThreadSchema,
   MAX_PINNED_THREADS,
   pinThreadSchema,
@@ -26,6 +28,11 @@ const DEFAULT_REPLIES_LIMIT = 20;
 threadsRouter.get("/", optionalAuth, async (req, res) => {
   const sort = req.query.sort === "new" ? "new" : "hot";
   const tagSlug = req.query.tag as string | undefined;
+  // Event threads live in the main feed under their own "Events" grouping:
+  // the default listing stays discussions, and clients fetch ?kind=event for
+  // the grouping — so an event isn't listed twice on one page.
+  const kindParam = req.query.kind as string | undefined;
+  const kind = kindParam === "event" ? "event" : kindParam === "all" ? undefined : "discussion";
   const viewerId = req.user?.id;
   const limit = Math.min(Number(req.query.limit) || DEFAULT_FEED_LIMIT, 100);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
@@ -35,6 +42,7 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
   const where = {
     deletedAt: null,
     chapterId: null,
+    ...(kind ? { kind } : {}),
     ...(tagSlug ? { tags: { some: { slug: tagSlug } } } : {}),
   };
 
@@ -49,7 +57,11 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
       // order and hotScore is never touched by a pin.
       orderBy: [
         { pinnedAt: "desc" },
-        sort === "new" ? { createdAt: "desc" } : { hotScore: "desc" },
+        // The events listing orders by the event's date (newest event first;
+        // clients split upcoming/past) — hot/new make little sense there.
+        ...(kind === "event"
+          ? [{ eventDate: "desc" as const }]
+          : [sort === "new" ? { createdAt: "desc" as const } : { hotScore: "desc" as const }]),
       ],
       skip: offset,
       take: limit,
@@ -70,6 +82,8 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
       title: t.title,
       author: toPublicUser(t.author),
       createdAt: t.createdAt.toISOString(),
+      kind: t.kind as "discussion" | "event",
+      eventDate: t.eventDate?.toISOString() ?? null,
       tags: t.tags.map((tag) => ({ id: tag.id, slug: tag.slug, name: tag.name, description: tag.description })),
       likeCount: t._count.likes,
       myLiked: viewerId ? t.likes.length > 0 : false,
@@ -96,6 +110,7 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
       tags: true,
       likes: true,
       chapter: { select: { id: true, slug: true, name: true } },
+      attendees: { select: { userId: true } },
       bookmarks: req.user ? { where: { userId: req.user.id } } : false,
       posts: {
         orderBy: { createdAt: "asc" },
@@ -172,6 +187,19 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
     ? []
     : visiblePosts.filter((p) => includedIds.has(p.id));
 
+  // Event bookkeeping. "Was there" markers ride on each post; canPost tells
+  // the client whether to offer the composer (the API enforces it again in
+  // POST /api/posts regardless). Chapter events inherit the chapter rule —
+  // anyone who can see the thread can post in it.
+  const isEvent = thread.kind === "event";
+  const attendeeIds = new Set(thread.attendees.map((a) => a.userId));
+  const isAdmin = req.user?.role === "admin";
+  const canPost = !isEvent
+    ? undefined
+    : thread.chapterId
+      ? Boolean(req.user)
+      : Boolean(req.user && (req.user.isSupporter || isAdmin));
+
   res.json({
     thread: {
       id: thread.id,
@@ -182,6 +210,18 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
       locked: thread.locked,
       pinnedAt: thread.pinnedAt?.toISOString() ?? null,
       chapter: thread.chapter,
+      kind: thread.kind as "discussion" | "event",
+      eventDate: thread.eventDate?.toISOString() ?? null,
+      ...(isEvent
+        ? {
+            attendeeCount: attendeeIds.size,
+            myAttended: viewerId ? attendeeIds.has(viewerId) : false,
+            canPost,
+            // The code is what an admin reads out in the room — never sent to
+            // anyone else.
+            ...(isAdmin ? { eventCode: thread.eventCode } : {}),
+          }
+        : {}),
       author: threadDeleted ? DELETED_AUTHOR : toPublicUser(thread.author),
       createdAt: thread.createdAt.toISOString(),
       editedAt: threadDeleted ? null : thread.editedAt?.toISOString() ?? null,
@@ -224,6 +264,7 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
               deleted: false,
               likeCount: p._count.likes,
               myLiked: viewerId ? p.likes.some((l) => l.userId === viewerId) : false,
+              ...(isEvent ? { wasThere: attendeeIds.has(p.authorId) } : {}),
             },
       ),
     },
@@ -235,7 +276,22 @@ threadsRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, 
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  const { title, body, tagIds, chapterId } = parsed.data;
+  const { title, body, tagIds, chapterId, kind, eventDate, eventCode } = parsed.data;
+
+  // Event threads are admin-created only — one per club event, with its date.
+  // The event fields are meaningless on a discussion and rejected there so a
+  // client bug can't quietly create a half-event.
+  const isEvent = kind === "event";
+  if (isEvent) {
+    if (req.user!.role !== "admin") {
+      return res.status(403).json({ error: "Only admins can create event threads" });
+    }
+    if (!eventDate) {
+      return res.status(400).json({ error: "An event thread needs the event's date" });
+    }
+  } else if (eventDate || eventCode) {
+    return res.status(400).json({ error: "Event fields only apply to event threads" });
+  }
 
   if (tagIds.length > 0) {
     const count = await prisma.tag.count({ where: { id: { in: tagIds } } });
@@ -264,6 +320,11 @@ threadsRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, 
       authorId: req.user!.id,
       createdAt,
       chapterId: chapterId ?? null,
+      kind: isEvent ? "event" : "discussion",
+      eventDate: isEvent ? new Date(eventDate!) : null,
+      // Normalized the same way redemption normalizes input, so the code an
+      // admin reads out matches regardless of how people type it.
+      eventCode: isEvent && eventCode ? eventCode.trim().toUpperCase() : null,
       hotScore: hotScore(0, 0, createdAt),
       tags: { connect: tagIds.map((id) => ({ id })) },
     },
@@ -495,3 +556,120 @@ threadsRouter.delete("/:id/pin", requireAuth, requireAdmin, adminLimiter, async 
 
   res.json({ pinnedAt: null });
 });
+
+/* ---- Event attendance ---------------------------------------------------- */
+
+/**
+ * Redeem the event's per-event code (the WISDOMKEY pattern, one code per
+ * event) to get the "was there" marker. Any signed-in reader of the thread
+ * may redeem — attendance records who was in the room, and a free account
+ * can have been in the room; posting stays member-only regardless.
+ */
+threadsRouter.post("/:id/attend", requireAuth, writeLimiter, async (req, res) => {
+  const parsed = attendEventSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
+  const thread = await prisma.thread.findUnique({ where: { id: req.params.id } });
+  if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+  if (!(await canViewThread(req.user, thread))) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
+  if (thread.kind !== "event") {
+    return res.status(400).json({ error: "This isn't an event thread" });
+  }
+  if (!thread.eventCode) {
+    return res.status(400).json({ error: "This event has no attendance code — ask an admin to mark you" });
+  }
+  if (parsed.data.code.trim().toUpperCase() !== thread.eventCode) {
+    return res.status(400).json({ error: "That code isn't valid." });
+  }
+
+  await prisma.eventAttendee.upsert({
+    where: { threadId_userId: { threadId: thread.id, userId: req.user!.id } },
+    update: {},
+    create: { threadId: thread.id, userId: req.user!.id, source: "code" },
+  });
+  res.json({ attended: true });
+});
+
+/** Admin: the attendee list, for marking people who didn't redeem a code. */
+threadsRouter.get("/:id/attendees", requireAuth, requireAdmin, async (req, res) => {
+  const thread = await prisma.thread.findUnique({ where: { id: req.params.id } });
+  if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+  if (thread.kind !== "event") {
+    return res.status(400).json({ error: "This isn't an event thread" });
+  }
+
+  const rows = await prisma.eventAttendee.findMany({
+    where: { threadId: thread.id },
+    orderBy: { createdAt: "asc" },
+    include: { user: true },
+  });
+  res.json({
+    attendees: rows
+      .filter((a) => !a.user.deletedAt)
+      .map((a) => ({ user: toPublicUser(a.user), source: a.source, createdAt: a.createdAt.toISOString() })),
+  });
+});
+
+threadsRouter.post("/:id/attendees", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const parsed = addEventAttendeeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+
+  const thread = await prisma.thread.findUnique({ where: { id: req.params.id } });
+  if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+  if (thread.kind !== "event") {
+    return res.status(400).json({ error: "This isn't an event thread" });
+  }
+  const target = await prisma.user.findUnique({ where: { id: parsed.data.userId } });
+  if (!target || target.deletedAt) return res.status(404).json({ error: "User not found" });
+
+  await prisma.eventAttendee.upsert({
+    where: { threadId_userId: { threadId: thread.id, userId: target.id } },
+    update: {},
+    create: { threadId: thread.id, userId: target.id, source: "admin" },
+  });
+  await logModeration({
+    actorId: req.user!.id,
+    action: "event_attendee_added",
+    targetType: "user",
+    targetId: target.id,
+    targetLabel: target.displayName,
+    detail: { threadId: thread.id, threadTitle: contentLabel(thread.title) },
+  });
+
+  res.status(201).json({ attended: true });
+});
+
+threadsRouter.delete(
+  "/:id/attendees/:userId",
+  requireAuth,
+  requireAdmin,
+  adminLimiter,
+  async (req, res) => {
+    const thread = await prisma.thread.findUnique({ where: { id: req.params.id } });
+    if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+
+    const existing = await prisma.eventAttendee.findUnique({
+      where: { threadId_userId: { threadId: thread.id, userId: req.params.userId } },
+      include: { user: true },
+    });
+    if (!existing) return res.json({ attended: false });
+
+    await prisma.eventAttendee.delete({ where: { id: existing.id } });
+    await logModeration({
+      actorId: req.user!.id,
+      action: "event_attendee_removed",
+      targetType: "user",
+      targetId: existing.userId,
+      targetLabel: existing.user.displayName,
+      detail: { threadId: thread.id, threadTitle: contentLabel(thread.title) },
+    });
+
+    res.json({ attended: false });
+  },
+);

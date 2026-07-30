@@ -27,6 +27,20 @@ postsRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, re
     return res.status(404).json({ error: "Thread not found" });
   }
   if (thread.locked) return res.status(403).json({ error: "This thread is locked" });
+  // Event threads: reading is open, posting is member-only. A chapter event
+  // inherits the chapter rule instead (anyone who can see it can post —
+  // chapter visibility wins, and it's already enforced above).
+  if (
+    thread.kind === "event" &&
+    !thread.chapterId &&
+    !req.user!.isSupporter &&
+    req.user!.role !== "admin"
+  ) {
+    return res.status(403).json({
+      error:
+        "Posting in event threads is for members of the Society. Redeem a membership code in Settings to join the conversation.",
+    });
+  }
 
   let parent: { authorId: string; deletedAt: Date | null } | null = null;
   if (parentId) {

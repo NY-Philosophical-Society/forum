@@ -43,6 +43,14 @@ export const createThreadSchema = z.object({
   // A thread belongs to the main feed (null/absent) or exactly one chapter —
   // never both. The API checks active chapter membership server-side.
   chapterId: z.string().nullable().optional(),
+  // "event" threads are admin-created only; eventDate is required for them.
+  kind: z.enum(["discussion", "event"]).optional(),
+  eventDate: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date and time")
+    .optional(),
+  // Per-event attendance code (the WISDOMKEY pattern, one per event).
+  eventCode: z.string().min(4, "Codes need at least 4 characters").max(40).optional(),
 });
 export type CreateThreadInput = z.infer<typeof createThreadSchema>;
 
@@ -254,6 +262,8 @@ export const ModerationAction = {
   CHAPTER_MEMBER_ADDED: "chapter_member_added",
   CHAPTER_MEMBER_APPROVED: "chapter_member_approved",
   CHAPTER_MEMBER_REMOVED: "chapter_member_removed",
+  EVENT_ATTENDEE_ADDED: "event_attendee_added",
+  EVENT_ATTENDEE_REMOVED: "event_attendee_removed",
   REPORT_RESOLVED: "report_resolved",
   REPORT_DISMISSED: "report_dismissed",
   CONTENT_DELETED: "content_deleted",
@@ -276,6 +286,8 @@ export const MODERATION_ACTION_LABELS: Record<ModerationAction, string> = {
   chapter_member_added: "Added chapter member",
   chapter_member_approved: "Approved chapter join request",
   chapter_member_removed: "Removed chapter member",
+  event_attendee_added: "Marked event attendee",
+  event_attendee_removed: "Removed event attendee",
   report_resolved: "Resolved report",
   report_dismissed: "Dismissed report",
   content_deleted: "Deleted content",
@@ -331,12 +343,25 @@ export const addChapterMemberSchema = z.object({
 });
 export type AddChapterMemberInput = z.infer<typeof addChapterMemberSchema>;
 
+/* ---- Event threads ------------------------------------------------------- */
+
+export const attendEventSchema = z.object({
+  code: z.string().min(1, "Enter the event code"),
+});
+export type AttendEventInput = z.infer<typeof attendEventSchema>;
+
+export const addEventAttendeeSchema = z.object({
+  userId: z.string(),
+});
+export type AddEventAttendeeInput = z.infer<typeof addEventAttendeeSchema>;
+
 export const redeemCodeSchema = z.object({
   code: z.string().min(1),
 });
 export type RedeemCodeInput = z.infer<typeof redeemCodeSchema>;
 
 export const BIO_MAX_LENGTH = 500;
+export const DIRECTORY_BIO_MAX_LENGTH = 280;
 
 export const updateProfileSchema = z.object({
   // Rendered as markdown (same renderer as posts) since brief 03.
@@ -344,6 +369,15 @@ export const updateProfileSchema = z.object({
   // The display name is the legal name tied to ID verification; the API
   // rejects this field for VERIFIED users (see routes/users.ts).
   displayName: z.string().min(2, "Enter your real first and last name").max(80).optional(),
+  // Member directory (all strictly opt-in; only shown while isSupporter):
+  // visibility flag, short interests text, and the reading-partner flag.
+  directoryVisible: z.boolean().optional(),
+  directoryBio: z
+    .string()
+    .max(DIRECTORY_BIO_MAX_LENGTH, `Interests must be ${DIRECTORY_BIO_MAX_LENGTH} characters or fewer`)
+    .nullable()
+    .optional(),
+  openToPartners: z.boolean().optional(),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 

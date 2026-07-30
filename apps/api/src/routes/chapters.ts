@@ -201,6 +201,8 @@ chaptersRouter.get("/:slug/threads", requireAuth, requireMember, async (req, res
     author: toPublicUser(t.author),
     createdAt: t.createdAt.toISOString(),
     chapter: { id: chapter.id, slug: chapter.slug, name: chapter.name },
+    kind: t.kind as "discussion" | "event",
+    eventDate: t.eventDate?.toISOString() ?? null,
     tags: t.tags.map((tag) => ({ id: tag.id, slug: tag.slug, name: tag.name, description: tag.description })),
     likeCount: t._count.likes,
     myLiked: t.likes.length > 0,

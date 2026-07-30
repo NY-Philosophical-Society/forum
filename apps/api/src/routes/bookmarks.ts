@@ -49,6 +49,8 @@ bookmarksRouter.get("/", requireAuth, async (req, res) => {
     title: t.title,
     author: toPublicUser(t.author),
     createdAt: t.createdAt.toISOString(),
+    kind: t.kind as "discussion" | "event",
+    eventDate: t.eventDate?.toISOString() ?? null,
     tags: t.tags.map((tag) => ({ id: tag.id, slug: tag.slug, name: tag.name, description: tag.description })),
     likeCount: t._count.likes,
     myLiked: t.likes.length > 0,

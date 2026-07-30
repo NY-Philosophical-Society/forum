@@ -28,6 +28,7 @@ beforeAll(async () => {
   await prisma.message.deleteMany();
   await prisma.postLike.deleteMany();
   await prisma.threadLike.deleteMany();
+  await prisma.eventAttendee.deleteMany();
   await prisma.post.deleteMany();
   await prisma.thread.deleteMany();
   await prisma.chapterMembership.deleteMany();

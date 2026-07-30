@@ -19,14 +19,19 @@ describe("GET /api/auth/account", () => {
     const res = await request(app)
       .get("/api/auth/account")
       .set("Authorization", `Bearer ${user.token}`);
+    const defaultDirectory = {
+      directoryVisible: false,
+      directoryBio: null,
+      openToPartners: false,
+    };
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ email: user.email, hasPassword: true });
+    expect(res.body).toEqual({ email: user.email, hasPassword: true, directory: defaultDirectory });
 
     const oauth = await signupOAuth();
     const res2 = await request(app)
       .get("/api/auth/account")
       .set("Authorization", `Bearer ${oauth.token}`);
-    expect(res2.body).toEqual({ email: oauth.email, hasPassword: false });
+    expect(res2.body).toEqual({ email: oauth.email, hasPassword: false, directory: defaultDirectory });
   });
 });
 

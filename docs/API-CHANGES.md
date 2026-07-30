@@ -5,6 +5,66 @@ the backend engineer can rebuild it properly without reading diffs. Shapes are
 the source of truth in `packages/shared/src/types.ts` (responses) and
 `schemas.ts` (request validation); this file is the map.
 
+## 2026-07-30 — Membership parts 2–4: member directory, partner matching, event threads
+
+### Member directory + reading-partner matching
+
+New `User` fields: `directoryVisible Boolean @default(false)` (strictly
+opt-in), `directoryBio String?` (short plain-text interests, max 280 — distinct
+from the public markdown `bio`), `openToPartners Boolean @default(false)`
+("open to a reading partner / study group" — a directory filter, deliberately
+no matching algorithm; members connect by DM).
+
+- `GET /api/directory` — **member-only** (`requireMember`, server-enforced).
+  `?q=` matches displayName OR directoryBio (contains), `?partners=1` narrows
+  to `openToPartners`, `limit` (≤100, default 30) / `offset`. Returns
+  `{ entries: DirectoryEntry[], total, limit, offset, hasMore }`; each entry is
+  `{ user: PublicUser, directoryBio, openToPartners, chapters: ChapterRef[] }`
+  (active chapter memberships only). **An entry appears only while
+  `directoryVisible && isSupporter && !deletedAt && !bannedAt`** — lapsed
+  members drop out automatically, their settings survive.
+- `PATCH /api/users/me` accepts the three new fields (any account may save
+  them; the directory query is the gate). Account deletion resets all three.
+- `GET /api/auth/account` now also returns
+  `directory: { directoryVisible, directoryBio, openToPartners }` for the
+  Settings screen.
+
+### Event threads (the event's afterlife)
+
+New `Thread` fields: `kind String @default("discussion")` (`"discussion" |
+"event"`), `eventDate DateTime?`, `eventCode String?` (per-event attendance
+code, stored uppercase; the WISDOMKEY pattern). New model **`EventAttendee`**
+— `(threadId, userId)` unique, `source` (`"admin" | "code"`), `createdAt`.
+
+Rules (all server-enforced):
+
+- **Creation**: `POST /api/threads` with `kind: "event"` is admin-only;
+  `eventDate` required; `eventCode` optional (normalized
+  `trim().toUpperCase()`). Event fields on a discussion → 400. Event threads
+  can sit in a chapter (`chapterId`), in which case **chapter visibility wins**
+  everywhere and chapter members may post.
+- **Reading**: normal rules — free accounts read main-feed event threads in
+  full; anonymous get the usual teaser.
+- **Posting**: member-only (`isSupporter` or admin) for main-feed events —
+  enforced in `POST /api/posts`, 403 with a membership pitch message. Likes
+  stay verification-gated as before (posting, not liking, is the member perk).
+- **Feed**: `GET /api/threads?kind=discussion|event|all` — default is
+  `discussion`, so events don't double-list; the Events grouping fetches
+  `?kind=event`, ordered `eventDate desc` (clients split upcoming/past).
+- **Serialization**: `ThreadSummary.kind` + `.eventDate` everywhere (feed,
+  chapter feed, bookmarks, profiles). Thread detail adds `attendeeCount`,
+  `myAttended`, `canPost`, and `eventCode` **for admins only**; each post in an
+  event thread carries `wasThere` (author has an `EventAttendee` row).
+- **Attendance**: `POST /api/threads/:id/attend` `{ code }` — any signed-in
+  user who can see the thread may redeem (a free account can have been in the
+  room); case/whitespace-insensitive; 400 on wrong code or non-event. Admin
+  routes: `GET/POST /api/threads/:id/attendees` (`{ userId }`) and
+  `DELETE /api/threads/:id/attendees/:userId` — logged as
+  `event_attendee_added` / `event_attendee_removed` in the moderation log.
+
+Tests: `apps/api/src/routes/directory-events.test.ts` (9 tests across the
+tier matrix).
+
 ## 2026-07-30 — Membership part 1: chapters (member-only sub-forums)
 
 Skeleton-quality per the handoff agreement: SQLite models + plain Express
