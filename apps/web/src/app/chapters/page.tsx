@@ -123,7 +123,9 @@ export default function ChaptersPage() {
               )}
             </div>
           </div>
-          <p style={{ margin: "0.75rem 0 0", lineHeight: "var(--leading-body)" }}>{c.description}</p>
+          {c.description && (
+            <p style={{ margin: "0.75rem 0 0", lineHeight: "var(--leading-body)" }}>{c.description}</p>
+          )}
         </article>
       ))}
     </div>

@@ -703,15 +703,40 @@ async function seedMembership(adminId: string) {
   // queue. Members were added by the admin, so they land active.
   const chapter = await prisma.chapter.upsert({
     where: { slug: "new-york-city" },
-    update: {},
+    // Explicit, so re-seeding an existing database converges on this shape
+    // rather than leaving whatever was there before.
+    update: { description: null, location: "New York, NY" },
     create: {
       slug: "new-york-city",
       name: "New York City",
-      description:
-        "The founding chapter. Meets monthly near Washington Square for close reading and long arguments.",
       location: "New York, NY",
     },
   });
+
+  const laChapter = await prisma.chapter.upsert({
+    where: { slug: "los-angeles" },
+    update: {},
+    create: {
+      slug: "los-angeles",
+      name: "Los Angeles",
+      location: "Los Angeles, CA",
+    },
+  });
+  // Supporters only — chapter membership requires it. wenli/samir aren't in NYC.
+  for (const handle of ["wenli", "samir"]) {
+    const user = await upsertUser(handle);
+    await prisma.chapterMembership.upsert({
+      where: { chapterId_userId: { chapterId: laChapter.id, userId: user.id } },
+      update: { state: "active" },
+      create: {
+        chapterId: laChapter.id,
+        userId: user.id,
+        state: "active",
+        approvedAt: new Date(),
+      },
+    });
+  }
+  console.log(`Seeded chapter "${laChapter.name}" (2 active).`);
   const activeHandles = ["marguerite", "daniel", "priya", "ruth"];
   for (const handle of activeHandles) {
     const user = await upsertUser(handle);
@@ -777,17 +802,23 @@ Say here if you're in, and whether Sunday afternoons still work for everyone.`,
  * badge shows. Reading is open to any account; posting is member-only.
  */
 async function seedEventThread(adminId: string, _chapterId: string) {
-  const eventDate = new Date(Date.now() - 12 * DAY);
+  // Last night's meeting, so the afterlife thread is the freshest thing in the
+  // Events strip — which is the state the feature is designed around.
+  const eventDate = new Date(Date.now() - 1 * DAY);
   const createdAt = new Date(eventDate.getTime() - 10 * DAY);
   const thread = await prisma.thread.create({
     data: {
-      title: "Members' Symposium: Free Will After Neuroscience",
-      body: `**An evening with Prof. Miriam Kessler (NYU)** — does the neuroscience of decision actually touch the free will debate, or has it been aimed at a strawman for forty years?
+      title: "Values: where do they come from, and can they be wrong?",
+      body: `Our topic for the evening. Three questions to hold onto:
+
+1. Are values discovered or made? If made, by whom — the individual, or the community they were raised in?
+2. Can a whole culture be **wrong** about a value, or does that question quietly assume the very standard it's asking about?
+3. When two values you hold genuinely conflict, what are you actually doing when you choose?
 
 **When:** ${eventDate.toDateString()}, 7pm
 **Where:** The clubroom, 24 Washington Mews
 
-Drop your questions for Prof. Kessler in this thread before the evening — we'll put the best three to her directly. Afterwards, the topics, recording, and transcript land here and the conversation continues with the people who were in the room.`,
+Bring the question you'd want pressed on you rather than the one you've already answered. Afterwards the topics land here and the conversation continues with the people who were in the room.`,
       authorId: adminId,
       createdAt,
       kind: "event",
@@ -801,12 +832,12 @@ Drop your questions for Prof. Kessler in this thread before the evening — we'l
     {
       handle: "samir",
       hoursAfter: 20,
-      body: "Question for the professor: if Libet-style findings were fully replicated at scale, what *specific* philosophical position would actually be refuted?",
+      body: "A question I'd like pressed: everyone says values are *shaped* by culture, which is obviously true and tells us nothing about whether they're **correct**. Origin and justification are different questions. Can we keep them apart for one evening?",
     },
     {
       handle: "adaora",
       hoursAfter: 50,
-      body: "Mine: compatibilists keep saying neuroscience changes nothing. Is there ANY conceivable neural finding that would move them, or is the thesis unfalsifiable?",
+      body: "Mine is narrower. We all agree some past culture was wrong about something — slavery, usually. So we already believe cultures can be wrong. What is that belief actually resting on, if not a standard outside the culture?",
     },
   ];
   const beforePosts: { id: string }[] = [];
@@ -831,13 +862,17 @@ Drop your questions for Prof. Kessler in this thread before the evening — we'l
       authorId: adminId,
       body: `**The evening, for the record.**
 
-Topics Prof. Kessler took: Samir's falsifiability question (her answer: "agent-causal libertarianism, and nothing else"), the readiness potential replication crisis, and whether "could have done otherwise" survives translation into neural terms.
+Where we actually went: Samir's separation of origin from justification held for about ten minutes before Adaora's slavery case pulled it apart — if the standard is outside the culture, name it; if it isn't, explain the conviction. Nobody managed both.
 
-📼 Recording: *(link goes here once the donation platform hosts media — for now, ask at the clubroom)*
+The room split roughly three ways. That values are discovered, and moral progress is literally progress. That they're made, and "progress" just means "closer to ours." And a third position that got the least airtime and may have been the strongest: that the discovered/made distinction is the wrong frame, because values are the kind of thing that only exist in the practice of holding them.
+
+We never got to the third question — what you're *doing* when two values you hold conflict. Carrying it to next month.
+
+📼 Recording: *(link goes here once we have somewhere to host media)*
 📄 Transcript: *(same)*
 
-The floor stays open — especially for those who were in the room. What did she get wrong?`,
-      createdAt: new Date(eventDate.getTime() + 1 * DAY),
+The floor stays open, especially for those who were in the room. What did we miss?`,
+      createdAt: new Date(eventDate.getTime() + 8 * HOUR),
     },
   });
   const wenli = await upsertUser("wenli");
@@ -846,8 +881,8 @@ The floor stays open — especially for those who were in the room. What did she
       threadId: thread.id,
       authorId: wenli.id,
       parentId: afterDrop.id,
-      body: "What she got wrong: dismissing the Daoist framing in the Q&A as 'not about the same thing'. Wu wei is precisely a theory of action without a deliberating self — it is exactly the same thing.",
-      createdAt: new Date(eventDate.getTime() + 2 * DAY),
+      body: "What we missed: the third position got dismissed as evasion, and it isn't. Saying values exist only in the practice of holding them is not neutrality between the other two — it's a claim that both are asking a badly formed question. That deserved longer than four minutes.",
+      createdAt: new Date(eventDate.getTime() + 14 * HOUR),
     },
   });
   const priya = await upsertUser("priya");
@@ -856,8 +891,8 @@ The floor stays open — especially for those who were in the room. What did she
       threadId: thread.id,
       authorId: priya.id,
       parentId: beforePosts[1].id,
-      body: "For the record, she did answer this one from the stage: 'a finding that decisions complete before any information integration' would move her. Which of course no one can operationalize.",
-      createdAt: new Date(eventDate.getTime() + 3 * DAY),
+      body: "Adaora — I think your question was answered in the room and nobody noticed. The conviction rests on the *victims'* judgement, not ours. They said it was wrong at the time. That isn't a standard outside the culture; it's a standard inside it that the culture refused to hear.",
+      createdAt: new Date(eventDate.getTime() + 20 * HOUR),
     },
   });
   await recomputeThreadHotScore(thread.id);

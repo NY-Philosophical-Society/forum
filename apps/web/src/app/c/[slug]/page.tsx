@@ -158,9 +158,11 @@ export default function ChapterPage() {
           </Link>
         )}
       </div>
-      <p style={{ margin: "0.75rem 0 1.25rem", lineHeight: "var(--leading-body)" }}>
-        {chapter.description}
-      </p>
+      {chapter.description && (
+        <p style={{ margin: "0.75rem 0 1.25rem", lineHeight: "var(--leading-body)" }}>
+          {chapter.description}
+        </p>
+      )}
 
       {!canRead ? (
         // The chapter's door: a member who isn't in this chapter yet.

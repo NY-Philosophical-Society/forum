@@ -80,7 +80,8 @@ model Chapter {
   id          String   @id @default(cuid())
   slug        String   @unique
   name        String
-  description String
+  // Optional: a chapter's name and city usually say enough on their own.
+  description String?
   location    String?
   createdAt   DateTime @default(now())
 

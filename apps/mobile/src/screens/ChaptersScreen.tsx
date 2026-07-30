@@ -127,7 +127,7 @@ export function ChaptersScreen({ navigation }: Props) {
               {c.location ? `${c.location} · ` : ""}
               {c.memberCount} {c.memberCount === 1 ? "member" : "members"}
             </Text>
-            <Text style={styles.desc}>{c.description}</Text>
+            {c.description ? <Text style={styles.desc}>{c.description}</Text> : null}
             <View style={styles.cardActions}>
               {c.myMembership === "active" && (
                 <Pressable

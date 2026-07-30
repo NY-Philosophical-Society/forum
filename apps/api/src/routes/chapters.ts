@@ -45,7 +45,7 @@ function toChapterSummary(
     id: string;
     slug: string;
     name: string;
-    description: string;
+    description: string | null;
     location: string | null;
     createdAt: Date;
   },

@@ -139,7 +139,7 @@ export function ChapterFeedScreen({ route, navigation }: Props) {
   if (!canRead) {
     return (
       <View style={[styles.container, { padding: spacing.lg }]}>
-        <Text style={styles.desc}>{chapter.description}</Text>
+        {chapter.description ? <Text style={styles.desc}>{chapter.description}</Text> : null}
         <View style={styles.door}>
           <Text style={styles.doorMark}>❦</Text>
           <Text style={styles.doorTitle}>
@@ -164,7 +164,7 @@ export function ChapterFeedScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.container, { padding: spacing.lg, paddingBottom: 0 }]}>
-      <Text style={styles.desc}>{chapter.description}</Text>
+      {chapter.description ? <Text style={styles.desc}>{chapter.description}</Text> : null}
       <Text style={[styles.meta, { marginBottom: spacing.md }]}>
         {chapter.location ? `${chapter.location} · ` : ""}
         {chapter.memberCount} {chapter.memberCount === 1 ? "member" : "members"}

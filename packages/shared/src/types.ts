@@ -384,7 +384,7 @@ export interface ChapterSummary {
   id: string;
   slug: string;
   name: string;
-  description: string;
+  description: string | null;
   location: string | null;
   createdAt: string;
   memberCount: number;
