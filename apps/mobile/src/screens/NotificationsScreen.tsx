@@ -1,6 +1,6 @@
 import { useNavigation, useFocusEffect, type NavigationProp } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import {
   describeNotification,
   formatRelativeTime,
@@ -26,6 +26,7 @@ export function NotificationsScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   // "prompt" = permission never asked → show the enable banner.
   const [pushBanner, setPushBanner] = useState<"hidden" | "prompt">("hidden");
 
@@ -56,6 +57,23 @@ export function NotificationsScreen() {
     if (!token) return;
     setPushBanner("hidden");
     await registerForPush(token, true);
+  }
+
+  async function onRefresh() {
+    if (!token) return;
+    setRefreshing(true);
+    try {
+      const res = await api.get<NotificationsResponse>(
+        `/api/notifications?limit=${PAGE_SIZE}&offset=0`,
+        token,
+      );
+      setItems(res.notifications);
+      setHasMore(res.hasMore);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setRefreshing(false);
+    }
   }
 
   async function loadMore() {
@@ -140,6 +158,9 @@ export function NotificationsScreen() {
       <FlatList
         data={items ?? []}
         keyExtractor={(n) => n.id}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+        }
         renderItem={({ item: n }) => (
           <Pressable
             style={[

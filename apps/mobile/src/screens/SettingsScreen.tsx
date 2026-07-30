@@ -1,10 +1,21 @@
-import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import type { PublicUser } from "@nyps-forum/shared";
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import type { NotificationPreferences, PublicUser } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
+
+const PREF_ROWS: {
+  key: keyof Omit<NotificationPreferences, "master">;
+  label: string;
+  hint: string;
+}[] = [
+  { key: "replies", label: "Replies", hint: "Someone replies to your thread or your reply" },
+  { key: "likes", label: "Likes", hint: "Someone likes your thread or reply" },
+  { key: "mentions", label: "Mentions", hint: "Someone @mentions you" },
+  { key: "messages", label: "Messages", hint: "A new direct message arrives" },
+];
 
 export function SettingsScreen() {
   const { dateFormat, setDateFormat, themeName, setThemeName, colors } = useSettings();
@@ -14,6 +25,35 @@ export function SettingsScreen() {
   const [redeeming, setRedeeming] = useState(false);
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [redeemed, setRedeemed] = useState(false);
+  const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
+  const [prefsError, setPrefsError] = useState<string | null>(null);
+
+  // This screen also sits in the logged-out stack; no token, no section.
+  useEffect(() => {
+    if (!token) return;
+    api
+      .get<{ preferences: NotificationPreferences }>("/api/notifications/preferences", token)
+      .then((res) => setPrefs(res.preferences))
+      .catch(() => {});
+  }, [token]);
+
+  async function togglePref(key: keyof NotificationPreferences) {
+    if (!token || !prefs) return;
+    const next = { ...prefs, [key]: !prefs[key] };
+    setPrefs(next); // optimistic — reverted below if the save fails
+    setPrefsError(null);
+    try {
+      const res = await api.put<{ preferences: NotificationPreferences }>(
+        "/api/notifications/preferences",
+        { [key]: next[key] },
+        token,
+      );
+      setPrefs(res.preferences);
+    } catch (err: any) {
+      setPrefs(prefs);
+      setPrefsError(err.message ?? "Could not save that preference");
+    }
+  }
 
   async function redeemCode() {
     if (!token) return;
@@ -80,6 +120,45 @@ export function SettingsScreen() {
           </Pressable>
         </View>
       </View>
+
+      {user && prefs && (
+        <View style={styles.section}>
+          <Text style={styles.h2}>Notifications</Text>
+          <Text style={styles.meta}>
+            Per-type switches cover in-app alerts and push notifications alike.
+          </Text>
+          <View style={styles.prefRow}>
+            <View style={styles.prefText}>
+              <Text style={styles.prefLabel}>All notifications</Text>
+              <Text style={styles.prefHint}>
+                Master switch — turns everything off at once, push included.
+              </Text>
+            </View>
+            <Switch
+              value={prefs.master}
+              onValueChange={() => togglePref("master")}
+              trackColor={{ false: colors.border, true: colors.accent }}
+            />
+          </View>
+          {PREF_ROWS.map((row) => (
+            <View key={row.key} style={styles.prefRow}>
+              <View style={styles.prefText}>
+                <Text style={[styles.prefLabel, !prefs.master && styles.prefDisabled]}>
+                  {row.label}
+                </Text>
+                <Text style={styles.prefHint}>{row.hint}</Text>
+              </View>
+              <Switch
+                value={prefs[row.key]}
+                disabled={!prefs.master}
+                onValueChange={() => togglePref(row.key)}
+                trackColor={{ false: colors.border, true: colors.accent }}
+              />
+            </View>
+          ))}
+          {prefsError && <Text style={styles.error}>{prefsError}</Text>}
+        </View>
+      )}
 
       {user && (
         <View style={styles.section}>
@@ -160,6 +239,16 @@ function makeStyles(colors: ThemeColors) {
       fontSize: type.base,
     },
     error: { color: colors.danger, fontFamily: fonts.sans, marginTop: spacing.sm },
+    prefRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    prefText: { flex: 1 },
+    prefLabel: { fontFamily: fonts.displayMedium, fontSize: type.base, color: colors.ink },
+    prefDisabled: { color: colors.muted },
+    prefHint: { fontFamily: fonts.sans, fontSize: type.xs, color: colors.muted },
     success: {
       backgroundColor: colors.verifiedBg,
       color: colors.verifiedText,

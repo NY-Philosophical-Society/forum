@@ -1,6 +1,6 @@
 import { useNavigation, useFocusEffect, type NavigationProp } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { formatDate, type ThreadFeedResponse, type ThreadSummary } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
@@ -20,19 +20,30 @@ export function SavedScreen() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(() => {
+    if (!token) return Promise.resolve();
+    return api
+      .get<ThreadFeedResponse>(`/api/bookmarks?limit=${PAGE_SIZE}&offset=0`, token)
+      .then((res) => {
+        setThreads(res.threads);
+        setHasMore(res.hasMore);
+      })
+      .catch((e) => setError(e.message));
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!token) return;
-      api
-        .get<ThreadFeedResponse>(`/api/bookmarks?limit=${PAGE_SIZE}&offset=0`, token)
-        .then((res) => {
-          setThreads(res.threads);
-          setHasMore(res.hasMore);
-        })
-        .catch((e) => setError(e.message));
-    }, [token]),
+      load();
+    }, [load]),
   );
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
 
   async function loadMore() {
     if (!token || !threads) return;
@@ -70,6 +81,9 @@ export function SavedScreen() {
       <FlatList
         data={threads ?? []}
         keyExtractor={(t) => t.id}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Pressable
