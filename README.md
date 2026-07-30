@@ -1,5 +1,8 @@
 # NYPS Forum (prototype)
 
+> **Start here: [`docs/PROJECT.md`](docs/PROJECT.md)** — current state, decisions made,
+> and every open question. Everything else in `docs/` is reference or history.
+
 A real-name, ID-verified discussion feed for philosophical discussion — Reddit-style single feed
 (no boards), like-only engagement (no downvotes), optional tags, and DMs — one backend, a Next.js
 web app, and an Expo (React Native) iOS/Android app.

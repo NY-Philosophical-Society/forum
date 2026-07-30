@@ -1,0 +1,217 @@
+# The Forum — state of play
+
+**The single source of truth for where this project is and what's undecided.**
+Updated 2026-07-30.
+
+Everything else in `docs/` is either a reference (`API.md`, `DESIGN_SYSTEM.md`,
+`TESTING.md`) or a record of a completed run (`runs/`). If a decision matters,
+it is written down here.
+
+---
+
+## 1. What this is
+
+A member forum for the **New York Philosophy Club** (501(c)(3)) — web now,
+iOS and Android planned. Real-name discussion: anyone may read, posting requires
+ID verification. Members (donors) get chapters, a directory, and event spaces.
+
+Separate from the marketing site (`nyphilosophy.org`); this is its own repo,
+`NY-Philosophical-Society/forum`.
+
+**Stack:** npm-workspaces monorepo — Express 4 + Prisma API, Next.js 14 web,
+Expo React Native mobile, shared types package. SQLite locally.
+
+---
+
+## 2. Current state — what actually works
+
+Everything below is built, tested, and running locally. **179 API tests pass.**
+
+### Reading and writing
+Single feed with hot/new ranking (a stored `hotScore` column, ordered by the
+database). Twelve tags, filterable, collapsed behind "show more". Nested
+replies. Likes only — no downvotes. Markdown throughout, with a composer
+toolbar on web, a syntax hint on mobile, and a formatting guide on both. Edit
+and delete your own posts, with tombstones so replies never orphan. @mentions.
+Image uploads with server-side validation and EXIF stripping.
+
+### Accounts
+Email signup, Google and Apple sign-in (mocked locally), password reset.
+ID verification behind a provider interface with a local stub. Profile pages
+with photos, bios, avatars. Account management: password, email, data export,
+and deletion that anonymises rather than orphans.
+
+### Membership
+Chapters — member-only sub-forums with join requests and admin approval,
+server-enforced so a non-member gets nothing even by direct URL. Opt-in member
+directory with interests and reading-partner matching. Event threads that
+collect questions beforehand and receive topics afterwards, with "was there"
+markers for attendees.
+
+### Discovery and moderation
+Search (401 for anonymous, deliberately — snippets would leak past the preview
+wall). Bookmarks. In-app notifications with collapse rules and per-type
+preferences. Push notifications behind a provider stub. Admin dashboard:
+report queue with structured reasons, member administration, content
+management, moderation log, thread pinning and locking.
+
+### Access tiers, as implemented
+| Tier | Can |
+| --- | --- |
+| Anonymous | Feed and a 220-character teaser |
+| Free account | Read everything |
+| ID-verified | Post, reply, like, DM, start threads |
+| Member (donor) | Chapters, directory, matching, event posting |
+
+Admins bypass member gating. `WISDOMKEY` is the member unlock until a donation
+API exists.
+
+### Surface area
+27 web routes · 25 mobile screens · 16 API routers · 20 Prisma models.
+
+---
+
+## 3. Decisions already made
+
+| Decision | Detail |
+| --- | --- |
+| **Backend host** | **Supabase** — database host and auth provider. Express stays as the API layer; no PostgREST, no RLS. See §5. |
+| **Membership model** | Reading stays free. Membership buys member spaces, never a lock on the main feed. Supporter-gated reading was proposed and **rejected** — it inverts the funnel. |
+| **Single feed** | One feed with optional tags. Not boards. Chapters are separate access-controlled spaces, not a boards system by another name. |
+| **Likes only** | No downvotes, ever. |
+| **Verification** | Required to post, not to read. Third-party vendor behind a provider interface. |
+| **Design** | Palette and type extracted from the club's real identity. `docs/DESIGN_SYSTEM.md` is binding — no hardcoded hex, no drop shadows, cards default to no fill. |
+| **Division of labour** | A human engineer owns the production backend. Claude owns frontend and product, plus skeleton backend to keep features testable locally. |
+
+---
+
+## 4. Open questions — backend
+
+**Owner: the backend engineer.** Full plan in `docs/SUPABASE-MIGRATION.md`.
+
+1. **`User` ↔ `auth.users` linkage** — database trigger on insert, or lazy
+   creation on first authenticated request? Engineer's call; lazy is easier to
+   test, a trigger is harder to get wrong in production.
+2. **When to migrate.** Currently deliberately not started: it would break
+   zero-setup local dev while the remaining product work barely touches auth.
+   The trigger is: project provisioned, linkage decided, project URL and anon
+   key available. Then the frontend swap happens in one pass.
+3. **Storage** — Supabase Storage or Cloudflare R2? Both sit behind the existing
+   `storage-provider` interface, so this is reversible. R2 has no egress fees;
+   Supabase is one fewer vendor.
+4. **Rate limiting is single-instance only.** `express-rate-limit` with the
+   default memory store — two instances silently double what an attacker gets.
+   Needs Redis, or an explicit single-instance constraint, before scaling.
+5. **Region is fixed at project creation** — `us-east-1` for New York.
+
+**Not open:** whether to use RLS. Express is the only database client, so
+policies would duplicate middleware. Don't build them.
+
+---
+
+## 5. Open questions — product and strategy
+
+### Membership perks — decided
+Chapters · member directory (opt-in) · reading-partner matching · event
+afterlife threads. All built.
+
+### Membership perks — undecided
+Ranked by my read of incentive versus effort:
+
+| Perk | Pulls donations | Cost |
+| --- | --- | --- |
+| **Event recording archive** | High | Low — needs somewhere to host media |
+| **Monthly members' symposium** | High | Human time; fixes the geographic unfairness for non-NYC members |
+| **Draft workshopping** before journal submission | Very high | Human time — needs someone to guarantee critique lands |
+| **Async office hours** — a fellow takes questions for a week | High | Human time, but schedulable and cancellable |
+| **Speaker/topic nomination and voting** | Medium | Low |
+| **7-day member-first window on new threads** | High | Low build, mild growth cost — parked |
+| **Annual print anthology** | Medium | Editorial effort |
+| **Digest newsletter** | Medium | Low |
+| **Mentorship pairing** | Medium | Reuses matching machinery |
+
+**The open question:** which of these to commit to, given that the ones with the
+highest pull all cost human time every cycle. An unmet guarantee is worse than
+no guarantee.
+
+### Other strategy questions
+1. **Donation tiers.** Currently one flag (`isSupporter`). A Reader / Member /
+   Patron ladder would capture supporters who'd give more than the median.
+   Undecided.
+2. **Verification timing.** Verify at signup, or at first post? At first post
+   means paying the vendor (~$1–2/check) only for people who actually
+   contribute. Not yet implemented either way.
+3. **Two trust levels?** Email-verified members can reply, ID-verified get a
+   visible mark and can start threads — keeps real-name culture where it matters
+   without an ID wall in front of every newcomer. Undecided.
+4. **Should thread-starting be member-only?** Currently open to any verified
+   account. Defensible either way; left open deliberately.
+5. **Journal and events are already bundled** into membership. The forum's job
+   is to make those worth more, not to be a fourth item. Reflected in the perks
+   above but not fully worked through.
+
+---
+
+## 6. Open questions — frontend and product surface
+
+1. **Nothing mobile has ever been seen running.** Every mobile screen is
+   typechecked but never opened in a simulator. Blocked on
+   `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, which
+   needs the owner's password.
+2. **Admin tooling is web-only** beyond the report queue. You can ban from
+   mobile via a report but not unban.
+3. **Notifications are polled**, every 15 seconds. With web plus two mobile
+   platforms this gets expensive. Supabase Realtime is the natural fix and is
+   now available to us — worth revisiting once the backend lands.
+4. **Chapter join requests raise no notification** — admins see a pending count
+   instead.
+5. **Search excludes chapter content entirely**, even for that chapter's own
+   members. Deliberate and safe, but arguably wrong.
+6. **No visual QA has happened on the admin dashboard.** It was built without a
+   dev server running; `docs/runs/brief-06-admin.md` names the two CSS rules
+   most likely to be wrong.
+
+---
+
+## 7. Where things live
+
+| Path | What |
+| --- | --- |
+| `docs/PROJECT.md` | This file — state and open questions |
+| `docs/API.md` + `docs/api/` | Endpoint reference for the backend engineer |
+| `docs/API-CHANGES.md` | Running log of API changes since that reference |
+| `docs/SUPABASE-MIGRATION.md` | The migration delta |
+| `docs/DESIGN_SYSTEM.md` | Binding design rules |
+| `docs/TESTING.md` | How to run the suite, how the test DB is isolated |
+| `docs/runs/` | What each automated run did, and what it skipped |
+| `docs/prompts/` | Original sequenced briefs — largely historical now |
+
+**Superseded and safe to ignore:** `docs/prompts/04-access-chapters.md` Part 1
+(supporter-gated reading — rejected), `docs/BACKEND-OPTIONS.md` (the host
+question is settled; kept for the reasoning), `docs/MEMBERSHIP.md` (folded into
+§3 and §5 here).
+
+### Running it locally
+```
+npm install
+cd apps/api && npx prisma migrate dev && npm run db:seed && npm run dev
+cd apps/web && npm run dev
+```
+Demo accounts, all `demo-password-123`:
+`admin@demo.nyphilosophy.org` (admin) · `marguerite@` (member, NYC chapter,
+directory) · `owen@` (member, pending chapter request) · `hannah@` (verified
+non-member) · `wenli@` (member, LA chapter).
+
+---
+
+## 8. The next real decisions
+
+In the order they block things:
+
+1. **Engineer starts the Supabase migration** — everything else waits on the
+   backend being real.
+2. **Owner picks which undecided perks to commit to** (§5) — this determines
+   the next build queue.
+3. **Owner runs `xcode-select`** so mobile can finally be seen.
+4. **Donation tiers and verification timing** — needed before launch, not
+   before more building.
