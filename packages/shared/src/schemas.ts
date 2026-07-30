@@ -40,6 +40,9 @@ export const createThreadSchema = z.object({
   title: z.string().min(4).max(200),
   body: z.string().min(1).max(20000),
   tagIds: z.array(z.string()).max(5).optional().default([]),
+  // A thread belongs to the main feed (null/absent) or exactly one chapter —
+  // never both. The API checks active chapter membership server-side.
+  chapterId: z.string().nullable().optional(),
 });
 export type CreateThreadInput = z.infer<typeof createThreadSchema>;
 
@@ -247,6 +250,10 @@ export const MAX_PINNED_THREADS = 3;
  * has no edit or delete path anywhere in the product.
  */
 export const ModerationAction = {
+  CHAPTER_CREATED: "chapter_created",
+  CHAPTER_MEMBER_ADDED: "chapter_member_added",
+  CHAPTER_MEMBER_APPROVED: "chapter_member_approved",
+  CHAPTER_MEMBER_REMOVED: "chapter_member_removed",
   REPORT_RESOLVED: "report_resolved",
   REPORT_DISMISSED: "report_dismissed",
   CONTENT_DELETED: "content_deleted",
@@ -265,6 +272,10 @@ export const ModerationAction = {
 export type ModerationAction = (typeof ModerationAction)[keyof typeof ModerationAction];
 
 export const MODERATION_ACTION_LABELS: Record<ModerationAction, string> = {
+  chapter_created: "Created chapter",
+  chapter_member_added: "Added chapter member",
+  chapter_member_approved: "Approved chapter join request",
+  chapter_member_removed: "Removed chapter member",
   report_resolved: "Resolved report",
   report_dismissed: "Dismissed report",
   content_deleted: "Deleted content",
@@ -287,7 +298,38 @@ export const DESTRUCTIVE_MODERATION_ACTIONS: ModerationAction[] = [
   "user_banned",
   "role_revoked",
   "supporter_revoked",
+  "chapter_member_removed",
 ];
+
+/* ---- Chapters (member-only sub-forums) ----------------------------------- */
+
+export const ChapterMembershipState = {
+  PENDING: "pending",
+  ACTIVE: "active",
+} as const;
+export type ChapterMembershipState =
+  (typeof ChapterMembershipState)[keyof typeof ChapterMembershipState];
+
+export const CHAPTER_DESCRIPTION_MAX_LENGTH = 300;
+
+export const createChapterSchema = z.object({
+  name: z.string().min(2, "Give the chapter a name").max(80),
+  // Generated from the name when absent.
+  slug: z
+    .string()
+    .min(2)
+    .max(60)
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Slug must be lowercase letters, digits, and hyphens")
+    .optional(),
+  description: z.string().min(1, "Say what this chapter is").max(CHAPTER_DESCRIPTION_MAX_LENGTH),
+  location: z.string().max(80).optional(),
+});
+export type CreateChapterInput = z.infer<typeof createChapterSchema>;
+
+export const addChapterMemberSchema = z.object({
+  userId: z.string(),
+});
+export type AddChapterMemberInput = z.infer<typeof addChapterMemberSchema>;
 
 export const redeemCodeSchema = z.object({
   code: z.string().min(1),

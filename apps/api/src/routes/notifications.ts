@@ -9,6 +9,7 @@ import {
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
+import { visibleThreadWhere } from "../lib/chapter-access";
 
 export const notificationsRouter = Router();
 
@@ -19,9 +20,17 @@ notificationsRouter.get("/", requireAuth, async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || DEFAULT_LIMIT, 100);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
 
+  // Defense in depth on top of emission-time gating and removal-time purge:
+  // a row about a chapter thread the viewer can no longer open is filtered
+  // out here rather than served with its title and snippet.
+  const visibility =
+    req.user!.role === "admin"
+      ? {}
+      : { OR: [{ threadId: null }, { thread: visibleThreadWhere(req.user) }] };
+
   const [notifications, total, unreadCount] = await Promise.all([
     prisma.notification.findMany({
-      where: { recipientId: myId },
+      where: { recipientId: myId, ...visibility },
       orderBy: { createdAt: "desc" },
       skip: offset,
       take: limit,
@@ -30,8 +39,8 @@ notificationsRouter.get("/", requireAuth, async (req, res) => {
         thread: { select: { title: true, deletedAt: true } },
       },
     }),
-    prisma.notification.count({ where: { recipientId: myId } }),
-    prisma.notification.count({ where: { recipientId: myId, readAt: null } }),
+    prisma.notification.count({ where: { recipientId: myId, ...visibility } }),
+    prisma.notification.count({ where: { recipientId: myId, readAt: null, ...visibility } }),
   ]);
 
   const items: NotificationItem[] = notifications.map((n) => ({
@@ -59,7 +68,10 @@ notificationsRouter.get("/", requireAuth, async (req, res) => {
 
 /**
  * The nav badge poll (every 15s alongside the DM unread poll) — kept to a
- * single COUNT on the (recipientId, readAt) index, nothing else.
+ * single COUNT on the (recipientId, readAt) index, nothing else. No chapter
+ * filter here on purpose: rows about invisible chapter content are never
+ * created (emission gate in lib/notifications.ts) and are purged when a
+ * membership is removed (routes/chapters.ts), so this count can't include one.
  */
 notificationsRouter.get("/unread-count", requireAuth, async (req, res) => {
   const unreadCount = await prisma.notification.count({

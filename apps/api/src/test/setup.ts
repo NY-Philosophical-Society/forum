@@ -30,6 +30,8 @@ beforeAll(async () => {
   await prisma.threadLike.deleteMany();
   await prisma.post.deleteMany();
   await prisma.thread.deleteMany();
+  await prisma.chapterMembership.deleteMany();
+  await prisma.chapter.deleteMany();
   await prisma.tag.deleteMany();
   await prisma.verificationSession.deleteMany();
   await prisma.user.deleteMany();

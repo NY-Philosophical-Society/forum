@@ -59,6 +59,41 @@ model User {
   notificationPrefs     NotificationPreference[]
   pushTokens            PushToken[]
   bookmarks             Bookmark[]
+  chapterMemberships    ChapterMembership[]
+}
+
+// A member-only sub-forum for one local group (the NYC chapter, ...). Not a
+// tag and not a board: the main feed stays a single feed, and a chapter is a
+// separate access-controlled space with its own feed. Admin-created only.
+model Chapter {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String
+  location    String?
+  createdAt   DateTime @default(now())
+
+  memberships ChapterMembership[]
+  threads     Thread[]
+}
+
+// Membership is two-step for self-service: a member (isSupporter) requests to
+// join ("pending") and an admin approves ("active"); an admin can also add
+// someone directly (created "active"). Only "active" grants any visibility —
+// every read gate in the API checks state, never mere row existence.
+model ChapterMembership {
+  id         String    @id @default(cuid())
+  chapterId  String
+  userId     String
+  state      String    @default("pending")
+  createdAt  DateTime  @default(now())
+  approvedAt DateTime?
+
+  chapter Chapter @relation(fields: [chapterId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([chapterId, userId])
+  @@index([userId, state])
 }
 
 model VerificationSession {
@@ -108,7 +143,13 @@ model Thread {
   // stays whole; serializers tombstone the title/body/author. Deleted threads
   // are excluded from the feed and profile listings.
   deletedAt  DateTime?
+  // A thread belongs to either the main feed (null) or exactly one chapter —
+  // never both. Chapter threads are invisible everywhere (feed, search,
+  // notifications, bookmarks, profiles, direct URL) to anyone who is not an
+  // active member of that chapter; admins bypass.
+  chapterId  String?
 
+  chapter       Chapter?       @relation(fields: [chapterId], references: [id])
   author        User           @relation(fields: [authorId], references: [id])
   tags          Tag[]
   posts         Post[]

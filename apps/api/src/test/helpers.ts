@@ -63,10 +63,69 @@ export async function promoteToAdmin(userId: string): Promise<void> {
   await prisma.user.update({ where: { id: userId }, data: { role: "admin" } });
 }
 
+/** Redeem the standing WISDOMKEY code — the placeholder membership unlock. */
+export async function makeSupporter(user: TestUser): Promise<void> {
+  const res = await request(app)
+    .post("/api/auth/redeem-code")
+    .set("Authorization", `Bearer ${user.token}`)
+    .send({ code: "WISDOMKEY" });
+  if (res.status !== 200) {
+    throw new Error(`redeem-code failed (${res.status}): ${JSON.stringify(res.body)}`);
+  }
+}
+
+/** Signup + verify + redeem — a full Member who can use member features. */
+export async function signupMember(prefix = "member"): Promise<TestUser> {
+  const user = await signupVerified(prefix);
+  await makeSupporter(user);
+  return user;
+}
+
+/** Signup + verify + promote — an admin who is deliberately NOT a supporter. */
+export async function signupAdmin(prefix = "admin"): Promise<TestUser> {
+  const user = await signupVerified(prefix);
+  await promoteToAdmin(user.id);
+  return user;
+}
+
+/** Create a chapter through the API as the given admin. */
+export async function createChapter(
+  admin: TestUser,
+  overrides: { name?: string; description?: string; location?: string } = {},
+): Promise<{ id: string; slug: string }> {
+  const res = await request(app)
+    .post("/api/chapters")
+    .set("Authorization", `Bearer ${admin.token}`)
+    .send({
+      name: overrides.name ?? `Chapter ${randomUUID().slice(0, 8)}`,
+      description: overrides.description ?? "A local chapter for testing.",
+      ...(overrides.location ? { location: overrides.location } : {}),
+    });
+  if (res.status !== 201) {
+    throw new Error(`createChapter failed (${res.status}): ${JSON.stringify(res.body)}`);
+  }
+  return { id: res.body.chapter.id, slug: res.body.chapter.slug };
+}
+
+/** Admin-add a user to a chapter (lands active immediately). */
+export async function addChapterMember(
+  admin: TestUser,
+  chapterSlug: string,
+  userId: string,
+): Promise<void> {
+  const res = await request(app)
+    .post(`/api/chapters/${chapterSlug}/members`)
+    .set("Authorization", `Bearer ${admin.token}`)
+    .send({ userId });
+  if (res.status !== 201) {
+    throw new Error(`addChapterMember failed (${res.status}): ${JSON.stringify(res.body)}`);
+  }
+}
+
 /** Create a thread through the API as the given (verified) user. */
 export async function createThread(
   user: TestUser,
-  overrides: { title?: string; body?: string; tagIds?: string[] } = {},
+  overrides: { title?: string; body?: string; tagIds?: string[]; chapterId?: string } = {},
 ): Promise<string> {
   const res = await request(app)
     .post("/api/threads")
@@ -75,6 +134,7 @@ export async function createThread(
       title: overrides.title ?? `Thread ${randomUUID().slice(0, 8)}`,
       body: overrides.body ?? "What is justice, really?",
       tagIds: overrides.tagIds ?? [],
+      ...(overrides.chapterId ? { chapterId: overrides.chapterId } : {}),
     });
   if (res.status !== 201) {
     throw new Error(`createThread failed (${res.status}): ${JSON.stringify(res.body)}`);

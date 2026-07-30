@@ -16,6 +16,7 @@ import { syncMentions } from "../lib/mentions";
 import { contentLabel, logModeration } from "../lib/moderation-log";
 import { softDeleteThread } from "../lib/moderation";
 import { notify, toSnippet } from "../lib/notifications";
+import { canViewThread, isActiveChapterMember } from "../lib/chapter-access";
 
 export const threadsRouter = Router();
 
@@ -29,8 +30,11 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || DEFAULT_FEED_LIMIT, 100);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
 
+  // The main feed is main-feed threads only: chapter threads appear solely in
+  // their chapter's own feed (GET /api/chapters/:slug/threads), for anyone.
   const where = {
     deletedAt: null,
+    chapterId: null,
     ...(tagSlug ? { tags: { some: { slug: tagSlug } } } : {}),
   };
 
@@ -91,6 +95,7 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
       author: true,
       tags: true,
       likes: true,
+      chapter: { select: { id: true, slug: true, name: true } },
       bookmarks: req.user ? { where: { userId: req.user.id } } : false,
       posts: {
         orderBy: { createdAt: "asc" },
@@ -99,6 +104,12 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
     },
   });
   if (!thread) return res.status(404).json({ error: "Thread not found" });
+  // Chapter threads are invisible to anyone who isn't an active member of
+  // that chapter (admins excepted) — 404, not 403, so a probed id doesn't
+  // even confirm the thread exists.
+  if (!(await canViewThread(req.user, thread))) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
 
   const viewerId = req.user?.id;
   // A soft-deleted thread keeps its page so surviving replies stay readable,
@@ -170,6 +181,7 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
       deleted: threadDeleted,
       locked: thread.locked,
       pinnedAt: thread.pinnedAt?.toISOString() ?? null,
+      chapter: thread.chapter,
       author: threadDeleted ? DELETED_AUTHOR : toPublicUser(thread.author),
       createdAt: thread.createdAt.toISOString(),
       editedAt: threadDeleted ? null : thread.editedAt?.toISOString() ?? null,
@@ -223,12 +235,24 @@ threadsRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, 
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  const { title, body, tagIds } = parsed.data;
+  const { title, body, tagIds, chapterId } = parsed.data;
 
   if (tagIds.length > 0) {
     const count = await prisma.tag.count({ where: { id: { in: tagIds } } });
     if (count !== tagIds.length) {
       return res.status(400).json({ error: "One or more tags are invalid" });
+    }
+  }
+
+  // Starting a thread inside a chapter needs an active membership there
+  // (admins excepted) — same 404-over-403 policy as reading, so an outsider
+  // can't use this route to probe which chapter ids exist.
+  if (chapterId) {
+    const chapter = await prisma.chapter.findUnique({ where: { id: chapterId } });
+    if (!chapter) return res.status(404).json({ error: "Chapter not found" });
+    const isAdmin = req.user!.role === "admin";
+    if (!isAdmin && !(await isActiveChapterMember(req.user!.id, chapterId))) {
+      return res.status(404).json({ error: "Chapter not found" });
     }
   }
 
@@ -239,6 +263,7 @@ threadsRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, 
       body,
       authorId: req.user!.id,
       createdAt,
+      chapterId: chapterId ?? null,
       hotScore: hotScore(0, 0, createdAt),
       tags: { connect: tagIds.map((id) => ({ id })) },
     },
@@ -265,6 +290,11 @@ threadsRouter.patch("/:id", requireAuth, writeLimiter, async (req, res) => {
 
   const thread = await prisma.thread.findUnique({ where: { id: req.params.id } });
   if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+  // Same invisibility rule as reading: an outsider probing a chapter thread's
+  // id through the edit route must not learn it exists.
+  if (!(await canViewThread(req.user, thread))) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
 
   const isAdmin = req.user!.role === "admin";
   const isAuthor = thread.authorId === req.user!.id;
@@ -315,6 +345,9 @@ threadsRouter.patch("/:id", requireAuth, writeLimiter, async (req, res) => {
 threadsRouter.delete("/:id", requireAuth, writeLimiter, async (req, res) => {
   const thread = await prisma.thread.findUnique({ where: { id: req.params.id } });
   if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+  if (!(await canViewThread(req.user, thread))) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
 
   const isAdmin = req.user!.role === "admin";
   const isAuthor = thread.authorId === req.user!.id;
@@ -356,6 +389,9 @@ threadsRouter.post("/:id/like", requireAuth, requireVerified, writeLimiter, asyn
   const threadId = req.params.id;
   const thread = await prisma.thread.findUnique({ where: { id: threadId } });
   if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+  if (!(await canViewThread(req.user, thread))) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
 
   const existing = await prisma.threadLike.findUnique({
     where: { threadId_userId: { threadId, userId: req.user!.id } },

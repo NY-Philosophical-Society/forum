@@ -38,8 +38,13 @@ export async function searchThreads(
   q: string,
   opts: { limit: number; offset: number },
 ): Promise<SearchSection<ThreadSearchResult>> {
+  // Chapter threads are excluded from search outright — for everyone, members
+  // of the chapter included. Search covers the shared forum; a chapter's own
+  // feed is the only listing of its content. Snippets are exactly how gated
+  // content would otherwise leak.
   const where = {
     deletedAt: null,
+    chapterId: null,
     OR: [{ title: { contains: q } }, { body: { contains: q } }],
   };
   const [threads, total] = await Promise.all([
@@ -74,7 +79,8 @@ export async function searchPosts(
   q: string,
   opts: { limit: number; offset: number },
 ): Promise<SearchSection<PostSearchResult>> {
-  const where = { deletedAt: null, body: { contains: q } };
+  // Same chapter exclusion as searchThreads — replies leak content just as well.
+  const where = { deletedAt: null, body: { contains: q }, thread: { chapterId: null } };
   const [posts, total] = await Promise.all([
     prisma.post.findMany({
       where,

@@ -28,13 +28,27 @@ export interface NotifyEvent {
 
 /**
  * Whether the recipient is allowed to see the content the notification is
- * about. Today everything a notification can point at is readable by any
- * account, so this is constant — it exists so brief 04's chapter-visibility
- * rules have exactly one place to land for notifications: never emit about
- * content the recipient can't open.
+ * about — never emit about content the recipient can't open. The one rule
+ * today: chapter threads are visible only to that chapter's active members
+ * (and admins). Enforced at emission so the row never exists; removal from a
+ * chapter additionally purges already-emitted rows (see routes/chapters.ts).
  */
-async function canRecipientSee(_recipientId: string, _threadId?: string): Promise<boolean> {
-  return true;
+async function canRecipientSee(
+  recipient: { id: string; role: string },
+  threadId?: string,
+): Promise<boolean> {
+  if (!threadId) return true;
+  const thread = await prisma.thread.findUnique({
+    where: { id: threadId },
+    select: { chapterId: true },
+  });
+  if (!thread?.chapterId) return true;
+  if (recipient.role === "admin") return true;
+  const membership = await prisma.chapterMembership.findFirst({
+    where: { chapterId: thread.chapterId, userId: recipient.id, state: "active" },
+    select: { id: true },
+  });
+  return Boolean(membership);
 }
 
 async function prefsAllow(userId: string, key: NotificationPrefKey): Promise<boolean> {
@@ -76,7 +90,7 @@ export async function notify(event: NotifyEvent): Promise<void> {
       if (recipient.blocking.length > 0 || recipient.blockedBy.length > 0) return;
       const prefKey = prefKeyForNotificationType(type);
       if (prefKey && !(await prefsAllow(recipientId, prefKey))) return;
-      if (!(await canRecipientSee(recipientId, threadId))) return;
+      if (!(await canRecipientSee(recipient, threadId))) return;
     }
 
     if (type === "like_thread" || type === "like_post") {

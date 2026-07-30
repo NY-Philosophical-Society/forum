@@ -3,6 +3,7 @@ import { createBookmarkSchema, type ThreadSummary } from "@nyps-forum/shared";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
+import { canViewThread, visibleThreadWhere } from "../lib/chapter-access";
 
 export const bookmarksRouter = Router();
 
@@ -19,7 +20,10 @@ bookmarksRouter.get("/", requireAuth, async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || DEFAULT_LIMIT, 100);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
 
-  const where = { userId: myId, thread: { deletedAt: null } };
+  // visibleThreadWhere: a saved chapter thread stays in the list only while
+  // the saver is still an active member of that chapter. The bookmark row is
+  // kept (like deleted threads), so rejoining restores it.
+  const where = { userId: myId, thread: { deletedAt: null, ...visibleThreadWhere(req.user) } };
   const [bookmarks, total] = await Promise.all([
     prisma.bookmark.findMany({
       where,
@@ -65,6 +69,9 @@ bookmarksRouter.post("/", requireAuth, async (req, res) => {
   const { threadId } = parsed.data;
   const thread = await prisma.thread.findUnique({ where: { id: threadId } });
   if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+  if (!(await canViewThread(req.user, thread))) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
 
   await prisma.bookmark.upsert({
     where: { userId_threadId: { userId: req.user!.id, threadId } },

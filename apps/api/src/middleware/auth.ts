@@ -108,6 +108,21 @@ export function requireVerified(req: Request, res: Response, next: NextFunction)
   next();
 }
 
+/**
+ * Member-only surfaces (chapters, the member directory). Admins pass without
+ * isSupporter — moderating must never require donating. Must run after
+ * requireAuth. This gates *member features* only; it must never be added to
+ * anything a free account can do today (reading, notifications, bookmarks).
+ */
+export function requireMember(req: Request, res: Response, next: NextFunction) {
+  if (!req.user?.isSupporter && req.user?.role !== "admin") {
+    return res.status(403).json({
+      error: "This area is for members of the Society. Redeem a membership code in Settings to join.",
+    });
+  }
+  next();
+}
+
 /** Moderation actions (ban, thread lock, viewing reports). Must run after requireAuth. */
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.user?.role !== "admin") {

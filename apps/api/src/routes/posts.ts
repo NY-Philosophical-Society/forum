@@ -8,6 +8,7 @@ import { syncMentions } from "../lib/mentions";
 import { contentLabel, logModeration } from "../lib/moderation-log";
 import { softDeletePost } from "../lib/moderation";
 import { notify, toSnippet } from "../lib/notifications";
+import { canViewThread } from "../lib/chapter-access";
 
 export const postsRouter = Router();
 
@@ -20,6 +21,11 @@ postsRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, re
 
   const thread = await prisma.thread.findUnique({ where: { id: threadId } });
   if (!thread || thread.deletedAt) return res.status(404).json({ error: "Thread not found" });
+  // Replying inside a chapter requires the same active membership as reading
+  // it — 404 so a probed id confirms nothing.
+  if (!(await canViewThread(req.user, thread))) {
+    return res.status(404).json({ error: "Thread not found" });
+  }
   if (thread.locked) return res.status(403).json({ error: "This thread is locked" });
 
   let parent: { authorId: string; deletedAt: Date | null } | null = null;
@@ -73,9 +79,12 @@ postsRouter.patch("/:id", requireAuth, writeLimiter, async (req, res) => {
 
   const post = await prisma.post.findUnique({
     where: { id: req.params.id },
-    include: { thread: { select: { locked: true, deletedAt: true } } },
+    include: { thread: { select: { locked: true, deletedAt: true, chapterId: true } } },
   });
   if (!post || post.deletedAt) return res.status(404).json({ error: "Post not found" });
+  if (!(await canViewThread(req.user, post.thread))) {
+    return res.status(404).json({ error: "Post not found" });
+  }
 
   const isAdmin = req.user!.role === "admin";
   const isAuthor = post.authorId === req.user!.id;
@@ -115,8 +124,14 @@ postsRouter.patch("/:id", requireAuth, writeLimiter, async (req, res) => {
 });
 
 postsRouter.delete("/:id", requireAuth, writeLimiter, async (req, res) => {
-  const post = await prisma.post.findUnique({ where: { id: req.params.id } });
+  const post = await prisma.post.findUnique({
+    where: { id: req.params.id },
+    include: { thread: { select: { chapterId: true } } },
+  });
   if (!post || post.deletedAt) return res.status(404).json({ error: "Post not found" });
+  if (!(await canViewThread(req.user, post.thread))) {
+    return res.status(404).json({ error: "Post not found" });
+  }
 
   const isAdmin = req.user!.role === "admin";
   const isAuthor = post.authorId === req.user!.id;
@@ -156,8 +171,14 @@ postsRouter.delete("/:id", requireAuth, writeLimiter, async (req, res) => {
 
 postsRouter.post("/:id/like", requireAuth, requireVerified, writeLimiter, async (req, res) => {
   const postId = req.params.id;
-  const post = await prisma.post.findUnique({ where: { id: postId } });
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    include: { thread: { select: { chapterId: true } } },
+  });
   if (!post || post.deletedAt) return res.status(404).json({ error: "Post not found" });
+  if (!(await canViewThread(req.user, post.thread))) {
+    return res.status(404).json({ error: "Post not found" });
+  }
 
   const existing = await prisma.postLike.findUnique({
     where: { postId_userId: { postId, userId: req.user!.id } },

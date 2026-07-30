@@ -42,14 +42,18 @@ usersRouter.get("/:id/profile", optionalAuth, async (req, res) => {
   const repliesLimit = Math.min(Number(req.query.repliesLimit) || PROFILE_PAGE_LIMIT, 50);
   const repliesOffset = Math.max(Number(req.query.repliesOffset) || 0, 0);
 
-  // Soft-deleted content is gone from its author's public record too.
+  // Soft-deleted content is gone from its author's public record too, and so
+  // is chapter content: a profile is a public record, so it lists main-feed
+  // activity only — even to viewers who could open the chapter thread itself.
   const [threadCount, replyCount, threads, replies] = await Promise.all([
-    prisma.thread.count({ where: { authorId: profileUser.id, deletedAt: null } }),
-    prisma.post.count({ where: { authorId: profileUser.id, deletedAt: null } }),
+    prisma.thread.count({ where: { authorId: profileUser.id, deletedAt: null, chapterId: null } }),
+    prisma.post.count({
+      where: { authorId: profileUser.id, deletedAt: null, thread: { chapterId: null } },
+    }),
     previewOnly
       ? []
       : prisma.thread.findMany({
-          where: { authorId: profileUser.id, deletedAt: null },
+          where: { authorId: profileUser.id, deletedAt: null, chapterId: null },
           orderBy: { createdAt: "desc" },
           skip: threadsOffset,
           take: threadsLimit,
@@ -62,7 +66,7 @@ usersRouter.get("/:id/profile", optionalAuth, async (req, res) => {
     previewOnly
       ? []
       : prisma.post.findMany({
-          where: { authorId: profileUser.id, deletedAt: null },
+          where: { authorId: profileUser.id, deletedAt: null, thread: { chapterId: null } },
           orderBy: { createdAt: "desc" },
           skip: repliesOffset,
           take: repliesLimit,

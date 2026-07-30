@@ -78,11 +78,20 @@ export interface TagWithCount extends Tag {
   threadCount: number;
 }
 
+/** Where a thread lives when it isn't in the main feed. */
+export interface ChapterRef {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 export interface ThreadSummary {
   id: string;
   title: string;
   author: PublicUser;
   createdAt: string;
+  /** Set only for chapter threads — responses carrying it are already access-checked. */
+  chapter?: ChapterRef | null;
   tags: Tag[];
   likeCount: number;
   myLiked: boolean;
@@ -354,6 +363,40 @@ export interface ModerationLogEntry {
   targetLabel: string | null;
   reason: string | null;
   createdAt: string;
+}
+
+/** One chapter as the viewer sees it in the directory. */
+export interface ChapterSummary {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  location: string | null;
+  createdAt: string;
+  memberCount: number;
+  myMembership: "none" | "pending" | "active";
+  /** Present for admins only: join requests awaiting review. */
+  pendingCount?: number;
+}
+
+export interface ChaptersResponse {
+  chapters: ChapterSummary[];
+}
+
+export interface ChapterDetailResponse {
+  chapter: ChapterSummary;
+}
+
+export interface ChapterMemberItem {
+  user: PublicUser;
+  state: "pending" | "active";
+  createdAt: string;
+}
+
+export interface ChapterMembersResponse {
+  members: ChapterMemberItem[];
+  /** Admin-only: pending join requests, oldest first. */
+  pending?: ChapterMemberItem[];
 }
 
 export interface ModerationLogResponse {

@@ -18,7 +18,7 @@ import { prisma } from "../db";
 export async function logModeration(entry: {
   actorId: string;
   action: ModerationAction;
-  targetType: "user" | "thread" | "post" | "report";
+  targetType: "user" | "thread" | "post" | "report" | "chapter";
   targetId: string;
   /** Captured at action time so the entry survives the target being deleted. */
   targetLabel?: string | null;

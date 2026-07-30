@@ -5,6 +5,87 @@ the backend engineer can rebuild it properly without reading diffs. Shapes are
 the source of truth in `packages/shared/src/types.ts` (responses) and
 `schemas.ts` (request validation); this file is the map.
 
+## 2026-07-30 — Membership part 1: chapters (member-only sub-forums)
+
+Skeleton-quality per the handoff agreement: SQLite models + plain Express
+routes, but the **access rules are real and enforced server-side** — rebuild
+them exactly, they are the point of the feature. `docs/MEMBERSHIP.md` records
+the owner decisions; supporter-gated *reading* was rejected and must not come
+back. Nothing any existing tier could do yesterday was reduced.
+
+### New Prisma models
+
+- **`Chapter`** — `slug` (unique), `name`, `description`, `location?`,
+  `createdAt`. Admin-created only.
+- **`ChapterMembership`** — `(chapterId, userId)` unique, `state`
+  (`"pending" | "active"`), `createdAt`, `approvedAt?`. Two paths in: a member
+  requests (→ pending, admin approves) or an admin adds directly (→ active).
+  **Only `active` grants visibility** — every gate checks state, never row
+  existence. Indexed `(userId, state)`.
+- **`Thread.chapterId String?`** — a thread belongs to the main feed (null) or
+  exactly one chapter, never both.
+
+### The access rule (single module: `apps/api/src/lib/chapter-access.ts`)
+
+Chapter content is readable/writable only by that chapter's **active** members
+and **admins** (admins bypass member gating — moderating must not require
+donating; the demo admin is deliberately not a supporter). Probing routes
+return **404, not 403**, so an id can't be confirmed to exist. Enforced at:
+
+- `GET/PATCH/DELETE /api/threads/:id`, `POST /api/threads/:id/like`
+- `POST /api/posts` (reply), `PATCH/DELETE /api/posts/:id`, `POST /api/posts/:id/like`
+- `POST /api/bookmarks` (404) and `GET /api/bookmarks` (read-time filter —
+  a saved chapter thread disappears from the list while access is lost, the
+  bookmark row is kept so it returns on re-add)
+- Search (`lib/search.ts`): chapter threads/posts are excluded **for
+  everyone**, members included — search covers the shared forum only
+- Notifications: emission-time gate in `lib/notifications.ts`
+  `canRecipientSee()` (a mention of a non-member inside a chapter creates no
+  row), read-time filter on `GET /api/notifications` for defense in depth,
+  and a purge of the leaver's chapter notifications on membership removal so
+  `GET /api/notifications/unread-count` can stay a bare indexed COUNT
+- Public profiles (`GET /api/users/:id/profile`): list **main-feed activity
+  only** (counts included) — a profile is a public record
+- `GET /api/tags`: counts now `deletedAt: null, chapterId: null` (also fixes
+  pre-existing inflation by deleted threads)
+- Main feed `GET /api/threads`: `chapterId: null` always
+
+### New middleware
+
+`requireMember` (`middleware/auth.ts`): `isSupporter || role === "admin"`,
+else 403. Gates member *features* only — never reading, notifications, or
+bookmarks.
+
+### New endpoints (all under `/api/chapters`, all `requireAuth`)
+
+| Endpoint | Method | Auth beyond login | Notes |
+| --- | --- | --- | --- |
+| `/api/chapters` | GET | member | All chapters with `myMembership: "none"\|"pending"\|"active"`, active `memberCount`; admins also get `pendingCount` per chapter. |
+| `/api/chapters` | POST | admin | `createChapterSchema` `{ name, slug?, description, location? }`; slug generated from name when absent; 409 on slug collision. Logs `chapter_created`. |
+| `/api/chapters/:slug` | GET | member | One `ChapterSummary`. |
+| `/api/chapters/:slug/threads` | GET | **active** chapter member or admin | Same query params/response shape as `GET /api/threads` (`sort`, `limit`, `offset`) so clients reuse feed components; each item carries `chapter: {id, slug, name}`. 403 for members who aren't in this chapter. |
+| `/api/chapters/:slug/join` | POST | member | Creates a `pending` membership; idempotent (existing state returned). |
+| `/api/chapters/:slug/members` | GET | active member or admin | Active members; admins also get `pending` (oldest first). |
+| `/api/chapters/:slug/members` | POST | admin | `{ userId }` → upsert to `active`. Logs `chapter_member_added`. |
+| `/api/chapters/:slug/members/:userId/approve` | POST | admin | pending → active. Logs `chapter_member_approved`. |
+| `/api/chapters/:slug/members/:userId` | DELETE | admin, or self | Remove membership / reject request / leave. Purges the user's notifications about this chapter's threads. Admin removal of someone else logs `chapter_member_removed`. |
+
+`POST /api/threads` accepts optional `chapterId` (active membership or admin
+required — 404 otherwise). Threads cannot be *moved* between the feed and a
+chapter after creation (no `chapterId` on the update schema).
+
+New `ModerationAction` values: `chapter_created`, `chapter_member_added`,
+`chapter_member_approved`, `chapter_member_removed`; `ModerationLog.targetType`
+gains `"chapter"`.
+
+Deliberate skeleton gaps for the real backend: no notification to admins on a
+join request (the admin UI polls pending counts instead), pin cap remains
+global rather than per-chapter, and revoking `isSupporter` does **not** cascade
+into chapter memberships — admins remove members explicitly.
+
+Tier-gate test matrix: `apps/api/src/routes/chapters.test.ts` (13 tests —
+anonymous/free/verified/pending/active/admin against every surface above).
+
 ## 2026-07-30 — Brief 05 backfill: notifications, push tokens, search, bookmarks
 
 > These endpoints and models landed 2026-07-29 (commits `18a308e` and
