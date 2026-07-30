@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import type { TagWithCount } from "@nyps-forum/shared";
+import type { ChapterSummary, TagWithCount } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { MarkdownEditor } from "../markdown";
@@ -13,13 +13,21 @@ function NewThreadForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedTagSlug = searchParams.get("tag");
+  const chapterSlug = searchParams.get("chapter");
 
   const [tags, setTags] = useState<TagWithCount[] | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [chapter, setChapter] = useState<ChapterSummary | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Admin-only event creation: one thread per club event, with its date and
+  // an optional attendance code to read out in the room.
+  const [isEvent, setIsEvent] = useState(false);
+  const [eventDate, setEventDate] = useState("");
+  const [eventCode, setEventCode] = useState("");
 
   useEffect(() => {
     api.get<{ tags: TagWithCount[] }>("/api/tags").then((res) => {
@@ -31,6 +39,14 @@ function NewThreadForm() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preselectedTagSlug]);
+
+  useEffect(() => {
+    if (!chapterSlug || !token) return;
+    api
+      .get<{ chapter: ChapterSummary }>(`/api/chapters/${chapterSlug}`, token)
+      .then((res) => setChapter(res.chapter))
+      .catch((e) => setError(e.message));
+  }, [chapterSlug, token]);
 
   if (loading) return <p className="meta">Loading...</p>;
   if (!user) return <p className="meta">Log in first.</p>;
@@ -55,7 +71,19 @@ function NewThreadForm() {
     try {
       const { thread } = await api.post<{ thread: { id: string } }>(
         "/api/threads",
-        { title, body, tagIds: selectedTagIds },
+        {
+          title,
+          body,
+          tagIds: selectedTagIds,
+          ...(chapter ? { chapterId: chapter.id } : {}),
+          ...(isEvent
+            ? {
+                kind: "event",
+                eventDate: new Date(eventDate).toISOString(),
+                ...(eventCode.trim() ? { eventCode: eventCode.trim() } : {}),
+              }
+            : {}),
+        },
         token,
       );
       router.push(`/t/${thread.id}`);
@@ -68,14 +96,53 @@ function NewThreadForm() {
 
   return (
     <div>
-      <Link href="/" className="back-link">
-        ← Back to the feed
+      <Link href={chapter ? `/c/${chapter.slug}` : "/"} className="back-link">
+        ← Back to {chapter ? chapter.name : "the feed"}
       </Link>
       <h1 className="page-title">New Thread</h1>
       <p className="meta" style={{ marginBottom: "1.5rem" }}>
-        Pose the question well and the discussion will follow.
+        {chapter
+          ? `Posting in the ${chapter.name} chapter — visible to its members only.`
+          : "Pose the question well and the discussion will follow."}
       </p>
       <form onSubmit={onSubmit} style={{ maxWidth: "none" }}>
+        {user.role === "admin" && (
+          <div className="card" style={{ marginBottom: "1rem" }}>
+            <label className="pref-row" style={{ borderTop: "none", paddingTop: 0 }}>
+              <span>
+                <span className="pref-label">This is an event thread</span>
+                <span className="meta">
+                  One per club event: collects questions before the date, carries the topics,
+                  recording, and transcript after. Anyone may read it; posting is member-only.
+                </span>
+              </span>
+              <input type="checkbox" checked={isEvent} onChange={(e) => setIsEvent(e.target.checked)} />
+            </label>
+            {isEvent && (
+              <>
+                <label>
+                  Event date and time
+                  <input
+                    type="datetime-local"
+                    value={eventDate}
+                    onChange={(e) => setEventDate(e.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  Attendance code <span className="field-hint">Optional</span>
+                  <input
+                    value={eventCode}
+                    onChange={(e) => setEventCode(e.target.value)}
+                    placeholder="Read out in the room — attendees redeem it for a 'was there' mark"
+                    minLength={4}
+                    maxLength={40}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+        )}
         <label>
           Title
           <input

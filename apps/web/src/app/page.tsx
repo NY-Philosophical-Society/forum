@@ -3,17 +3,101 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { formatDate, type TagWithCount, type ThreadFeedResponse, type ThreadSummary } from "@nyps-forum/shared";
+import {
+  formatDate,
+  type ChapterSummary,
+  type TagWithCount,
+  type ThreadFeedResponse,
+  type ThreadSummary,
+} from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
-import { Avatar, EmptyState, ThreadCardSkeleton } from "./ui";
+import { ThreadCard } from "./thread-card";
+import { EmptyState, ThreadCardSkeleton } from "./ui";
 
 const PAGE_SIZE = 20;
+const EVENTS_STRIP_COUNT = 4;
+
+/**
+ * Members' chapter row: the main feed stays the front page, chapters ride
+ * above it as one quiet line of links, never burying the feed.
+ */
+function ChapterSwitcher() {
+  const { user, token } = useAuth();
+  const [chapters, setChapters] = useState<ChapterSummary[] | null>(null);
+  const isMemberViewer = Boolean(user && (user.isSupporter || user.role === "admin"));
+
+  useEffect(() => {
+    if (!token || !isMemberViewer) return;
+    api
+      .get<{ chapters: ChapterSummary[] }>("/api/chapters", token)
+      .then((res) => setChapters(res.chapters))
+      .catch(() => {});
+  }, [token, isMemberViewer]);
+
+  if (!isMemberViewer || !chapters || chapters.length === 0) return null;
+  const mine = chapters.filter((c) => c.myMembership === "active");
+
+  return (
+    <div className="chapter-switcher row wrap">
+      <span className="chapter-switcher-label">Chapters</span>
+      {mine.map((c) => (
+        <Link className="chapter-link" href={`/c/${c.slug}`} key={c.id}>
+          {c.name}
+        </Link>
+      ))}
+      <Link className="chapter-link chapter-link-all" href="/chapters">
+        {mine.length > 0 ? "All chapters" : "Browse chapters"}
+      </Link>
+    </div>
+  );
+}
+
+/** The Events grouping: upcoming first, then the freshest afterlives. */
+function EventsStrip() {
+  const { token } = useAuth();
+  const { dateFormat } = useSettings();
+  const [events, setEvents] = useState<ThreadSummary[] | null>(null);
+
+  useEffect(() => {
+    api
+      .get<ThreadFeedResponse>(`/api/threads?kind=event&limit=${EVENTS_STRIP_COUNT}`, token)
+      .then((res) => setEvents(res.threads))
+      .catch(() => {});
+  }, [token]);
+
+  if (!events || events.length === 0) return null;
+  const now = Date.now();
+
+  return (
+    <section className="events-strip">
+      <div className="row between">
+        <span className="eyebrow">Events</span>
+      </div>
+      <div className="events-row">
+        {events.map((t) => {
+          const upcoming = t.eventDate ? Date.parse(t.eventDate) > now : false;
+          return (
+            <Link className="event-card" href={`/t/${t.id}`} key={t.id}>
+              <span className="event-card-date">
+                {upcoming ? "Upcoming · " : ""}
+                {t.eventDate ? formatDate(t.eventDate, dateFormat) : ""}
+              </span>
+              <span className="event-card-title">{t.title}</span>
+              <span className="meta">
+                {t.postCount} {t.postCount === 1 ? "reply" : "replies"}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 function HomeFeed() {
   const { user, token } = useAuth();
-  const { dateFormat } = useSettings();
   const router = useRouter();
   const searchParams = useSearchParams();
   const sort = searchParams.get("sort") === "new" ? "new" : "hot";
@@ -132,6 +216,9 @@ function HomeFeed() {
 
       <h1 className="page-title">Forum</h1>
 
+      <ChapterSwitcher />
+      <EventsStrip />
+
       <div className="feed-controls row between wrap">
         <div className="segmented">
           <button className={sort === "hot" ? "segmented-active" : ""} onClick={() => setSort("hot")}>
@@ -201,59 +288,12 @@ function HomeFeed() {
       )}
 
       {threads.map((t) => (
-        <article
-          className={`card thread-card ${t.pinnedAt ? "pinned-card" : ""}`}
+        <ThreadCard
           key={t.id}
-        >
-          {t.pinnedAt && (
-            <p className="pinned-label" style={{ marginBottom: "0.35rem" }}>
-              <span className="pin-mark" aria-hidden>
-                ❖
-              </span>
-              Pinned
-            </p>
-          )}
-          <Link className="title" href={`/t/${t.id}`}>
-            {t.title}
-            {t.locked && " 🔒"}
-          </Link>
-          <div className="row" style={{ marginTop: "0.6rem" }}>
-            <Link className="author-link" href={`/u/${t.author.id}`}>
-              <Avatar name={t.author.displayName} src={t.author.avatarUrl} size={24} />
-              <p className="meta">{t.author.displayName}</p>
-            </Link>
-            <p className="meta">· {formatDate(t.createdAt, dateFormat)}</p>
-          </div>
-          {t.tags.length > 0 && (
-            <div className="row wrap" style={{ marginTop: "0.75rem" }}>
-              {t.tags.map((tag) => (
-                <span className="tag-static" key={tag.id}>
-                  {tag.name}
-                </span>
-              ))}
-            </div>
-          )}
-          <div className="like-row">
-            <button
-              className={`like-button ${t.myLiked ? "like-button-active" : ""}`}
-              disabled={user?.verificationStatus !== "VERIFIED"}
-              onClick={() => toggleLike(t.id)}
-            >
-              ♥ {t.likeCount}
-            </button>
-            <span className="meta">
-              {t.postCount} {t.postCount === 1 ? "reply" : "replies"}
-            </span>
-            {user && (
-              <button
-                className={`bookmark-button ${t.myBookmarked ? "bookmark-button-active" : ""}`}
-                onClick={() => toggleBookmark(t)}
-              >
-                {t.myBookmarked ? "❧ Saved" : "❧ Save"}
-              </button>
-            )}
-          </div>
-        </article>
+          thread={t}
+          onToggleLike={toggleLike}
+          onToggleBookmark={toggleBookmark}
+        />
       ))}
 
       {hasMore && (

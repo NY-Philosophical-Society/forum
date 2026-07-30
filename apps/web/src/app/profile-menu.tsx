@@ -71,6 +71,20 @@ export function ProfileMenu() {
           <Link href="/saved" onClick={() => setOpen(false)}>
             Saved threads
           </Link>
+          {user.isSupporter || user.role === "admin" ? (
+            <>
+              <Link href="/chapters" onClick={() => setOpen(false)}>
+                Chapters
+              </Link>
+              <Link href="/directory" onClick={() => setOpen(false)}>
+                Member directory
+              </Link>
+            </>
+          ) : (
+            <Link href="/membership" onClick={() => setOpen(false)}>
+              Membership
+            </Link>
+          )}
           <Link href="/formatting" onClick={() => setOpen(false)}>
             Formatting guide
           </Link>

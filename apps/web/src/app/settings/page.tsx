@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { DataExport, NotificationPreferences, PublicUser } from "@nyps-forum/shared";
+import {
+  DIRECTORY_BIO_MAX_LENGTH,
+  type DataExport,
+  type DirectorySettings,
+  type NotificationPreferences,
+  type PublicUser,
+} from "@nyps-forum/shared";
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
@@ -81,24 +87,28 @@ export default function SettingsPage() {
 
       {user && <NotificationSection />}
 
+      {user && <DirectorySection />}
+
       {user && <AccountSections />}
 
       {user && (
         <div className="card settings-section">
-          <h3>Supporter access</h3>
+          <h3>Membership</h3>
           {user.isSupporter || redeemed ? (
             <p className="toast" style={{ marginBottom: 0 }}>
-              You have supporter access — thank you for sustaining the Society&apos;s events and
-              journal.
+              You&apos;re a member of the Society — thank you for sustaining its events and
+              journal. Chapters, the member directory, and event discussions are open to you.
             </p>
           ) : (
             <>
               <p className="meta">
-                Have an access code from a donation or journal subscription? Redeem it here.
+                Membership opens the <Link href="/membership" className="inline-link">member
+                spaces</Link> — chapters, the directory, posting in event threads. Have a code
+                from a donation or journal subscription? Redeem it here.
               </p>
               <form onSubmit={redeemCode}>
                 <label>
-                  Access code
+                  Membership code
                   <input value={code} onChange={(e) => setCode(e.target.value)} required />
                 </label>
                 {redeemError && <p className="error">{redeemError}</p>}
@@ -110,6 +120,128 @@ export default function SettingsPage() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Member-directory opt-in. The copy states exactly what becomes visible and
+ * to whom — the flag is meaningless without that. Saved for any account;
+ * the entry only ever shows while the account is a current member.
+ */
+function DirectorySection() {
+  const { user, token } = useAuth();
+  const [settings, setSettingsState] = useState<DirectorySettings | null>(null);
+  const [bioDraft, setBioDraft] = useState("");
+  const [savingBio, setSavingBio] = useState(false);
+  const [bioSaved, setBioSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isMember = Boolean(user && (user.isSupporter || user.role === "admin"));
+
+  useEffect(() => {
+    if (!token) return;
+    api
+      .get<{ directory: DirectorySettings }>("/api/auth/account", token)
+      .then((res) => {
+        setSettingsState(res.directory);
+        setBioDraft(res.directory.directoryBio ?? "");
+      })
+      .catch(() => {});
+  }, [token]);
+
+  async function save(patch: Partial<DirectorySettings>) {
+    if (!token || !settings) return;
+    const next = { ...settings, ...patch };
+    setSettingsState(next); // optimistic — reverted below if the save fails
+    setError(null);
+    try {
+      await api.patch("/api/users/me", patch, token);
+    } catch (err: any) {
+      setSettingsState(settings);
+      setError(err.message ?? "Could not save that");
+    }
+  }
+
+  async function saveBio(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) return;
+    setSavingBio(true);
+    setBioSaved(false);
+    setError(null);
+    try {
+      await api.patch("/api/users/me", { directoryBio: bioDraft.trim() || null }, token);
+      setSettingsState((prev) => (prev ? { ...prev, directoryBio: bioDraft.trim() || null } : prev));
+      setBioSaved(true);
+    } catch (err: any) {
+      setError(err.message ?? "Could not save your interests");
+    } finally {
+      setSavingBio(false);
+    }
+  }
+
+  if (!settings) return null;
+
+  return (
+    <div className="card settings-section">
+      <h3>Member directory</h3>
+      {!isMember && (
+        <p className="meta">
+          The directory is a member space — these settings take effect once you&apos;re a{" "}
+          <Link href="/membership" className="inline-link">member</Link>.
+        </p>
+      )}
+      <label className="pref-row pref-row-master">
+        <span>
+          <span className="pref-label">List me in the member directory</span>
+          <span className="meta">
+            Other members will see your photo, name, chapters, and the interests below — nothing
+            else, and never outside the membership. Off by default; switch off any time.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={settings.directoryVisible}
+          onChange={() => save({ directoryVisible: !settings.directoryVisible })}
+        />
+      </label>
+      <label className="pref-row">
+        <span>
+          <span className="pref-label">Open to a reading partner or study group</span>
+          <span className="meta">
+            Adds a &ldquo;⇄ open to partners&rdquo; mark to your entry and puts you in that
+            filter. People reach out by direct message.
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={settings.openToPartners}
+          disabled={!settings.directoryVisible}
+          onChange={() => save({ openToPartners: !settings.openToPartners })}
+        />
+      </label>
+      <form onSubmit={saveBio} style={{ marginTop: "0.75rem" }}>
+        <label>
+          Interests <span className="field-hint">What you&apos;re reading, what you want to argue about</span>
+          <textarea
+            value={bioDraft}
+            onChange={(e) => {
+              setBioDraft(e.target.value);
+              setBioSaved(false);
+            }}
+            maxLength={DIRECTORY_BIO_MAX_LENGTH}
+            placeholder="Kant's first Critique, philosophy of mind, looking for a Wittgenstein reading group..."
+            style={{ minHeight: "64px" }}
+          />
+        </label>
+        {error && <p className="error">{error}</p>}
+        <div className="row">
+          <button type="submit" className="btn-sm" disabled={savingBio}>
+            {savingBio ? "Saving..." : "Save interests"}
+          </button>
+          {bioSaved && <span className="meta">Saved.</span>}
+        </div>
+      </form>
     </div>
   );
 }

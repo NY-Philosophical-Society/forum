@@ -260,7 +260,12 @@ export default function ThreadPage() {
   // Acting on someone else's content is moderation and needs a logged reason;
   // acting on your own is not.
   const moderatingThread = Boolean(isAdmin && user && user.id !== thread.author.id);
-  const canPost = user?.verificationStatus === "VERIFIED" && !thread.locked && !thread.deleted;
+  const isEvent = thread.kind === "event";
+  // Event threads: reading is open, posting is member-only — thread.canPost
+  // is the server's verdict (and the server enforces it again on POST).
+  const memberGated = isEvent && thread.canPost === false;
+  const canPost =
+    user?.verificationStatus === "VERIFIED" && !thread.locked && !thread.deleted && !memberGated;
   const canEditThread =
     !thread.deleted &&
     Boolean(user) &&
@@ -269,8 +274,11 @@ export default function ThreadPage() {
 
   return (
     <div>
-      <Link href="/" className="back-link">
-        ← Back to the feed
+      <Link
+        href={thread.chapter ? `/c/${thread.chapter.slug}` : "/"}
+        className="back-link"
+      >
+        ← Back to {thread.chapter ? thread.chapter.name : "the feed"}
       </Link>
 
       <div className="row between wrap" style={{ alignItems: "flex-start" }}>
@@ -348,14 +356,27 @@ export default function ThreadPage() {
         )}
       </div>
 
-      {thread.tags.length > 0 && (
+      {(thread.tags.length > 0 || thread.chapter) && (
         <div className="row wrap" style={{ marginBottom: "1rem" }}>
+          {thread.chapter && (
+            <Link href={`/c/${thread.chapter.slug}`} className="tag-static chapter-tag">
+              {thread.chapter.name} chapter
+            </Link>
+          )}
           {thread.tags.map((tag) => (
             <span className="tag-static" key={tag.id}>
               {tag.name}
             </span>
           ))}
         </div>
+      )}
+
+      {isEvent && (
+        <EventPanel
+          thread={thread}
+          isAdmin={isAdmin}
+          onChanged={() => load(repliesWindow)}
+        />
       )}
 
       {editingThread ? (
@@ -507,6 +528,11 @@ export default function ThreadPage() {
                       <Avatar name={p.author.displayName} src={p.author.avatarUrl} size={22} />
                       <p className="meta">{p.author.displayName}</p>
                     </Link>
+                    {p.wasThere && (
+                      <span className="was-there" title="Attended this event">
+                        ◆ was there
+                      </span>
+                    )}
                     <p className="meta">· {formatDateTime(p.createdAt, dateFormat)}</p>
                     {p.editedAt && (
                       <p className="edited-note">edited {formatDateTime(p.editedAt, dateFormat)}</p>
@@ -591,6 +617,14 @@ export default function ThreadPage() {
                 {submitting ? "Posting..." : "Post reply"}
               </button>
             </form>
+          ) : memberGated ? (
+            <p className="notice">
+              Posting in event threads is for members of the Society —{" "}
+              <Link href="/membership" className="inline-link">
+                what membership opens
+              </Link>
+              . Reading stays free.
+            </p>
           ) : (
             <p className="notice">
               <a href="/verify">Verify your identity</a> to reply and like.
@@ -598,6 +632,238 @@ export default function ThreadPage() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * The event header: date, attendance, and the "I was there" code redemption.
+ * Admins additionally see the code to read out in the room and a panel to
+ * mark attendees by hand.
+ */
+function EventPanel({
+  thread,
+  isAdmin,
+  onChanged,
+}: {
+  thread: ThreadDetail;
+  isAdmin: boolean;
+  onChanged: () => void;
+}) {
+  const { user, token } = useAuth();
+  const { dateFormat } = useSettings();
+  const [code, setCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemOpen, setRedeemOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const upcoming = thread.eventDate ? Date.parse(thread.eventDate) > Date.now() : false;
+
+  async function redeem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) return;
+    setRedeeming(true);
+    setError(null);
+    try {
+      await api.post(`/api/threads/${thread.id}/attend`, { code }, token);
+      setCode("");
+      setRedeemOpen(false);
+      onChanged();
+    } catch (err: any) {
+      setError(err.message ?? "Could not record your attendance");
+    } finally {
+      setRedeeming(false);
+    }
+  }
+
+  return (
+    <div className="card event-panel">
+      <div className="row wrap between">
+        <p className="event-label" style={{ margin: 0 }}>
+          <span className="event-mark" aria-hidden>
+            ◆
+          </span>
+          {upcoming ? "Upcoming event" : "Event"}
+          {thread.eventDate ? ` · ${formatDateTime(thread.eventDate, dateFormat)}` : ""}
+        </p>
+        <p className="meta" style={{ margin: 0 }}>
+          {thread.attendeeCount ?? 0} {(thread.attendeeCount ?? 0) === 1 ? "person" : "people"} were
+          there
+        </p>
+      </div>
+      <p className="meta" style={{ margin: "0.5rem 0 0" }}>
+        {upcoming
+          ? "Questions gathered here go to the speaker. Afterwards the topics, recording, and transcript land in this thread."
+          : "The topics, recording, and transcript live in this thread — and the conversation continues."}
+        {" "}Anyone may read; posting is for members.
+      </p>
+
+      {user && !thread.myAttended && !upcoming && (
+        <div style={{ marginTop: "0.75rem" }}>
+          {!redeemOpen ? (
+            <button className="secondary btn-sm" onClick={() => setRedeemOpen(true)}>
+              I was there — enter the event code
+            </button>
+          ) : (
+            <form className="row wrap" onSubmit={redeem}>
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Event code"
+                style={{ maxWidth: "12rem" }}
+                required
+              />
+              <button className="btn-sm" type="submit" disabled={redeeming}>
+                {redeeming ? "Checking..." : "Confirm"}
+              </button>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setRedeemOpen(false);
+                  setError(null);
+                }}
+              >
+                cancel
+              </button>
+            </form>
+          )}
+          {error && <p className="error">{error}</p>}
+        </div>
+      )}
+      {user && thread.myAttended && (
+        <p className="was-there" style={{ marginTop: "0.75rem" }}>
+          ◆ You were there — your posts here carry the mark.
+        </p>
+      )}
+
+      {isAdmin && (
+        <div className="event-admin">
+          {thread.eventCode ? (
+            <p className="meta" style={{ margin: 0 }}>
+              Attendance code (visible to admins only): <strong>{thread.eventCode}</strong>
+            </p>
+          ) : (
+            <p className="meta" style={{ margin: 0 }}>
+              No attendance code was set for this event — mark attendees below.
+            </p>
+          )}
+          <AttendeeAdmin threadId={thread.id} onChanged={onChanged} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Admin: mark someone as having been in the room, or unmark them. */
+function AttendeeAdmin({ threadId, onChanged }: { threadId: string; onChanged: () => void }) {
+  const { token } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [attendees, setAttendees] = useState<
+    { user: { id: string; displayName: string; avatarUrl: string | null }; source: string }[] | null
+  >(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<
+    { id: string; displayName: string; avatarUrl: string | null }[] | null
+  >(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refresh() {
+    if (!token) return;
+    try {
+      const res = await api.get<{ attendees: NonNullable<typeof attendees> }>(
+        `/api/threads/${threadId}/attendees`,
+        token,
+      );
+      setAttendees(res.attendees);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  async function search(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token || !query.trim()) return;
+    const res = await api.get<{ users: NonNullable<typeof results> }>(
+      `/api/users?search=${encodeURIComponent(query.trim())}`,
+      token,
+    );
+    setResults(res.users);
+  }
+
+  async function add(userId: string) {
+    if (!token) return;
+    await api.post(`/api/threads/${threadId}/attendees`, { userId }, token);
+    setResults(null);
+    setQuery("");
+    await refresh();
+    onChanged();
+  }
+
+  async function remove(userId: string) {
+    if (!token) return;
+    await api.delete(`/api/threads/${threadId}/attendees/${userId}`, token);
+    await refresh();
+    onChanged();
+  }
+
+  if (!open) {
+    return (
+      <button
+        className="link-button"
+        style={{ marginTop: "0.5rem" }}
+        onClick={() => {
+          setOpen(true);
+          refresh();
+        }}
+      >
+        Manage attendees
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: "0.75rem" }}>
+      {error && <p className="error">{error}</p>}
+      {attendees?.map((a) => (
+        <div className="row between wrap admin-chapter-row" key={a.user.id}>
+          <span className="row">
+            <Avatar name={a.user.displayName} src={a.user.avatarUrl} size={22} />
+            <span>{a.user.displayName}</span>
+            <span className="meta">{a.source === "code" ? "redeemed code" : "marked by admin"}</span>
+          </span>
+          <button className="secondary btn-sm" onClick={() => remove(a.user.id)}>
+            Unmark
+          </button>
+        </div>
+      ))}
+      {attendees && attendees.length === 0 && <p className="meta">No attendees marked yet.</p>}
+      <form className="row" onSubmit={search} style={{ marginTop: "0.5rem" }}>
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Mark an attendee by name..."
+        />
+        <button className="secondary btn-sm" type="submit">
+          Find
+        </button>
+      </form>
+      {results?.length === 0 && <p className="meta">No one by that name.</p>}
+      {results?.map((u) => (
+        <div className="row between wrap admin-chapter-row" key={u.id}>
+          <span className="row">
+            <Avatar name={u.displayName} src={u.avatarUrl} size={22} />
+            <span>{u.displayName}</span>
+          </span>
+          <button className="btn-sm" onClick={() => add(u.id)}>
+            Mark as attended
+          </button>
+        </div>
+      ))}
+      <button className="link-button" style={{ marginTop: "0.5rem" }} onClick={() => setOpen(false)}>
+        Close
+      </button>
     </div>
   );
 }

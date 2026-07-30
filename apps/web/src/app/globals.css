@@ -2033,3 +2033,285 @@ mark {
     min-width: 7rem;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Membership run (2026-07-30): chapters, member directory, event threads.
+   Appended per the conflict-avoidance rule — do not fold into earlier rules.
+--------------------------------------------------------------------------- */
+
+/* Plain uppercase tracked kicker (design-system eyebrow — no leading rule). */
+.eyebrow {
+  display: inline-block;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.inline-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--border-strong);
+}
+
+.inline-link:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* --- Chapter switcher on the feed — one quiet line, never buries the feed */
+.chapter-switcher {
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.chapter-switcher-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.chapter-link {
+  color: var(--ink);
+  font-family: var(--font-display), Georgia, serif;
+  font-size: var(--text-base);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.chapter-link:hover {
+  border-bottom-color: var(--accent);
+}
+
+.chapter-link-all {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* --- Events grouping above the feed */
+.events-strip {
+  margin-bottom: var(--space-5);
+}
+
+.events-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.event-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.event-card:hover {
+  border-color: var(--border-strong);
+}
+
+.event-card-date {
+  color: var(--accent);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.event-card-title {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: var(--text-md);
+  line-height: 1.35;
+}
+
+/* Event marker on cards and the thread header — terracotta tick treatment */
+.event-label {
+  color: var(--accent);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.event-mark {
+  margin-right: 0.4rem;
+}
+
+.event-panel {
+  margin-bottom: var(--space-4);
+  border-left: 2px solid var(--accent);
+}
+
+.event-admin {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline);
+}
+
+/* "Was there" attendance marker on posts */
+.was-there {
+  display: inline-block;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* --- Chapter directory cards */
+.chapter-card .title {
+  font-size: var(--text-lg);
+}
+
+.chapter-members {
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.chapter-tag {
+  color: var(--accent) !important;
+  text-decoration: none;
+}
+
+/* --- Membership pitch */
+.pitch {
+  max-width: 38rem;
+}
+
+.pitch-title {
+  font-size: clamp(1.75rem, 3.4vw, 2.4rem);
+  line-height: 1.12;
+  margin: var(--space-3) 0 0;
+}
+
+.pitch-dek {
+  margin-top: var(--space-4);
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
+}
+
+/* Terracotta chapter tick on its hairline — reserved emphasis, used once */
+.pitch-tick {
+  position: relative;
+  border-top: 1px solid var(--hairline);
+  margin: var(--space-6) 0;
+}
+
+.pitch-tick::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 3px;
+  background: var(--accent);
+}
+
+.perk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.perk-list li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4) 0;
+}
+
+.perk-list li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.perk-name {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: var(--text-md);
+}
+
+.perk-desc {
+  color: var(--muted);
+  line-height: var(--leading-body);
+}
+
+.pitch-cta {
+  margin-top: var(--space-5);
+  background: var(--surface);
+  border: none;
+}
+
+/* --- Member directory */
+.dir-card {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+.dir-avatar {
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.dir-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dir-name {
+  color: var(--ink);
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: var(--text-md);
+  text-decoration: none;
+}
+
+.dir-name:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--accent);
+}
+
+.dir-bio {
+  margin: 0.45rem 0 0;
+  line-height: var(--leading-body);
+}
+
+.dir-action {
+  flex-shrink: 0;
+}
+
+.badge-partner {
+  display: inline-block;
+  border: 1px solid var(--badge-supporter-border);
+  border-radius: var(--radius-full);
+  background: var(--badge-supporter-bg);
+  color: var(--badge-supporter-text);
+  font-size: var(--text-xs);
+  padding: 0.1rem 0.55rem;
+}
+
+/* --- Admin: chapters */
+.admin-chapter {
+  margin-bottom: var(--space-3);
+}
+
+.admin-chapter-row {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.admin-section-label {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
