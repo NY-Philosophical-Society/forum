@@ -7,6 +7,13 @@ web app, and an Expo (React Native) iOS/Android app.
 **This is a working local prototype, not a production deployment.** See "What's stubbed / what's
 missing before launch" below before you show this to real users.
 
+> **Taking over the backend?** Start at **[`docs/API.md`](docs/API.md)** — the full API contract
+> walked out of the running implementation: every endpoint with its auth tier, request/response
+> shapes, error cases, rate limits and side effects; the auth and access-tier models; the four
+> provider interfaces; every Prisma model and its invariants; and the list of skeleton shortcuts
+> that must be replaced. `docs/API-CHANGES.md` logs anything added after it, and
+> `docs/BACKEND-OPTIONS.md` covers the hosting decision.
+
 ## Why this shape
 
 - **One single feed, not separate category boards.** Every thread lives in the same feed; tags
@@ -94,6 +101,13 @@ apps/
   mobile/   Expo/React Native app, same API, JWT stored via AsyncStorage
 packages/
   shared/   zod schemas + TS types shared by api/web/mobile (signup/login/thread/post/like/DM shapes)
+docs/
+  API.md            the API contract — start here for backend work (endpoint detail in docs/api/)
+  API-CHANGES.md    dated log of everything added to the API since
+  BACKEND-OPTIONS.md hosting comparison and recommendation
+  DESIGN_SYSTEM.md  the binding visual system (palette, type, flat design)
+  MEMBERSHIP.md     membership/chapters product decisions
+  TESTING.md        how the test suite isolates itself and what it covers
 ```
 
 ## Running it locally
