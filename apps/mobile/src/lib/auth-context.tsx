@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { AuthResponse, PublicUser } from "@nyps-forum/shared";
 import { api } from "./api";
+import { deregisterPush } from "./push";
 
 interface AuthContextValue {
   user: PublicUser | null;
@@ -76,10 +77,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearLinkedNotice = useCallback(() => setLinkedNotice(false), []);
 
   const logout = useCallback(() => {
+    // Best-effort: revoke this device's push token while the session can
+    // still authenticate the DELETE. Fire-and-forget — never blocks logout.
+    if (token) deregisterPush(token);
     AsyncStorage.removeItem(STORAGE_KEY);
     setToken(null);
     setUser(null);
-  }, []);
+  }, [token]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

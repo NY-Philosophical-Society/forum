@@ -1,5 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { NavigationContainer, useNavigation, type NavigationProp } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+  useNavigation,
+  type NavigationProp,
+} from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
@@ -16,10 +21,12 @@ import {
 } from "@expo-google-fonts/newsreader";
 import { ActivityIndicator, Image, Text, View } from "react-native";
 import { useEffect } from "react";
+import type { PublicUser } from "@nyps-forum/shared";
+import { api } from "./src/lib/api";
 import { AuthProvider, useAuth } from "./src/lib/auth-context";
 import { SettingsProvider, useSettings } from "./src/lib/settings-context";
 import { useNotificationUnreadCount, useUnreadCount } from "./src/lib/use-unread";
-import { onPushOpened } from "./src/lib/push";
+import { onPushOpened, registerForPush } from "./src/lib/push";
 import { fonts, type as typeScale } from "./src/lib/theme";
 import type {
   AlertsStackParamList,
@@ -209,6 +216,7 @@ function ProfileStack() {
 function AppTabs() {
   const { colors } = useSettings();
   const unread = useUnreadCount();
+  const alertsUnread = useNotificationUnreadCount();
 
   return (
     <Tabs.Navigator
@@ -247,6 +255,17 @@ function AppTabs() {
           tabBarBadge: unread > 0 ? unread : undefined,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="chatbubbles-outline" color={color} size={size} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="AlertsTab"
+        component={AlertsStack}
+        options={{
+          title: "Alerts",
+          tabBarBadge: alertsUnread > 0 ? alertsUnread : undefined,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="notifications-outline" color={color} size={size} />
           ),
         }}
       />
@@ -292,9 +311,49 @@ function AuthStack() {
   );
 }
 
+const navigationRef = createNavigationContainerRef<RootTabParamList>();
+
 function Root() {
   const { colors, themeName } = useSettings();
-  const { user, loading } = useAuth();
+  const { user, loading, token } = useAuth();
+
+  // Re-register the push token whenever a session starts. `ask: false` — this
+  // only refreshes an already-granted permission; the ask itself happens on
+  // the Alerts tab, the first moment someone shows they care.
+  useEffect(() => {
+    if (token) registerForPush(token, false);
+  }, [token]);
+
+  // Push taps deep-link exactly like their in-app rows: replies/likes/
+  // mentions to the specific reply, DMs to the conversation, anything
+  // without a target to the Alerts list.
+  useEffect(() => {
+    if (!token) return;
+    return onPushOpened(async (link) => {
+      if (!navigationRef.isReady()) return;
+      if (link.type === "message" && link.actorId) {
+        try {
+          const res = await api.get<{ user: PublicUser }>(
+            `/api/users/${link.actorId}/profile`,
+            token,
+          );
+          navigationRef.navigate("MessagesTab", {
+            screen: "Conversation",
+            params: { userId: link.actorId, displayName: res.user.displayName },
+          });
+        } catch {
+          navigationRef.navigate("MessagesTab", { screen: "Messages" });
+        }
+      } else if (link.threadId) {
+        navigationRef.navigate("FeedTab", {
+          screen: "Thread",
+          params: { threadId: link.threadId, highlightPostId: link.postId },
+        });
+      } else {
+        navigationRef.navigate("AlertsTab", { screen: "Notifications" });
+      }
+    });
+  }, [token]);
   const [fontsLoaded, fontError] = useFonts({
     LibreBaskerville_400Regular,
     LibreBaskerville_400Regular_Italic,
@@ -320,7 +379,7 @@ function Root() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {user ? <AppTabs /> : <AuthStack />}
       <StatusBar style={themeName === "dark" ? "light" : "dark"} />
     </NavigationContainer>
