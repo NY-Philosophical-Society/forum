@@ -587,6 +587,7 @@ async function seedTags() {
 async function wipeThreads() {
   await prisma.postLike.deleteMany();
   await prisma.threadLike.deleteMany();
+  await prisma.eventAttendee.deleteMany();
   // Reports carry a bare targetId rather than a foreign key, so ones pointing
   // at the threads/replies about to be deleted would linger as "gone" rows in
   // the admin queue. The ModerationLog is deliberately never touched here —
@@ -642,7 +643,9 @@ async function main() {
   // Demo moderator account — there's no bootstrap admin UI, so this is the
   // one way to get an admin account locally. Promote a real account the same
   // way (`role: "admin"`) via direct DB access until an admin UI exists.
-  await prisma.user.upsert({
+  // Deliberately NOT a supporter: admins must be able to moderate chapters,
+  // events, and the directory without donating, and the seed should prove it.
+  const admin = await prisma.user.upsert({
     where: { email: "admin@demo.nyphilosophy.org" },
     update: { role: "admin" },
     create: {
@@ -655,6 +658,227 @@ async function main() {
   });
   console.log("Seeded demo admin (admin@demo.nyphilosophy.org / demo-password-123).");
   await seedDemoReports();
+  await seedMembership(admin.id);
+}
+
+/**
+ * Membership demo data: members of the Society, an NYC chapter with an
+ * active roster + one pending request, chapter-only threads, directory
+ * opt-ins, and a past event with its afterlife thread — so every membership
+ * feature is visible in the preview on a fresh seed.
+ */
+const SUPPORTERS = ["marguerite", "daniel", "priya", "ruth", "wenli", "owen", "adaora", "samir"];
+
+const DIRECTORY_PROFILES: Record<string, { bio: string; partners: boolean }> = {
+  marguerite: { bio: "History of philosophy, the Liar, whatever resists tidy answers.", partners: false },
+  daniel: { bio: "Classical logic, philosophy of mathematics. Will defend LEM to the death.", partners: true },
+  priya: { bio: "Philosophy of language and truth. Reading Kripke's 'Outline of a Theory of Truth'.", partners: true },
+  ruth: { bio: "Ancient ethics — currently leading the Nicomachean Ethics reading group.", partners: true },
+  wenli: { bio: "Paradoxes, Daoism, comparative philosophy. Slow reader, careful arguer.", partners: false },
+  owen: { bio: "Epistemology and philosophy of religion. Happy to be wrong in public.", partners: true },
+};
+
+async function seedMembership(adminId: string) {
+  // Members of the Society (isSupporter) — the WISDOMKEY placeholder made real.
+  for (const handle of SUPPORTERS) {
+    const user = await upsertUser(handle);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isSupporter: true, supporterSince: new Date(Date.now() - 30 * DAY) },
+    });
+  }
+  console.log(`Marked ${SUPPORTERS.length} demo members as supporters.`);
+
+  // Directory opt-ins (member-only, opt-in — most members in, some out).
+  for (const [handle, profile] of Object.entries(DIRECTORY_PROFILES)) {
+    const user = await upsertUser(handle);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { directoryVisible: true, directoryBio: profile.bio, openToPartners: profile.partners },
+    });
+  }
+  console.log(`Seeded ${Object.keys(DIRECTORY_PROFILES).length} directory opt-ins.`);
+
+  // The NYC chapter: an active roster plus one pending request for the admin
+  // queue. Members were added by the admin, so they land active.
+  const chapter = await prisma.chapter.upsert({
+    where: { slug: "new-york-city" },
+    update: {},
+    create: {
+      slug: "new-york-city",
+      name: "New York City",
+      description:
+        "The founding chapter. Meets monthly near Washington Square for close reading and long arguments.",
+      location: "New York, NY",
+    },
+  });
+  const activeHandles = ["marguerite", "daniel", "priya", "ruth"];
+  for (const handle of activeHandles) {
+    const user = await upsertUser(handle);
+    await prisma.chapterMembership.upsert({
+      where: { chapterId_userId: { chapterId: chapter.id, userId: user.id } },
+      update: { state: "active" },
+      create: { chapterId: chapter.id, userId: user.id, state: "active", approvedAt: new Date() },
+    });
+  }
+  const pendingUser = await upsertUser("owen");
+  await prisma.chapterMembership.upsert({
+    where: { chapterId_userId: { chapterId: chapter.id, userId: pendingUser.id } },
+    update: { state: "pending", approvedAt: null },
+    create: { chapterId: chapter.id, userId: pendingUser.id, state: "pending" },
+  });
+  console.log(`Seeded chapter "${chapter.name}" (${activeHandles.length} active, 1 pending).`);
+
+  // A chapter-only thread — must never surface outside the chapter.
+  const marguerite = await upsertUser("marguerite");
+  const chapterThreadCreated = new Date(Date.now() - 1 * DAY);
+  const chapterThread = await prisma.thread.create({
+    data: {
+      title: "November meetup: shall we tackle the Tractatus?",
+      body: `Proposal for the November session: the *Tractatus*, propositions 1–3, with Anscombe's introduction as a crutch.
+
+It is short, it is brutal, and it will either be the best meeting of the year or a room full of people silently renumbering their objections. Both outcomes seem worth having.
+
+Say here if you're in, and whether Sunday afternoons still work for everyone.`,
+      authorId: marguerite.id,
+      createdAt: chapterThreadCreated,
+      chapterId: chapter.id,
+      hotScore: hotScore(0, 0, chapterThreadCreated),
+    },
+  });
+  const daniel = await upsertUser("daniel");
+  const ruth = await upsertUser("ruth");
+  await prisma.post.create({
+    data: {
+      threadId: chapterThread.id,
+      authorId: daniel.id,
+      body: "In. And I'll bring the Ogden translation so we can argue about the translations too.",
+      createdAt: new Date(chapterThreadCreated.getTime() + 3 * HOUR),
+    },
+  });
+  await prisma.post.create({
+    data: {
+      threadId: chapterThread.id,
+      authorId: ruth.id,
+      body: "Sundays work. But I want it on record that I predicted the silent renumbering.",
+      createdAt: new Date(chapterThreadCreated.getTime() + 7 * HOUR),
+    },
+  });
+  await recomputeThreadHotScore(chapterThread.id);
+  console.log("Seeded 1 chapter-only thread with replies.");
+
+  await seedEventThread(adminId, chapter.id);
+}
+
+/**
+ * A past event and its afterlife thread: member questions from before the
+ * evening, the admin's post-event drop (topics, recording, transcript), the
+ * conversation continuing after — with attendees marked so the "was there"
+ * badge shows. Reading is open to any account; posting is member-only.
+ */
+async function seedEventThread(adminId: string, _chapterId: string) {
+  const eventDate = new Date(Date.now() - 12 * DAY);
+  const createdAt = new Date(eventDate.getTime() - 10 * DAY);
+  const thread = await prisma.thread.create({
+    data: {
+      title: "Members' Symposium: Free Will After Neuroscience",
+      body: `**An evening with Prof. Miriam Kessler (NYU)** — does the neuroscience of decision actually touch the free will debate, or has it been aimed at a strawman for forty years?
+
+**When:** ${eventDate.toDateString()}, 7pm
+**Where:** The clubroom, 24 Washington Mews
+
+Drop your questions for Prof. Kessler in this thread before the evening — we'll put the best three to her directly. Afterwards, the topics, recording, and transcript land here and the conversation continues with the people who were in the room.`,
+      authorId: adminId,
+      createdAt,
+      kind: "event",
+      eventDate,
+      eventCode: "MEWS-1124",
+      hotScore: hotScore(0, 0, createdAt),
+    },
+  });
+
+  const before = [
+    {
+      handle: "samir",
+      hoursAfter: 20,
+      body: "Question for the professor: if Libet-style findings were fully replicated at scale, what *specific* philosophical position would actually be refuted?",
+    },
+    {
+      handle: "adaora",
+      hoursAfter: 50,
+      body: "Mine: compatibilists keep saying neuroscience changes nothing. Is there ANY conceivable neural finding that would move them, or is the thesis unfalsifiable?",
+    },
+  ];
+  const beforePosts: { id: string }[] = [];
+  for (const q of before) {
+    const author = await upsertUser(q.handle);
+    beforePosts.push(
+      await prisma.post.create({
+        data: {
+          threadId: thread.id,
+          authorId: author.id,
+          body: q.body,
+          createdAt: new Date(createdAt.getTime() + q.hoursAfter * HOUR),
+        },
+      }),
+    );
+  }
+
+  // The afterlife drop, day after the event.
+  const afterDrop = await prisma.post.create({
+    data: {
+      threadId: thread.id,
+      authorId: adminId,
+      body: `**The evening, for the record.**
+
+Topics Prof. Kessler took: Samir's falsifiability question (her answer: "agent-causal libertarianism, and nothing else"), the readiness potential replication crisis, and whether "could have done otherwise" survives translation into neural terms.
+
+📼 Recording: *(link goes here once the donation platform hosts media — for now, ask at the clubroom)*
+📄 Transcript: *(same)*
+
+The floor stays open — especially for those who were in the room. What did she get wrong?`,
+      createdAt: new Date(eventDate.getTime() + 1 * DAY),
+    },
+  });
+  const wenli = await upsertUser("wenli");
+  await prisma.post.create({
+    data: {
+      threadId: thread.id,
+      authorId: wenli.id,
+      parentId: afterDrop.id,
+      body: "What she got wrong: dismissing the Daoist framing in the Q&A as 'not about the same thing'. Wu wei is precisely a theory of action without a deliberating self — it is exactly the same thing.",
+      createdAt: new Date(eventDate.getTime() + 2 * DAY),
+    },
+  });
+  const priya = await upsertUser("priya");
+  await prisma.post.create({
+    data: {
+      threadId: thread.id,
+      authorId: priya.id,
+      parentId: beforePosts[1].id,
+      body: "For the record, she did answer this one from the stage: 'a finding that decisions complete before any information integration' would move her. Which of course no one can operationalize.",
+      createdAt: new Date(eventDate.getTime() + 3 * DAY),
+    },
+  });
+  await recomputeThreadHotScore(thread.id);
+
+  // Who was in the room: some marked by the admin, some via the event code.
+  const attendees: { handle: string; source: string }[] = [
+    { handle: "samir", source: "admin" },
+    { handle: "adaora", source: "admin" },
+    { handle: "wenli", source: "code" },
+    { handle: "priya", source: "code" },
+    { handle: "marguerite", source: "code" },
+  ];
+  for (const a of attendees) {
+    const user = await upsertUser(a.handle);
+    await prisma.eventAttendee.upsert({
+      where: { threadId_userId: { threadId: thread.id, userId: user.id } },
+      update: {},
+      create: { threadId: thread.id, userId: user.id, source: a.source },
+    });
+  }
+  console.log(`Seeded past event thread with ${attendees.length} attendees (code MEWS-1124).`);
 }
 
 /**
