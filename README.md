@@ -272,7 +272,11 @@ Five things need real decisions before this goes live — flagged here rather th
 - Account deletion anonymizes to "[deleted]" rather than erasing content. A deleted author's
   threads/replies/messages remain readable; whether that satisfies a legal erasure request is a
   question for the compliance review above.
-- No notifications (mentions are already stored for it — see the `Mention` model), no search.
+- **Push notifications are a log-only stub.** In-app notifications, search, and saved threads
+  work on both platforms, but real push delivery needs an Apple Developer APNs key (plus FCM
+  for Android) uploaded to an Expo project and `EXPO_ACCESS_TOKEN` set — see
+  `apps/api/src/lib/push-provider.ts`. Until then pushes are logged to the API console, and
+  nothing push-related can be verified end to end.
 - iOS app has not been run in a Simulator in this environment (Xcode is installed but not selected
   as the active developer directory — run
   `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`) — it typechecks cleanly and
