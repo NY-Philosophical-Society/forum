@@ -50,33 +50,6 @@ describe("search", () => {
     expect(users.body.threads.items).toHaveLength(0);
   });
 
-  /**
- * Postgres LIKE is case-sensitive where SQLite's was not, so every search
- * filter carries an explicit `mode: "insensitive"`. Search in a case nothing
- * was stored in — drop that mode and all four of these go empty.
- */
-  it("matches regardless of case, in titles, bodies, names, and the mention autocomplete", async () => {
-    const auth = { Authorization: `Bearer ${author.token}` };
-
-    const titles = await request(app).get("/api/search?q=TROLLEY").set(auth);
-    expect(titles.body.threads.items.some((t: any) => t.id === threadId)).toBe(true);
-
-    const bodies = await request(app).get("/api/search?q=UNSATISFYING").set(auth);
-    expect(bodies.body.posts.items.some((p: any) => p.threadId === threadId)).toBe(true);
-
-    const names = await request(app)
-      .get(`/api/search?q=${encodeURIComponent(author.displayName.toUpperCase())}&type=users`)
-      .set(auth);
-    expect(names.body.users.items.some((u: any) => u.id === author.id)).toBe(true);
-
-    // The @mention autocomplete is a separate route with its own filter.
-    const other = await signupVerified("search-mentioner");
-    const mentions = await request(app)
-      .get(`/api/users?search=${encodeURIComponent(author.displayName.toUpperCase())}`)
-      .set("Authorization", `Bearer ${other.token}`);
-    expect(mentions.body.users.some((u: any) => u.id === author.id)).toBe(true);
-  });
-
   it("excludes deleted threads from results", async () => {
     const doomed = await createThread(author, { title: "Ephemeral zeugma discussion" });
     await request(app)

@@ -104,30 +104,16 @@ Requires Node 20+. From the repo root:
 npm install
 ```
 
-**API** (first time only: copy env, start Postgres, migrate, seed):
+**API** (first time only: copy env, migrate, seed):
 
 ```bash
 cd apps/api
 cp .env.example .env
-npm run db:up          # starts local Postgres 17 on port 5433 — see below
-npm run db:deploy      # applies prisma/migrations to it
-npm run db:seed        # seeds 12 tags + 7 demo threads with nested replies
+npm run db:migrate   # creates apps/api/prisma/dev.db (SQLite)
+npm run db:seed       # seeds 12 tags + 5 demo threads with nested replies
 cd ../..
 npm run dev:api        # http://localhost:4000
 ```
-
-**Nothing to install for the database.** `npm run db:up` starts a real
-PostgreSQL 17 server from binaries that come in with `npm install` (the
-`embedded-postgres` devDependency), with its data in `apps/api/.postgres/`.
-`db:down` stops it, `db:status` checks it, `db:nuke` throws the data away. If
-you'd rather use Docker, `docker compose up -d db` gives you the same thing on
-the same port with the same credentials — `DATABASE_URL` is identical either
-way, so pick one and don't run both. Dev and test both run Postgres because
-production does; SQLite would let case-sensitivity bugs pass locally and fail
-on a host.
-
-`npm test` in `apps/api` needs no setup at all — it starts the local cluster if
-it isn't already up, migrates a throwaway schema, and drops it afterwards.
 
 **Web:**
 

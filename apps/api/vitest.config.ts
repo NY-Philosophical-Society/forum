@@ -7,8 +7,8 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     globalSetup: "./src/test/global-setup.ts",
     setupFiles: ["./src/test/setup.ts"],
-    // One shared Postgres schema; files run one at a time (each in a fresh
-    // fork, wiped by setup.ts) so they can't race each other on the same tables.
+    // One shared SQLite file; files run one at a time (each in a fresh fork,
+    // wiped by setup.ts) so they can't race each other on the same tables.
     pool: "forks",
     fileParallelism: false,
     hookTimeout: 30_000,

@@ -7,14 +7,13 @@ import { toPublicUser } from "./serialize";
  * parses parameters and assembles the response, so access rules and engine
  * changes both land in exactly one place.
  *
- * Engine: substring match (Prisma `contains` → SQL ILIKE, via the explicit
- * `mode: "insensitive"` below). Postgres LIKE is case-*sensitive*, unlike
- * SQLite's, so that mode is load-bearing rather than decorative — without it
- * searching "kant" stops finding "Kant". It still won't rank by relevance and
- * table-scans at scale; the upgrade path is Postgres full-text (a `tsvector`
- * column + GIN index queried with `websearch_to_tsquery`). Swap the bodies of
- * the three search functions; their signatures and the result shapes are
- * engine-agnostic and nothing outside this file changes.
+ * Engine: substring match (Prisma `contains` → SQL LIKE). SQLite's LIKE is
+ * case-insensitive for ASCII, which is fine for a dev prototype but won't
+ * rank by relevance and table-scans at scale. Upgrade path, in order of
+ * effort: SQLite FTS5 virtual tables locally / Postgres full-text
+ * (`tsvector` column + GIN index, `websearch_to_tsquery`) in production.
+ * Swap the bodies of the three search functions; their signatures and the
+ * result shapes are engine-agnostic and nothing outside this file changes.
  *
  * Access rules: callers must be authenticated (any account reads all content
  * in full under the current model — routes/search.ts enforces it). When
@@ -24,10 +23,6 @@ import { toPublicUser } from "./serialize";
  */
 
 const SNIPPET_RADIUS = 70;
-
-/** Every search filter is case-insensitive; spelled out once so no query can
- * silently drop back to Postgres' case-sensitive LIKE. */
-const CI = { mode: "insensitive" } as const;
 
 /** Plain-text window around the first match, ellipsized on both sides. */
 export function buildSnippet(body: string, term: string): string {
@@ -45,7 +40,7 @@ export async function searchThreads(
 ): Promise<SearchSection<ThreadSearchResult>> {
   const where = {
     deletedAt: null,
-    OR: [{ title: { contains: q, ...CI } }, { body: { contains: q, ...CI } }],
+    OR: [{ title: { contains: q } }, { body: { contains: q } }],
   };
   const [threads, total] = await Promise.all([
     prisma.thread.findMany({
@@ -79,7 +74,7 @@ export async function searchPosts(
   q: string,
   opts: { limit: number; offset: number },
 ): Promise<SearchSection<PostSearchResult>> {
-  const where = { deletedAt: null, body: { contains: q, ...CI } };
+  const where = { deletedAt: null, body: { contains: q } };
   const [posts, total] = await Promise.all([
     prisma.post.findMany({
       where,
@@ -108,7 +103,7 @@ export async function searchUsers(
   q: string,
   opts: { limit: number; offset: number },
 ): Promise<SearchSection<PublicUser>> {
-  const where = { deletedAt: null, displayName: { contains: q, ...CI } };
+  const where = { deletedAt: null, displayName: { contains: q } };
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where,

@@ -8,8 +8,8 @@ build/
 *.tsbuildinfo
 .env
 .env.local
-# Local Postgres cluster data from `npm run db:up` (scripts/local-postgres.ts)
-apps/api/.postgres/
+apps/api/prisma/dev.db
+apps/api/prisma/dev.db-journal
 # Local storage-provider stub writes uploaded images here
 apps/api/uploads/
 .DS_Store
