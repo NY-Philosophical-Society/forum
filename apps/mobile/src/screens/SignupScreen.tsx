@@ -13,7 +13,8 @@ export function SignupScreen({ navigation }: Props) {
   const { signup } = useAuth();
   const { colors } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [displayName, setDisplayName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +25,7 @@ export function SignupScreen({ navigation }: Props) {
     setSubmitting(true);
     try {
       // Once `signup` resolves the root navigator swaps to the app tabs.
-      await signup(email, password, displayName);
+      await signup(email, password, `${firstName.trim()} ${lastName.trim()}`.trim());
     } catch (err: any) {
       setError(err.message ?? "Signup failed");
     } finally {
@@ -41,19 +42,31 @@ export function SignupScreen({ navigation }: Props) {
       />
       <Text style={styles.h1}>Create your account</Text>
       <Text style={styles.subtitle}>
-        Posting under your real name asks for a one-time identity verification — do that whenever
-        you&apos;re ready, from your profile.
+        We ask for your real name because philosophy is better when people stand behind their
+        words — a name you'd say out loud in a seminar room changes how you argue and how you
+        listen. Anyone can read and sign up freely; posting under your name is what asks a little
+        more of you. If you'd like your identity confirmed rather than simply asserted, a
+        one-time ID verification is built in and available any time from your profile — never
+        required to read, only if you choose to post.
       </Text>
 
       <OAuthButtons navigation={navigation} />
 
-      <Text style={styles.label}>Full real name</Text>
+      <Text style={styles.label}>First name</Text>
       <TextInput
         style={styles.input}
-        placeholder="Jane Doe"
+        placeholder="Jane"
         placeholderTextColor={colors.muted}
-        value={displayName}
-        onChangeText={setDisplayName}
+        value={firstName}
+        onChangeText={setFirstName}
+      />
+      <Text style={styles.label}>Last name</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Doe"
+        placeholderTextColor={colors.muted}
+        value={lastName}
+        onChangeText={setLastName}
       />
       <Text style={styles.label}>Email</Text>
       <TextInput

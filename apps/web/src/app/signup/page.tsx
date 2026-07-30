@@ -9,7 +9,8 @@ import { OAuthButtons } from "../oauth-buttons";
 export default function SignupPage() {
   const { signup } = useAuth();
   const router = useRouter();
-  const [displayName, setDisplayName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +21,7 @@ export default function SignupPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await signup(email, password, displayName);
+      await signup(email, password, `${firstName.trim()} ${lastName.trim()}`.trim());
       router.push("/");
     } catch (err: any) {
       setError(err.message ?? "Signup failed");
@@ -42,15 +43,26 @@ export default function SignupPage() {
         <OAuthButtons />
 
         <form onSubmit={onSubmit}>
-          <label>
-            Full real name
-            <input
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Jane Doe"
-              required
-            />
-          </label>
+          <div className="row" style={{ gap: "0.75rem" }}>
+            <label style={{ flex: 1 }}>
+              First name
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Jane"
+                required
+              />
+            </label>
+            <label style={{ flex: 1 }}>
+              Last name
+              <input
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Doe"
+                required
+              />
+            </label>
+          </div>
           <label>
             Email
             <input
@@ -77,8 +89,13 @@ export default function SignupPage() {
         </form>
 
         <p className="auth-footer">
-          Anyone can browse and sign up freely. Posting under your real name requires a one-time
-          identity verification — you can do that whenever you&apos;re ready, from your account.
+          We ask for your real name because we think philosophy is better when people stand behind
+          their words. A name you'd say out loud in a seminar room changes how you argue and how
+          you listen — it's harder to be cruel, and easier to be taken seriously. Anyone can read
+          and sign up freely; posting under your name is what asks a little more of you, and
+          that's the point. If you'd like your identity confirmed rather than simply asserted, a
+          one-time ID verification is built in and available any time from your account — never
+          required to read, only if you choose to post.
         </p>
       </div>
     </div>
