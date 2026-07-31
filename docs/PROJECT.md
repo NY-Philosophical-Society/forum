@@ -12,8 +12,10 @@ it is written down here.
 ## 1. What this is
 
 A member forum for the **New York Philosophy Club** (501(c)(3)) — web now,
-iOS and Android planned. Real-name discussion: anyone may read, posting requires
-ID verification. Members (donors) get chapters, a directory, and event spaces.
+iOS and Android planned. Real-name discussion: anyone may read, and posting
+currently runs on the honor system rather than a completed ID check (see
+"Access tiers" below). Members (donors) get chapters, a directory, and event
+spaces.
 
 Separate from the marketing site (`nyphilosophy.org`); this is its own repo,
 `NY-Philosophical-Society/forum`.
@@ -25,7 +27,7 @@ Expo React Native mobile, shared types package. SQLite locally.
 
 ## 2. Current state — what actually works
 
-Everything below is built, tested, and running locally. **179 API tests pass.**
+Everything below is built, tested, and running locally. **184 API tests pass.**
 
 ### Reading and writing
 Single feed with hot/new ranking (a stored `hotScore` column, ordered by the
@@ -89,7 +91,7 @@ directly on the signup screen. `docs/API.md` documents the toggle.
 | **Membership model** | Reading stays free. Membership buys member spaces, never a lock on the main feed. Supporter-gated reading was proposed and **rejected** — it inverts the funnel. |
 | **Single feed** | One feed with optional tags. Not boards. Chapters are separate access-controlled spaces, not a boards system by another name. |
 | **Likes only** | No downvotes, ever. |
-| **Verification** | Required to post, not to read. Third-party vendor behind a provider interface. |
+| **Verification** | Not required to read or post — the honor system, since 2026-07-30. A completed ID check (third-party vendor behind a provider interface) is optional and available to any member; it becomes mandatory again with one env var (`REQUIRE_ID_VERIFICATION=true`) whenever the club wants that back. |
 | **Design** | Palette and type extracted from the club's real identity. `docs/DESIGN_SYSTEM.md` is binding — no hardcoded hex, no drop shadows, cards default to no fill. |
 | **Division of labour** | A human engineer owns the production backend. Claude owns frontend and product, plus skeleton backend to keep features testable locally. |
 
