@@ -1,0 +1,11 @@
+# Supabase
+.branches
+.temp
+# Local JWT signing keys — regenerate with
+#   supabase gen signing-key --algorithm ES256 -o supabase/signing_keys.json
+signing_keys.json
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local

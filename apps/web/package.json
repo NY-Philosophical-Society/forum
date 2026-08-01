@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@nyps-forum/shared": "0.1.0",
+    "@supabase/supabase-js": "^2.58.0",
     "next": "^14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

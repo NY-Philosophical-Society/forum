@@ -1,22 +1,31 @@
-// Local prototype uses SQLite for zero-setup dev. Swap provider to "postgresql"
-// and set DATABASE_URL to a real connection string for production.
+// Supabase Postgres. Local development runs the stack from supabase/config.toml
+// (`supabase start`); there is no SQLite path any more.
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
+  // Runtime uses the pooled connection (Supavisor, port 6543 in production)
+  // with ?pgbouncer=true&connection_limit=1; migrations need the direct one.
+  // Using the pooled URL for migrations is the classic mistake here.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id                  String    @id @default(cuid())
+  // This IS the Supabase auth.users id (a uuid), not a generated cuid — one
+  // identity, no linking column, nothing that can drift out of sync. Supplied
+  // by the API when it first sees a token (see middleware/auth.ts resolveUser),
+  // never generated here. There is deliberately no foreign key to auth.users:
+  // in production both live in one database, but the test suite runs against a
+  // throwaway database while auth lives in the shared local stack, and not
+  // modelling the FK keeps those two environments identical.
+  id                  String    @id
+  // Mirrored from the JWT's email claim on every authenticated request, so an
+  // email changed in Supabase propagates here. Supabase owns the credential;
+  // this copy exists for admin search, the directory, and DM display.
   email               String    @unique
-  // Null for accounts created via Google/Apple sign-in, which have no password.
-  passwordHash        String?
-  // Set only for accounts created via that provider's sign-in.
-  googleId            String?   @unique
-  appleId             String?   @unique
   displayName         String
   // Public URL served by the configured StorageProvider (see
   // src/lib/storage-provider.ts). Null = no photo, clients fall back to
@@ -61,7 +70,6 @@ model User {
   moderationActions    ModerationLog[]        @relation("ModerationActions")
   blocking             Block[]                @relation("Blocker")
   blockedBy            Block[]                @relation("Blocked")
-  passwordResetTokens  PasswordResetToken[]
   mentionsReceived     Mention[]              @relation("MentionsReceived")
   mentionsAuthored     Mention[]              @relation("MentionsAuthored")
   notificationsReceived Notification[]        @relation("NotificationsReceived")
@@ -438,18 +446,4 @@ model Bookmark {
 
   @@unique([userId, threadId])
   @@index([userId, createdAt])
-}
-
-// No email service is configured (see routes/auth.ts), so the reset link is
-// surfaced directly in the API response / server logs in dev instead of
-// being emailed — never do that in production.
-model PasswordResetToken {
-  id        String    @id @default(cuid())
-  userId    String
-  token     String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  user User @relation(fields: [userId], references: [id])
 }
