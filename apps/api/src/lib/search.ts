@@ -45,7 +45,10 @@ export async function searchThreads(
   const where = {
     deletedAt: null,
     chapterId: null,
-    OR: [{ title: { contains: q } }, { body: { contains: q } }],
+    OR: [
+      { title: { contains: q, mode: "insensitive" as const } },
+      { body: { contains: q, mode: "insensitive" as const } },
+    ],
   };
   const [threads, total] = await Promise.all([
     prisma.thread.findMany({
@@ -80,7 +83,11 @@ export async function searchPosts(
   opts: { limit: number; offset: number },
 ): Promise<SearchSection<PostSearchResult>> {
   // Same chapter exclusion as searchThreads — replies leak content just as well.
-  const where = { deletedAt: null, body: { contains: q }, thread: { chapterId: null } };
+  const where = {
+    deletedAt: null,
+    body: { contains: q, mode: "insensitive" as const },
+    thread: { chapterId: null },
+  };
   const [posts, total] = await Promise.all([
     prisma.post.findMany({
       where,
@@ -109,7 +116,10 @@ export async function searchUsers(
   q: string,
   opts: { limit: number; offset: number },
 ): Promise<SearchSection<PublicUser>> {
-  const where = { deletedAt: null, displayName: { contains: q } };
+  const where = {
+    deletedAt: null,
+    displayName: { contains: q, mode: "insensitive" as const },
+  };
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where,

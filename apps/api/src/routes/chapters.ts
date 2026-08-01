@@ -179,7 +179,9 @@ chaptersRouter.get("/:slug/threads", requireAuth, requireMember, async (req, res
     prisma.thread.findMany({
       where,
       orderBy: [
-        { pinnedAt: "desc" },
+        // Postgres DESC defaults to NULLS FIRST — be explicit so unpinned
+        // chapter threads sort below pinned ones, not above.
+        { pinnedAt: { sort: "desc", nulls: "last" } },
         sort === "new" ? { createdAt: "desc" } : { hotScore: "desc" },
       ],
       skip: offset,

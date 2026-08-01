@@ -29,7 +29,12 @@ directoryRouter.get("/", requireAuth, requireMember, async (req, res) => {
     directoryVisible: true,
     ...(partners ? { openToPartners: true } : {}),
     ...(q
-      ? { OR: [{ displayName: { contains: q } }, { directoryBio: { contains: q } }] }
+      ? {
+          OR: [
+            { displayName: { contains: q, mode: "insensitive" as const } },
+            { directoryBio: { contains: q, mode: "insensitive" as const } },
+          ],
+        }
       : {}),
   };
 

@@ -53,10 +53,12 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
       // current by recomputeThreadHotScore() on every like/reply instead of
       // being recomputed by fetching and sorting every thread per request.
       // Pins ride in front of either sort as a separate column: SQLite puts
-      // NULLs last on DESC, so unpinned threads fall through to their real
-      // order and hotScore is never touched by a pin.
+      // Unpinned threads must fall through to their real order, so pinnedAt
+      // NULLs sort last. Postgres defaults DESC to NULLS FIRST (SQLite did the
+      // opposite), which would put every unpinned thread above the pinned ones
+      // — so this is explicit rather than relying on the engine's default.
       orderBy: [
-        { pinnedAt: "desc" },
+        { pinnedAt: { sort: "desc", nulls: "last" } },
         // The events listing orders by the event's date (newest event first;
         // clients split upcoming/past) — hot/new make little sense there.
         ...(kind === "event"

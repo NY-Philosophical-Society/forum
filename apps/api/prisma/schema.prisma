@@ -1,12 +1,19 @@
-// Local prototype uses SQLite for zero-setup dev. Swap provider to "postgresql"
-// and set DATABASE_URL to a real connection string for production.
+// Postgres, hosted on Supabase.
+//
+// Two connection strings, and using the wrong one is the classic failure:
+//   DATABASE_URL        pooled  (Supavisor, port 6543) — app runtime.
+//                       Prisma needs ?pgbouncer=true&connection_limit=1
+//   DIRECT_DATABASE_URL direct  (port 5432)            — migrations only.
+// Prisma opens a session-mode connection for migrations that the transaction
+// pooler cannot serve, which is why both are required.
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model User {

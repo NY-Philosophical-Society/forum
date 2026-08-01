@@ -41,8 +41,8 @@ adminRouter.get("/users", async (req, res) => {
     ...(search
       ? {
           OR: [
-            { displayName: { contains: search } },
-            { email: { contains: search } },
+            { displayName: { contains: search, mode: "insensitive" as const } },
+            { email: { contains: search, mode: "insensitive" as const } },
           ],
         }
       : {}),
@@ -107,7 +107,7 @@ adminRouter.get("/threads", async (req, res) => {
   const offset = Math.max(Number(req.query.offset) || 0, 0);
 
   const where = {
-    ...(search ? { title: { contains: search } } : {}),
+    ...(search ? { title: { contains: search, mode: "insensitive" as const } } : {}),
     ...(req.query.pinned === "1" ? { pinnedAt: { not: null } } : {}),
     ...(req.query.locked === "1" ? { locked: true } : {}),
     // Deleted threads are hidden by default but reachable, since an admin may
@@ -118,7 +118,7 @@ adminRouter.get("/threads", async (req, res) => {
   const [rows, total, pinnedCount] = await Promise.all([
     prisma.thread.findMany({
       where,
-      orderBy: [{ pinnedAt: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ pinnedAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
       skip: offset,
       take: limit,
       include: {

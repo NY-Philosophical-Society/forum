@@ -246,7 +246,7 @@ usersRouter.get("/", requireAuth, async (req, res) => {
 
   const users = await prisma.user.findMany({
     where: {
-      displayName: { contains: search },
+      displayName: { contains: search, mode: "insensitive" as const },
       id: { not: req.user!.id },
       deletedAt: null,
       blocking: { none: { blockedId: req.user!.id } },
