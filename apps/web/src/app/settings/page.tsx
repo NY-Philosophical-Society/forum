@@ -13,6 +13,7 @@ import {
 import { api } from "~/lib/api";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
+import { hasPasswordIdentity, supabase } from "~/lib/supabase";
 
 export default function SettingsPage() {
   const { dateFormat, setDateFormat, theme, setTheme } = useSettings();
@@ -318,9 +319,12 @@ function NotificationSection() {
 
 /**
  * Account management: profile link, password, email, data export, deletion.
- * Only rendered for signed-in users; hasPassword (from /api/auth/account)
- * switches the password card between "change" and "set a first password"
- * for Google/Apple-created accounts.
+ *
+ * Credentials are Supabase's now, so the password and email cards talk to
+ * supabase-js directly rather than to our API. Whether the account has a
+ * password is read off the session's linked identities — an account that only
+ * ever signed in with Google has no "email" identity, and is setting a first
+ * password rather than changing one.
  */
 function AccountSections() {
   const { user, token, logout } = useAuth();
@@ -329,15 +333,24 @@ function AccountSections() {
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!token) return;
-    api
-      .get<{ email: string; hasPassword: boolean }>("/api/auth/account", token)
-      .then((res) => {
-        setEmail(res.email);
-        setHasPassword(res.hasPassword);
-      })
-      .catch(() => {});
+    supabase.auth.getUser().then(({ data }) => {
+      setEmail(data.user?.email ?? null);
+      setHasPassword(hasPasswordIdentity(data.user?.identities));
+    });
   }, [token]);
+
+  /**
+   * Supabase accepts a password change on session alone. We ask for the
+   * current one anyway and verify it by signing in again: a hijacked session
+   * should not be enough to lock the real owner out of their own account.
+   * Signing in also refreshes the token, which is what account deletion below
+   * needs.
+   */
+  async function reauthenticate(password: string): Promise<void> {
+    if (!email) throw new Error("Your session has expired — log in again.");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error("That password is incorrect.");
+  }
 
   // Change password
   const [currentPassword, setCurrentPassword] = useState("");
@@ -347,19 +360,16 @@ function AccountSections() {
 
   async function changePassword(e: React.FormEvent) {
     e.preventDefault();
-    if (!token) return;
     setPasswordMsg(null);
     setPasswordBusy(true);
     try {
-      await api.post(
-        "/api/auth/change-password",
-        hasPassword ? { currentPassword, newPassword } : { newPassword },
-        token,
-      );
+      if (hasPassword) await reauthenticate(currentPassword);
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw new Error(error.message);
       setCurrentPassword("");
       setNewPassword("");
-      setHasPassword(true);
       setPasswordMsg({ ok: true, text: hasPassword ? "Password changed." : "Password set." });
+      setHasPassword(true);
     } catch (err: any) {
       setPasswordMsg({ ok: false, text: err.message ?? "Could not change the password" });
     } finally {
@@ -375,19 +385,20 @@ function AccountSections() {
 
   async function changeEmail(e: React.FormEvent) {
     e.preventDefault();
-    if (!token) return;
     setEmailMsg(null);
     setEmailBusy(true);
     try {
-      const res = await api.post<{ ok: boolean; email: string }>(
-        "/api/auth/change-email",
-        hasPassword ? { email: newEmail, password: emailPassword } : { email: newEmail },
-        token,
-      );
-      setEmail(res.email);
+      if (hasPassword) await reauthenticate(emailPassword);
+      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      if (error) throw new Error(error.message);
       setNewEmail("");
       setEmailPassword("");
-      setEmailMsg({ ok: true, text: "Email changed." });
+      // Supabase only applies the change once the new address is confirmed,
+      // and our API mirrors it from the token on the next request after that.
+      setEmailMsg({
+        ok: true,
+        text: "Check your new email address for a confirmation link — the change applies once you click it.",
+      });
     } catch (err: any) {
       setEmailMsg({ ok: false, text: err.message ?? "Could not change the email" });
     } finally {
@@ -422,18 +433,21 @@ function AccountSections() {
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  /**
+   * The API requires a freshly-minted token here (see routes/users.ts), which
+   * is the replacement for the password check it used to do itself. Signing in
+   * again produces one; accounts that only use Google/Apple have no password to
+   * re-enter, so they get the API's own instruction to sign in again.
+   */
   async function deleteAccount(e: React.FormEvent) {
     e.preventDefault();
-    if (!token) return;
     setDeleteMsg(null);
     setDeleting(true);
     try {
-      await api.deleteWithBody(
-        "/api/users/me",
-        hasPassword ? { confirm: confirmText, password: deletePassword } : { confirm: confirmText },
-        token,
-      );
-      logout();
+      if (hasPassword) await reauthenticate(deletePassword);
+      const { data } = await supabase.auth.getSession();
+      await api.deleteWithBody("/api/users/me", { confirm: confirmText }, data.session?.access_token);
+      await logout();
       router.push("/");
     } catch (err: any) {
       setDeleteMsg(err.message ?? "Could not delete the account");
@@ -568,7 +582,12 @@ function AccountSections() {
                 required
               />
             </label>
-            {hasPassword !== false && (
+            {hasPassword === false ? (
+              <p className="meta">
+                Your account signs in with Google or Apple. If this is refused, sign out and back
+                in, then delete from here — we ask for a fresh sign-in before anything permanent.
+              </p>
+            ) : (
               <label>
                 Password
                 <input

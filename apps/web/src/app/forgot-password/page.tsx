@@ -2,71 +2,75 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { api } from "~/lib/api";
+import { supabase } from "~/lib/supabase";
 
+/**
+ * Supabase sends the reset email and owns the token; we only collect the
+ * address and name the page the link should land on. Locally the mail is
+ * caught by Inbucket — see supabase/config.toml for its port — so the flow can
+ * be walked end to end without a mail provider.
+ */
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [devResetUrl, setDevResetUrl] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
-    try {
-      const res = await api.post<{ message: string; devResetUrl?: string }>(
-        "/api/auth/password-reset/request",
-        { email },
-      );
-      setMessage(res.message);
-      setDevResetUrl(res.devResetUrl ?? null);
-    } catch (err: any) {
-      setError(err.message ?? "Something went wrong");
-    } finally {
-      setSubmitting(false);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setSubmitting(false);
+    if (error && /rate limit/i.test(error.message)) {
+      setError("Too many attempts just now. Try again in a few minutes.");
+      return;
     }
+    // Any other error is swallowed on purpose: whether an address has an
+    // account here is not something this form should confirm to a stranger.
+    setSent(true);
   }
 
   return (
     <div className="auth-page">
       <div className="auth-card">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/nypc-icon.png" alt="The New York Philosophy Club" className="auth-logo" />
         <h1 className="auth-title">Reset your password</h1>
-        <p className="auth-subtitle">
+
+        {sent ? (
+          <p className="auth-subtitle">
+            If that email has an account, we&apos;ve sent a link to reset your password. The link
+            expires in an hour.
+          </p>
+        ) : (
+          <>
+            <p className="auth-subtitle">
+              We&apos;ll email you a link to choose a new one.
+            </p>
+            <form onSubmit={onSubmit}>
+              <label>
+                Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </label>
+              {error && <p className="error">{error}</p>}
+              <button type="submit" disabled={submitting}>
+                {submitting ? "Sending..." : "Send reset link"}
+              </button>
+            </form>
+          </>
+        )}
+
+        <p className="auth-footer">
           <Link href="/login">Back to log in</Link>
         </p>
-
-        {message ? (
-          <>
-            <p className="notice">{message}</p>
-            {devResetUrl && (
-              <p className="meta">
-                No email service is configured on this server yet, so here&apos;s the link
-                directly (dev-only):
-                <br />
-                <a href={devResetUrl}>{devResetUrl}</a>
-              </p>
-            )}
-          </>
-        ) : (
-          <form onSubmit={onSubmit}>
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </label>
-            {error && <p className="error">{error}</p>}
-            <button type="submit" disabled={submitting}>
-              {submitting ? "Sending..." : "Send reset link"}
-            </button>
-          </form>
-        )}
       </div>
     </div>
   );
