@@ -1,0 +1,49 @@
+{
+  "//": [
+    "Build profiles for EAS (Expo Application Services).",
+    "",
+    "EXPO_PUBLIC_* values are BAKED INTO THE BINARY at build time — an app on",
+    "someone's phone cannot be re-pointed at a different server afterwards.",
+    "Getting this wrong means a new App Store submission to fix, which is why",
+    "each profile names its API URL explicitly instead of relying on a local",
+    ".env file that differs per machine.",
+    "",
+    "Replace API_URL_PLACEHOLDER in the preview and production profiles with",
+    "the real deployed API URL once it exists (see render.yaml).",
+    "",
+    "Build:   npx eas build --profile production --platform ios",
+    "Submit:  npx eas submit --profile production --platform ios"
+  ],
+  "cli": {
+    "version": ">= 5.9.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": true },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://localhost:4000"
+      }
+    },
+    "preview": {
+      "//": "TestFlight / internal testers. Points at the real API.",
+      "distribution": "internal",
+      "ios": { "simulator": false },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "API_URL_PLACEHOLDER"
+      }
+    },
+    "production": {
+      "//": "App Store. Must point at the production API.",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "API_URL_PLACEHOLDER"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

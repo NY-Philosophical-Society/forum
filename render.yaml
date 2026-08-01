@@ -1,0 +1,79 @@
+# Render blueprint for the API. Lives at the repo root because Render reads
+# render.yaml from the root of the connected repository.
+#
+# Setup, once:
+#   1. render.com → New → Blueprint → connect NY-Philosophical-Society/forum
+#   2. Render reads this file and proposes the service — accept it
+#   3. Fill in the env vars marked sync:false (Render prompts for each)
+#
+# The database is Supabase, NOT Render Postgres, so no database block here.
+# Connection strings come from Supabase → Connect → ORM → Prisma.
+
+services:
+  - type: web
+    name: nyps-forum-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    # Build context is the repo root — the Dockerfile copies from the
+    # workspace root because this is an npm-workspaces monorepo.
+    dockerContext: .
+    region: ohio # closest Render region to New York
+    plan: starter # $7/mo. The free plan sleeps after inactivity, which
+      # gives a 30–50s cold start — unacceptable for a mobile app's
+      # first request. Do not downgrade this to free.
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # --- Database (Supabase) -------------------------------------------
+      # POOLED connection, port 6543, with ?pgbouncer=true&connection_limit=1
+      - key: DATABASE_URL
+        sync: false
+      # DIRECT connection, port 5432 — migrations only. Prisma opens a
+      # session-mode connection the transaction pooler cannot serve.
+      - key: DIRECT_DATABASE_URL
+        sync: false
+
+      # --- Auth ------------------------------------------------------------
+      # Long random string. Render can generate one; it only needs to be
+      # stable, since changing it invalidates every existing session.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # --- URLs ------------------------------------------------------------
+      # Where the web app lives. Used to build password-reset and
+      # verification links that point back at it.
+      - key: WEB_APP_URL
+        sync: false
+      # This service's own public URL. Render fills it in automatically.
+      - key: API_PUBLIC_URL
+        fromService:
+          type: web
+          name: nyps-forum-api
+          property: host
+      # Comma-separated origins allowed to call this API. Must include the
+      # web app's domain; mobile apps are not browsers and are unaffected.
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+
+      # --- Image storage ---------------------------------------------------
+      # "local" writes to the container filesystem, which every host wipes on
+      # redeploy — uploaded avatars would silently vanish. Set to "s3" and
+      # fill the rest in before launch.
+      - key: STORAGE_PROVIDER
+        value: s3
+      - key: STORAGE_S3_BUCKET
+        sync: false
+      - key: STORAGE_S3_REGION
+        sync: false # Cloudflare R2: "auto"
+      - key: STORAGE_S3_ENDPOINT
+        sync: false # R2: https://<account-id>.r2.cloudflarestorage.com
+      - key: STORAGE_S3_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: STORAGE_S3_PUBLIC_URL
+        sync: false # public base URL the bucket/CDN serves objects at

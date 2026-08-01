@@ -2,7 +2,33 @@
 // dev machine. Set EXPO_PUBLIC_API_URL in .env to your machine's LAN IP
 // (e.g. http://192.168.1.23:4000) when testing on a real device. The iOS
 // Simulator can usually still reach localhost directly.
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
+//
+// This value is BAKED IN AT BUILD TIME — an installed app cannot be
+// re-pointed later. A release build made with this unset ships pointing at
+// "localhost", which on a user's phone is their own phone: every screen
+// fails to load, and only a new App Store submission can fix it. That has
+// happened once already, so release builds now refuse to start rather than
+// ship broken. eas.json sets this per profile.
+const configured = process.env.EXPO_PUBLIC_API_URL;
+
+if (!__DEV__) {
+  // Unset and "explicitly set to localhost" are equally broken in a release
+  // build — a phone's localhost is the phone itself.
+  const isLocal =
+    !configured ||
+    /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(configured);
+
+  if (isLocal) {
+    throw new Error(
+      `EXPO_PUBLIC_API_URL was ${configured ? `"${configured}"` : "unset"} when ` +
+        "this build was created. A release build must be built with a real, " +
+        "publicly reachable API URL — 'localhost' on a user's phone is their " +
+        "own phone. See apps/mobile/eas.json.",
+    );
+  }
+}
+
+export const API_URL = configured ?? "http://localhost:4000";
 
 class ApiError extends Error {
   constructor(message: string) {

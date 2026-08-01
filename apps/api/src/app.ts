@@ -23,7 +23,46 @@ import { verificationRouter } from "./routes/verification";
 // can drive it through supertest without binding a port.
 export const app = express();
 
-app.use(cors());
+/**
+ * CORS is a browser-only protection: it stops *other websites* from making
+ * authenticated requests to this API using a visitor's logged-in session.
+ * Native mobile apps are not browsers and are unaffected by any of this.
+ *
+ * In development, allow everything — the web app, Expo, and LAN IPs all move
+ * around. In production, allow only the origins named in
+ * CORS_ALLOWED_ORIGINS (comma-separated), so a hostile page can't ride along
+ * on a member's session.
+ *
+ * Requests with no Origin header (mobile apps, curl, server-to-server) are
+ * always allowed: they aren't browser requests, so there is no session for a
+ * third-party page to abuse.
+ */
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {
+  // Fail loudly rather than silently serving every origin in production.
+  throw new Error(
+    "CORS_ALLOWED_ORIGINS must be set in production — a comma-separated list " +
+      "of the web app's origins (e.g. https://forum.nyphilosophy.org). " +
+      "Leaving it unset would allow any website to call this API with a " +
+      "member's credentials.",
+  );
+}
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin) return callback(null, true); // not a browser request
+      if (process.env.NODE_ENV !== "production") return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));

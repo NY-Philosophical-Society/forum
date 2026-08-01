@@ -2315,3 +2315,62 @@ mark {
   letter-spacing: 0.15em;
   text-transform: uppercase;
 }
+
+/* --- Legal pages (privacy, terms) --------------------------------------
+   Long-form reading, so the measure is tighter than the app's default and
+   headings get real separation. Uses existing tokens only. */
+.prose-page {
+  max-width: 68ch;
+  padding-bottom: var(--space-6);
+}
+
+.prose-page h2 {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: 1.15rem;
+}
+
+.prose-page h3 {
+  margin: var(--space-4) 0 var(--space-1);
+  font-size: 1rem;
+}
+
+.prose-page p,
+.prose-page li {
+  line-height: var(--leading-body);
+}
+
+.prose-page p {
+  margin: 0 0 var(--space-2);
+}
+
+.prose-page ul {
+  margin: 0 0 var(--space-3);
+  padding-left: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* --- Site footer -------------------------------------------------------
+   Carries the legal links. The App Store requires a reachable privacy
+   policy, so these must exist on every page, not just be routable. */
+.site-footer {
+  max-width: var(--container);
+  margin: var(--space-6) auto 0;
+  padding: var(--space-3) var(--gutter) var(--space-5);
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1.25rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.site-footer a {
+  color: var(--muted);
+}
+
+.site-footer a:hover {
+  color: var(--ink);
+}

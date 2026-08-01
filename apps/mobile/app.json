@@ -1,15 +1,20 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "NY Philosophy Club",
+    "slug": "nyps-forum",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "scheme": "nypsforum",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "org.nyphilosophy.forum"
+      "bundleIdentifier": "org.nyphilosophy.forum",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Choose a profile photo or add an image to a post.",
+        "NSCameraUsageDescription": "Take a profile photo or a picture to add to a post."
+      }
     },
     "android": {
       "package": "org.nyphilosophy.forum",

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Libre_Baskerville, Newsreader } from "next/font/google";
 import { AuthProvider } from "~/lib/auth-context";
 import { SettingsProvider } from "~/lib/settings-context";
+import { Footer } from "./footer";
 import { Nav } from "./nav";
 import "./globals.css";
 
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <Nav />
             <div className="container">{children}</div>
+            <Footer />
           </AuthProvider>
         </SettingsProvider>
       </body>
