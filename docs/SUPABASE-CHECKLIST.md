@@ -23,6 +23,17 @@ Project: `izvomynkpvguisjdintq.supabase.co`
 - [x] **`supabase-js` installed** in web and mobile, with an inert client in
       `src/lib/supabase.ts` on each. Both are no-ops until their env vars are
       set, so this is safe to merge before the server side is ready.
+- [x] **All 21 tables created in the live Supabase project** (this exact
+      migration SQL, applied via the Supabase MCP after passing the full test
+      suite locally) and **Row Level Security enabled on every one, with no
+      policies** — a flat deny on the direct PostgREST path (the one the
+      public/publishable key can reach) without touching Express, which
+      connects as the database owner and bypasses RLS by design. Confirmed via
+      the security advisor: went from `CRITICAL — RLS disabled` (all 21
+      tables openly readable/writable via the public key) to `INFO — RLS
+      enabled, no policies` (the intended state for this architecture — see
+      `docs/SUPABASE-MIGRATION.md` on why no policies are needed). **The
+      project is otherwise still empty — no real member data exists yet.**
 
 ### Two real bugs this surfaced
 
