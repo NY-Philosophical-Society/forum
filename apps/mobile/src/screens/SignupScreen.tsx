@@ -50,7 +50,7 @@ export function SignupScreen({ navigation }: Props) {
         profile.
       </Text>
 
-      <OAuthButtons navigation={navigation} />
+      <OAuthButtons />
 
       <Text style={styles.label}>First name</Text>
       <TextInput

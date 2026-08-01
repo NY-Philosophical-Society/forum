@@ -1,124 +1,72 @@
-import * as AppleAuthentication from "expo-apple-authentication";
 import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
-import { useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import type { AuthResponse, OAuthConfig } from "@nyps-forum/shared";
-import { api } from "../lib/api";
-import { useAuth } from "../lib/auth-context";
+import { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSettings } from "../lib/settings-context";
+import { supabase } from "../lib/supabase";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { AuthStackParamList } from "../navigation";
 
 WebBrowser.maybeCompleteAuthSession();
 
-const GOOGLE_DISCOVERY = {
-  authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-  tokenEndpoint: "https://oauth2.googleapis.com/token",
-};
-
-// Public by nature (embedded in the app binary) — set once you've created an
-// iOS OAuth client in Google Cloud Console. See apps/api/src/lib/oauth.ts.
-const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? "";
-
 /**
- * Real Google (expo-auth-session) / Apple (expo-apple-authentication)
- * sign-in when the server has real credentials configured; otherwise routes
- * to a local mock screen. Apple Sign-In additionally requires a custom dev
- * client build (it isn't available in plain Expo Go) — see the README.
+ * Google and Apple sign-in, brokered by Supabase.
+ *
+ * This used to drive each provider directly — expo-auth-session against
+ * Google's endpoints, expo-apple-authentication for Apple, and a mock screen
+ * when neither had credentials. Supabase runs the provider flow now, so the
+ * app only opens the authorize URL and hands the returned tokens back to
+ * supabase-js. Configure providers under [auth.external] in
+ * supabase/config.toml, or in the hosted project's dashboard.
+ *
+ * The redirect scheme is declared in app.json and allow-listed in
+ * config.toml's additional_redirect_urls; the flow silently fails to come back
+ * if those disagree.
  */
-export function OAuthButtons<RouteName extends keyof AuthStackParamList>({
-  navigation,
-}: {
-  navigation: NativeStackNavigationProp<AuthStackParamList, RouteName>;
-}) {
-  const { setSession } = useAuth();
+export function OAuthButtons() {
   const { colors } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [config, setConfig] = useState<OAuthConfig | null>(null);
-  const [appleAvailable, setAppleAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.get<OAuthConfig>("/api/auth/oauth/config").then(setConfig).catch(() => {});
-    if (Platform.OS === "ios") {
-      AppleAuthentication.isAvailableAsync().then(setAppleAvailable);
+  async function signInWith(provider: "google" | "apple") {
+    setError(null);
+    const redirectTo = AuthSession.makeRedirectUri({ scheme: "nypsforum", path: "auth-callback" });
+    const { data, error: startError } = await supabase.auth.signInWithOAuth({
+      provider,
+      // Without this supabase-js redirects the (non-existent) page itself
+      // instead of handing us a URL to open in the browser.
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (startError || !data.url) {
+      setError(startError?.message ?? "Could not start sign-in");
+      return;
     }
-  }, []);
 
-  const [, response, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: GOOGLE_IOS_CLIENT_ID || "unconfigured",
-      scopes: ["openid", "profile", "email"],
-      redirectUri: AuthSession.makeRedirectUri({ scheme: "nypsforum" }),
-      responseType: AuthSession.ResponseType.IdToken,
-      usePKCE: false,
-    },
-    GOOGLE_DISCOVERY,
-  );
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type !== "success") return; // user dismissed the sheet
 
-  useEffect(() => {
-    if (response?.type === "success" && response.params.id_token) {
-      api
-        .post<AuthResponse>("/api/auth/oauth/google", { idToken: response.params.id_token })
-        .then((res) => {
-          // The root navigator swaps to the app tabs once the session is set.
-          setSession(res.token, res.user, res.linked);
-        })
-        .catch((e) => setError(e.message ?? "Google sign-in failed"));
+    // Supabase returns the session in the callback URL's fragment; there is no
+    // URL for supabase-js to read in React Native, so set it explicitly.
+    const params = new URLSearchParams(result.url.split("#")[1] ?? "");
+    const access_token = params.get("access_token");
+    const refresh_token = params.get("refresh_token");
+    if (!access_token || !refresh_token) {
+      setError(params.get("error_description") ?? "Sign-in did not complete");
+      return;
     }
-  }, [response, setSession]);
-
-  async function handleGoogle() {
-    if (config?.google.enabled) {
-      await promptAsync();
-    } else {
-      navigation.navigate("MockOAuth", { provider: "google" });
-    }
+    const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+    if (sessionError) setError(sessionError.message);
+    // On success the root navigator swaps to the app tabs, driven by
+    // onAuthStateChange in AuthProvider.
   }
-
-  async function handleApple() {
-    if (config?.apple.enabled && appleAvailable) {
-      try {
-        const credential = await AppleAuthentication.signInAsync({
-          requestedScopes: [
-            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-            AppleAuthentication.AppleAuthenticationScope.EMAIL,
-          ],
-        });
-        const displayName = credential.fullName
-          ? `${credential.fullName.givenName ?? ""} ${credential.fullName.familyName ?? ""}`.trim()
-          : undefined;
-        const res = await api.post<AuthResponse>("/api/auth/oauth/apple", {
-          identityToken: credential.identityToken,
-          displayName: displayName || undefined,
-        });
-        setSession(res.token, res.user, res.linked);
-      } catch (e: any) {
-        if (e.code !== "ERR_REQUEST_CANCELED") {
-          setError(e.message ?? "Apple sign-in failed");
-        }
-      }
-    } else {
-      navigation.navigate("MockOAuth", { provider: "apple" });
-    }
-  }
-
-  if (!config) return null;
 
   return (
     <View style={{ marginBottom: spacing.lg }}>
       {error && <Text style={styles.error}>{error}</Text>}
-      <Pressable style={styles.button} onPress={handleGoogle}>
-        <Text style={styles.buttonText}>
-          Continue with Google{!config.google.enabled ? "  (demo)" : ""}
-        </Text>
+      <Pressable style={styles.button} onPress={() => signInWith("google")}>
+        <Text style={styles.buttonText}>Continue with Google</Text>
       </Pressable>
-      <Pressable style={styles.button} onPress={handleApple}>
-        <Text style={styles.buttonText}>
-          Continue with Apple{!config.apple.enabled ? "  (demo)" : ""}
-        </Text>
+      <Pressable style={styles.button} onPress={() => signInWith("apple")}>
+        <Text style={styles.buttonText}>Continue with Apple</Text>
       </Pressable>
       <Text style={styles.divider}>─  or continue with email  ─</Text>
     </View>

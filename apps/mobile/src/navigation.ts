@@ -42,7 +42,6 @@ export type ProfileStackParamList = {
 export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
-  MockOAuth: { provider: "google" | "apple" };
   ForgotPassword: undefined;
   Settings: undefined;
 };

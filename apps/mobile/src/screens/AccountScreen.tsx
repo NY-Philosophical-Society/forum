@@ -15,15 +15,20 @@ import type { DataExport } from "@nyps-forum/shared";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { useSettings } from "../lib/settings-context";
+import { hasPasswordIdentity, supabase } from "../lib/supabase";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { ProfileStackParamList } from "../navigation";
 
 type Props = NativeStackScreenProps<ProfileStackParamList, "Account">;
 
 /**
- * Account management: password, email, data export, deletion. hasPassword
- * (from /api/auth/account) switches the password section between "change"
- * and "set a first password" for Google/Apple-created accounts.
+ * Account management: password, email, data export, deletion.
+ *
+ * Credentials are Supabase's now, so the password and email sections talk to
+ * supabase-js directly rather than to our API. Whether the account has a
+ * password comes off the session's linked identities — an account that only
+ * ever signed in with Google has no "email" identity, and is setting a first
+ * password rather than changing one.
  */
 export function AccountScreen(_props: Props) {
   const { token, logout } = useAuth();
@@ -35,13 +40,10 @@ export function AccountScreen(_props: Props) {
   useFocusEffect(
     useCallback(() => {
       if (!token) return;
-      api
-        .get<{ email: string; hasPassword: boolean }>("/api/auth/account", token)
-        .then((res) => {
-          setEmail(res.email);
-          setHasPassword(res.hasPassword);
-        })
-        .catch(() => {});
+      supabase.auth.getUser().then(({ data }) => {
+        setEmail(data.user?.email ?? null);
+        setHasPassword(hasPasswordIdentity(data.user?.identities));
+      });
     }, [token]),
   );
 
@@ -51,16 +53,25 @@ export function AccountScreen(_props: Props) {
   const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [passwordBusy, setPasswordBusy] = useState(false);
 
+  /**
+   * Supabase accepts a password change on session alone. We ask for the current
+   * one anyway and verify it by signing in again: a hijacked session should not
+   * be enough to lock the real owner out. Signing in also refreshes the token,
+   * which is what account deletion below requires.
+   */
+  async function reauthenticate(password: string): Promise<void> {
+    if (!email) throw new Error("Your session has expired — log in again.");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error("That password is incorrect.");
+  }
+
   async function changePassword() {
-    if (!token) return;
     setPasswordMsg(null);
     setPasswordBusy(true);
     try {
-      await api.post(
-        "/api/auth/change-password",
-        hasPassword ? { currentPassword, newPassword } : { newPassword },
-        token,
-      );
+      if (hasPassword) await reauthenticate(currentPassword);
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw new Error(error.message);
       setCurrentPassword("");
       setNewPassword("");
       setPasswordMsg({ ok: true, text: hasPassword ? "Password changed." : "Password set." });
@@ -79,19 +90,20 @@ export function AccountScreen(_props: Props) {
   const [emailBusy, setEmailBusy] = useState(false);
 
   async function changeEmail() {
-    if (!token) return;
     setEmailMsg(null);
     setEmailBusy(true);
     try {
-      const res = await api.post<{ ok: boolean; email: string }>(
-        "/api/auth/change-email",
-        hasPassword ? { email: newEmail.trim(), password: emailPassword } : { email: newEmail.trim() },
-        token,
-      );
-      setEmail(res.email);
+      if (hasPassword) await reauthenticate(emailPassword);
+      const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
+      if (error) throw new Error(error.message);
       setNewEmail("");
       setEmailPassword("");
-      setEmailMsg({ ok: true, text: "Email changed." });
+      // Supabase applies the change only once the new address is confirmed;
+      // our API mirrors it from the token on the next request after that.
+      setEmailMsg({
+        ok: true,
+        text: "Check your new email for a confirmation link — the change applies once you tap it.",
+      });
     } catch (err: any) {
       setEmailMsg({ ok: false, text: err.message ?? "Could not change the email" });
     } finally {
@@ -124,17 +136,24 @@ export function AccountScreen(_props: Props) {
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  /**
+   * The API requires a freshly-minted token here (see routes/users.ts) — the
+   * replacement for the password check it used to run itself. Signing in again
+   * produces one; accounts that only use Google/Apple have no password to
+   * re-enter and get the API's own instruction to sign in again.
+   */
   async function deleteAccount() {
-    if (!token) return;
     setDeleteMsg(null);
     setDeleting(true);
     try {
+      if (hasPassword) await reauthenticate(deletePassword);
+      const { data } = await supabase.auth.getSession();
       await api.deleteWithBody(
         "/api/users/me",
-        hasPassword ? { confirm: confirmText, password: deletePassword } : { confirm: confirmText },
-        token,
+        { confirm: confirmText },
+        data.session?.access_token,
       );
-      logout();
+      await logout();
     } catch (err: any) {
       setDeleteMsg(err.message ?? "Could not delete the account");
       setDeleting(false);

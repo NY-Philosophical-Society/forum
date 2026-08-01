@@ -269,6 +269,14 @@ otp_expiry = 3600
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
 
+# The default recovery email offers a link only. The mobile app has no web page
+# to land on, so it asks for the {{ .Token }} code instead — which only reaches
+# the user if the template includes it. The hosted project needs the same
+# change in its dashboard, or password reset silently breaks on mobile.
+[auth.email.template.recovery]
+subject = "Reset your Forum password"
+content_path = "./templates/recovery.html"
+
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
 # enabled = true

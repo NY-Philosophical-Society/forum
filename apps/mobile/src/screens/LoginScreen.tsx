@@ -41,7 +41,7 @@ export function LoginScreen({ navigation }: Props) {
       <Text style={styles.h1}>Log in to the Forum</Text>
       <Text style={styles.subtitle}>A real-name space for philosophical argument.</Text>
 
-      <OAuthButtons navigation={navigation} />
+      <OAuthButtons />
 
       <Text style={styles.label}>Email</Text>
       <TextInput

@@ -21,7 +21,7 @@ type Props = NativeStackScreenProps<FeedStackParamList, "Home">;
 const PAGE_SIZE = 20;
 
 export function HomeScreen({ navigation }: Props) {
-  const { user, token, linkedNotice, clearLinkedNotice } = useAuth();
+  const { user, token } = useAuth();
   const { colors, dateFormat } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [sort, setSort] = useState<"hot" | "new">("hot");
@@ -126,14 +126,6 @@ export function HomeScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      {linkedNotice && (
-        <Pressable style={styles.toast} onPress={clearLinkedNotice}>
-          <Text style={styles.toastText}>
-            Signed in — this provider was linked to your existing account. Tap to dismiss.
-          </Text>
-        </Pressable>
-      )}
-
       {isMemberViewer && (
         <View style={styles.chapterStrip}>
           <Text style={styles.chapterStripLabel}>CHAPTERS</Text>
@@ -287,15 +279,6 @@ export function HomeScreen({ navigation }: Props) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.paper, padding: spacing.lg, paddingBottom: 0 },
-    toast: {
-      backgroundColor: colors.verifiedBg,
-      borderWidth: 1,
-      borderColor: colors.verifiedText,
-      borderRadius: radius.sm,
-      padding: spacing.md,
-      marginBottom: spacing.md,
-    },
-    toastText: { color: colors.verifiedText, fontFamily: fonts.sans, fontSize: type.sm },
     controls: {
       flexDirection: "row",
       alignItems: "center",

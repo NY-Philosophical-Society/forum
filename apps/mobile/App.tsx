@@ -46,7 +46,6 @@ import { VerifyScreen } from "./src/screens/VerifyScreen";
 import { VerifyMockScreen } from "./src/screens/VerifyMockScreen";
 import { MessagesScreen } from "./src/screens/MessagesScreen";
 import { ConversationScreen } from "./src/screens/ConversationScreen";
-import { MockOAuthScreen } from "./src/screens/MockOAuthScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { UserProfileScreen } from "./src/screens/UserProfileScreen";
@@ -327,13 +326,6 @@ function AuthStack() {
     <AuthStackNav.Navigator screenOptions={options}>
       <AuthStackNav.Screen name="Login" component={LoginScreen} options={{ title: "Log in" }} />
       <AuthStackNav.Screen name="Signup" component={SignupScreen} options={{ title: "Sign up" }} />
-      <AuthStackNav.Screen
-        name="MockOAuth"
-        component={MockOAuthScreen}
-        options={({ route }) => ({
-          title: `Mock ${route.params.provider === "apple" ? "Apple" : "Google"} Sign-In`,
-        })}
-      />
       <AuthStackNav.Screen
         name="ForgotPassword"
         component={ForgotPasswordScreen}

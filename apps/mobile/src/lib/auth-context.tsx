@@ -1,104 +1,91 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import type { AuthResponse, PublicUser } from "@nyps-forum/shared";
+import type { PublicUser } from "@nyps-forum/shared";
 import { api } from "./api";
 import { deregisterPush } from "./push";
+import { supabase } from "./supabase";
 
+/**
+ * Identity is Supabase's; the account is ours.
+ *
+ * supabase-js owns the session — persisting it to AsyncStorage, refreshing it
+ * before expiry, and reporting changes. Everything downstream of `token` is
+ * unchanged: screens call our API with a bearer token, and `user` still comes
+ * from GET /api/auth/me, which applies the ban check and returns forum state
+ * (role, membership, verification) that Supabase knows nothing about.
+ */
 interface AuthContextValue {
   user: PublicUser | null;
   token: string | null;
   loading: boolean;
-  /** Set when an OAuth sign-in just attached a provider to an existing account. */
-  linkedNotice: boolean;
-  clearLinkedNotice: () => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, displayName: string) => Promise<void>;
-  /** Used by OAuth (Google/Apple) flows, which get a token+user from a different endpoint. */
-  setSession: (token: string, user: PublicUser, linked?: boolean) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const STORAGE_KEY = "nyps-forum:token";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [linkedNotice, setLinkedNotice] = useState(false);
 
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then(async (stored) => {
-      if (!stored) {
-        setLoading(false);
-        return;
-      }
-      setToken(stored);
-      try {
-        const res = await api.get<{ user: PublicUser }>("/api/auth/me", stored);
-        setUser(res.user);
-      } catch {
-        await AsyncStorage.removeItem(STORAGE_KEY);
-        setToken(null);
-      } finally {
-        setLoading(false);
-      }
-    });
+  const loadUser = useCallback(async (activeToken: string | null) => {
+    if (!activeToken) {
+      setUser(null);
+      return;
+    }
+    try {
+      const res = await api.get<{ user: PublicUser }>("/api/auth/me", activeToken);
+      setUser(res.user);
+    } catch {
+      // A valid Supabase session whose forum account is banned or deleted.
+      setUser(null);
+    }
   }, []);
 
-  const refreshUser = useCallback(async () => {
-    if (!token) return;
-    const res = await api.get<{ user: PublicUser }>("/api/auth/me", token);
-    setUser(res.user);
-  }, [token]);
+  useEffect(() => {
+    // Fires immediately with the restored session (or null), and again on every
+    // sign-in, sign-out and token refresh.
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextToken = session?.access_token ?? null;
+      setToken(nextToken);
+      void loadUser(nextToken).finally(() => setLoading(false));
+    });
+    return () => data.subscription.unsubscribe();
+  }, [loadUser]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const res = await api.post<AuthResponse>("/api/auth/login", { email, password });
-    await AsyncStorage.setItem(STORAGE_KEY, res.token);
-    setToken(res.token);
-    setUser(res.user);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(error.message);
   }, []);
 
   const signup = useCallback(async (email: string, password: string, displayName: string) => {
-    const res = await api.post<AuthResponse>("/api/auth/signup", { email, password, displayName });
-    await AsyncStorage.setItem(STORAGE_KEY, res.token);
-    setToken(res.token);
-    setUser(res.user);
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      // Read by the API when it creates the forum account on the first
+      // authenticated request. Real names are the point of this forum.
+      options: { data: { display_name: displayName } },
+    });
+    if (error) throw new Error(error.message);
   }, []);
 
-  const setSession = useCallback((newToken: string, newUser: PublicUser, linked?: boolean) => {
-    AsyncStorage.setItem(STORAGE_KEY, newToken);
-    setToken(newToken);
-    setUser(newUser);
-    if (linked) setLinkedNotice(true);
-  }, []);
-
-  const clearLinkedNotice = useCallback(() => setLinkedNotice(false), []);
-
-  const logout = useCallback(() => {
-    // Best-effort: revoke this device's push token while the session can
-    // still authenticate the DELETE. Fire-and-forget — never blocks logout.
+  const logout = useCallback(async () => {
+    // Best-effort: revoke this device's push token while the session can still
+    // authenticate the DELETE. Fire-and-forget — never blocks logout.
     if (token) deregisterPush(token);
-    AsyncStorage.removeItem(STORAGE_KEY);
-    setToken(null);
-    setUser(null);
+    await supabase.auth.signOut();
   }, [token]);
 
+  const refreshUser = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    await loadUser(data.session?.access_token ?? null);
+  }, [loadUser]);
+
   const value = useMemo<AuthContextValue>(
-    () => ({
-      user,
-      token,
-      loading,
-      linkedNotice,
-      clearLinkedNotice,
-      login,
-      signup,
-      setSession,
-      logout,
-      refreshUser,
-    }),
-    [user, token, loading, linkedNotice, clearLinkedNotice, login, signup, setSession, logout, refreshUser],
+    () => ({ user, token, loading, login, signup, logout, refreshUser }),
+    [user, token, loading, login, signup, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,24 +1,27 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput } from "react-native";
-import { api } from "../lib/api";
 import { useSettings } from "../lib/settings-context";
+import { supabase } from "../lib/supabase";
 import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import type { AuthStackParamList } from "../navigation";
 
 type Props = NativeStackScreenProps<AuthStackParamList, "ForgotPassword">;
 
 /**
- * On web the reset link lands in email (or, in dev, is returned directly).
- * On mobile we ask for the code from that link plus a new password, against
- * the same request/confirm endpoints.
+ * Password reset, run by Supabase.
+ *
+ * The app has no web page for a reset link to land on, so this uses the
+ * emailed one-time code instead: verifyOtp exchanges it for a short-lived
+ * session, and updateUser then sets the new password. That means the recovery
+ * email template MUST include {{ .Token }} — see supabase/config.toml, and the
+ * matching template in the hosted project's dashboard.
  */
 export function ForgotPasswordScreen({ navigation }: Props) {
   const { colors } = useSettings();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [email, setEmail] = useState("");
   const [requested, setRequested] = useState(false);
-  const [devToken, setDevToken] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -28,25 +31,32 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   async function request() {
     setError(null);
     setBusy(true);
-    try {
-      const res = await api.post<{ message: string; devToken?: string }>(
-        "/api/auth/password-reset/request",
-        { email },
-      );
-      setRequested(true);
-      setDevToken(res.devToken ?? null);
-    } catch (err: any) {
-      setError(err.message ?? "Something went wrong");
-    } finally {
-      setBusy(false);
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    setBusy(false);
+    if (error && /rate limit/i.test(error.message)) {
+      setError("Too many attempts just now. Try again in a few minutes.");
+      return;
     }
+    // Any other error is swallowed deliberately: whether an address has an
+    // account here is not something this screen should confirm to a stranger.
+    setRequested(true);
   }
 
   async function confirm() {
     setError(null);
     setBusy(true);
     try {
-      await api.post("/api/auth/password-reset/confirm", { token: token.trim(), password });
+      const { error: otpError } = await supabase.auth.verifyOtp({
+        email,
+        token: token.trim(),
+        type: "recovery",
+      });
+      if (otpError) throw new Error("That code is invalid or has expired.");
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw new Error(updateError.message);
+      // verifyOtp leaves the app signed in; the reset screen should not double
+      // as a back door into the account.
+      await supabase.auth.signOut();
       setDone(true);
     } catch (err: any) {
       setError(err.message ?? "Could not reset your password");
@@ -85,14 +95,9 @@ export function ForgotPasswordScreen({ navigation }: Props) {
       ) : (
         <>
           <Text style={styles.copy}>
-            If that email has a password-based account, reset instructions are on their way.
-            Enter the code here with a new password.
+            If that email has an account, a reset code is on its way. Enter it here with your
+            new password.
           </Text>
-          {devToken && (
-            <Text style={styles.meta}>
-              No email service is configured on this server yet — dev code: {devToken}
-            </Text>
-          )}
           <Text style={styles.label}>Reset code</Text>
           <TextInput style={styles.input} autoCapitalize="none" value={token} onChangeText={setToken} />
           <Text style={styles.label}>New password</Text>
@@ -115,12 +120,6 @@ function makeStyles(colors: ThemeColors) {
       fontSize: type.base,
       lineHeight: 24,
       color: colors.ink,
-      marginBottom: spacing.lg,
-    },
-    meta: {
-      fontFamily: fonts.sans,
-      fontSize: type.sm,
-      color: colors.muted,
       marginBottom: spacing.lg,
     },
     label: {
