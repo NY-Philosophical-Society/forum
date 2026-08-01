@@ -90,16 +90,28 @@ the schema is already `String`, so no relation changes shape.
 
 `@default(cuid())` is dropped from `User.id` — the id is always supplied.
 
-### Row creation: lazy, via upsert
+### Row creation: lazy, via upsert — in **one shared resolver**
 
 `docs/SUPABASE-MIGRATION.md` leaves trigger-vs-lazy open. Lazy is chosen: the
 logic lives in one place in application code, it is testable without database
 triggers, and it keeps the local test database (which has no `auth` schema —
 see §7) working identically to production.
 
-On the first authenticated request, `requireAuth` upserts the local row from the
-JWT claims. Upsert rather than find-then-create, so two concurrent first requests
-cannot race into a unique-constraint error.
+The upsert lives in a single `resolveUser(token)` helper that **both
+`requireAuth` and `optionalAuth` call**. Putting it only in `requireAuth` would
+be a bug: `optionalAuth` does its own lookup and treats a missing row as logged
+out, so a user whose first request after signing up hits an `optionalAuth` route
+— `GET /api/threads` or `GET /api/threads/:id`, i.e. the feed and any thread
+page — would hold a valid token, have no row, and be served the anonymous
+220-character preview wall while the UI showed them signed in. It would
+self-heal the moment `/me` ran, which makes it an intermittent bug rather than
+an obvious one.
+
+Upsert rather than find-then-create, so two concurrent first requests cannot
+race into a unique-constraint error.
+
+`optionalAuth` keeps its never-reject contract: `resolveUser` returning nothing,
+or throwing on an invalid token, still reads as logged out.
 
 - `id` ← `sub`
 - `email` ← `email` claim, refreshed on every request so an email changed in
@@ -147,6 +159,10 @@ as an error.
 
 **API files:** `src/auth.ts`, `src/lib/oauth.ts`, `src/lib/oauth-user.ts`.
 
+**The `Express.Request.user` type declaration** in `src/middleware/auth.ts`
+carries `passwordHash`, and `toRequestUser` copies it. Both must drop it or the
+build fails.
+
 **Prisma models/columns:** `PasswordResetToken` model;
 `User.passwordHash`, `User.googleId`, `User.appleId`.
 
@@ -156,13 +172,29 @@ as an error.
 `POST /password-reset/request`, `POST /password-reset/confirm`.
 
 **Kept:** `GET /me`, `GET /account`, `POST /redeem-code`. `GET /account` loses
-`hasPassword` (Supabase owns credentials now) and keeps `email` plus the
-directory settings.
+`hasPassword` and keeps `email` plus the directory settings.
+
+### `hasPassword` needs a replacement, not just a deletion
+
+Both settings screens use `hasPassword` to switch between "Set a password" and
+"Change password", and to decide whether to demand the current password. Under
+Supabase every account *can* have a password — an OAuth user adds one with
+`updateUser` — so the flag's meaning changes rather than disappearing. The
+clients read `user.identities` / `app_metadata.providers` from the Supabase
+session instead, and the distinction is now "this account signs in with Google"
+rather than "this account has no password". The API is out of this loop
+entirely.
 
 **Web:** `src/app/oauth/`, `src/app/forgot-password/`, `src/app/reset-password/`.
+Additionally `src/app/settings/page.tsx` calls `/auth/change-password`,
+`/auth/change-email` and `DELETE /api/users/me`, and branches on `hasPassword`
+in ten places — all of it moves to supabase-js (§6).
 
-**Mobile:** `MockOAuthScreen.tsx`, `ForgotPasswordScreen.tsx`, and their
-navigation entries.
+**Mobile:** `MockOAuthScreen.tsx`, `ForgotPasswordScreen.tsx`, `OAuthButtons.tsx`
+and their navigation entries. Additionally `AccountScreen.tsx` (calls
+`/auth/account`, `/auth/change-password`, `/auth/change-email`),
+`SettingsScreen.tsx` (`/auth/account` for directory settings — that part
+survives) and `lib/auth-context.tsx` all need rework, not just deletion.
 
 **Shared schemas** that no longer have an endpoint *or* a form:
 `googleAuthSchema`, `appleAuthSchema`, `oauthDevMockSchema`,
@@ -174,9 +206,30 @@ mobile forms still validate against them client-side before calling Supabase.
 Losing `signupSchema` would silently drop the "Enter your real first and last
 name" rule, which is a product behavior, not an artifact of our auth endpoints.
 
-**Account deletion keeps working.** It stays ours — it anonymizes the local row
-rather than erasing it — and additionally calls the Supabase admin API to delete
-the auth user, so the credentials go with it.
+### Account deletion: re-authentication replaces the password check
+
+`DELETE /api/users/me` (`src/routes/users.ts`) today bcrypt-compares a submitted
+password against `passwordHash`, then anonymizes the row — and that anonymize
+update writes `passwordHash: null, googleId: null, appleId: null`, columns that
+are about to stop existing. This is the one place where deleting the credential
+layer removes a live security check rather than just moving it.
+
+The bar being protected: a borrowed or stolen session must not be able to delete
+the account. Under a hard switch, the server has no password to verify, so the
+equivalent is a **freshly-authenticated session**:
+
+- Clients re-authenticate through Supabase immediately before deleting —
+  `signInWithPassword` for password accounts, `signInWithOAuth` for the rest —
+  which mints a new token.
+- The API enforces it server-side by requiring the JWT's `iat` to be within a
+  short window (5 minutes). UI-only enforcement would not be a security control.
+- `deleteAccountSchema.password` is dropped; `confirm: "DELETE"` stays. The
+  schema comment explaining the password rule goes with it.
+
+The anonymize update drops the three credential columns; everything else about
+it is unchanged — content stays under `[deleted]`, the email is still
+tombstoned, push tokens and notifications are still cleared. It then calls the
+Supabase admin API to delete the auth user, so the credentials go with it.
 
 ## 6. Clients
 
@@ -227,7 +280,9 @@ don't, the migration went wider than intended — stop and look.
   `prisma migrate deploy` against it, and drops it in teardown.
 - `src/test/setup.ts` keeps its guard, matching on the `nyps_api_test_` database
   name instead of the temp file path. It must still refuse to run against
-  anything else.
+  anything else. Its per-file wipe list calls
+  `prisma.passwordResetToken.deleteMany()` — that model is gone, so the line
+  must go too or every test file dies in `beforeAll`.
 - `src/test/helpers.ts` — `signup()` is the single chokepoint every test funnels
   through for a token. It calls the local GoTrue (`signUp` with the anon key,
   confirmations disabled) and returns the access token. `verifyUser`,
@@ -236,9 +291,11 @@ don't, the migration went wider than intended — stop and look.
 - Auth users accumulate in the shared local stack across runs. Emails are
   already unique per test (`randomUUID`), so this is harmless; `supabase stop
   --no-backup` clears it. Not worth cleanup code.
-- `rate-limit.test.ts` continues to prove the 429 path fires with
-  `DISABLE_RATE_LIMIT` unset — that is our limiter, not GoTrue's, and is
-  unaffected.
+- `rate-limit.test.ts` must be **repointed**: it drives `POST /api/auth/login`,
+  which this migration deletes. It still proves our limiter's 429 path fires
+  with `DISABLE_RATE_LIMIT` unset — that is our `authLimiter`, not GoTrue's —
+  but against a surviving route that still uses it (`POST /api/auth/redeem-code`
+  or `DELETE /api/users/me`).
 
 Test fates, per `docs/SUPABASE-MIGRATION.md`:
 
@@ -257,6 +314,10 @@ New coverage required:
 3. A banned user's live session is rejected 403 on the next request, with a
    valid Supabase token — the ban check must not have moved into the token.
 4. Case-mismatched search returns the hit (§2).
+5. An `optionalAuth` route as the very first request after signup returns the
+   full body, not the preview wall — the shared resolver, §3.
+6. Account deletion with a stale token is rejected; with a fresh one it
+   succeeds — §5.
 
 ## 8. Seed
 
