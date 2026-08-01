@@ -7,7 +7,11 @@
  * the structural Mention table in sync (see apps/api/src/lib/mentions.ts).
  */
 
-const MENTION_LINK_RE = /\]\(\/u\/([A-Za-z0-9]+)\)/g;
+// Hyphens matter: user ids are Supabase auth uuids, not the cuids this
+// originally shipped with. Without them the id is truncated at the first
+// hyphen, no user matches, and the mention silently fails to register — the
+// link still renders, so nothing looks broken.
+const MENTION_LINK_RE = /\]\(\/u\/([A-Za-z0-9-]+)\)/g;
 
 export function mentionMarkdown(displayName: string, userId: string): string {
   // Brackets/parens in a display name would break out of the link syntax.

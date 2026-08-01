@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { DirectoryEntry } from "@nyps-forum/shared";
-import { prisma } from "../db";
+import { containsInsensitive, prisma } from "../db";
 import { requireAuth, requireMember } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
 
@@ -29,7 +29,7 @@ directoryRouter.get("/", requireAuth, requireMember, async (req, res) => {
     directoryVisible: true,
     ...(partners ? { openToPartners: true } : {}),
     ...(q
-      ? { OR: [{ displayName: { contains: q } }, { directoryBio: { contains: q } }] }
+      ? { OR: [{ displayName: containsInsensitive(q) }, { directoryBio: containsInsensitive(q) }] }
       : {}),
   };
 

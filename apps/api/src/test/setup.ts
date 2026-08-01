@@ -1,10 +1,10 @@
 import { afterAll, beforeAll } from "vitest";
 
-// Refuse to run against anything but the throwaway DB created by
+// Refuse to run against anything but the throwaway database created by
 // global-setup.ts. If env propagation ever breaks, dotenv would fall back to
-// .env's file:./dev.db and the suite would trash seeded dev data — fail
-// loudly instead.
-if (!process.env.DATABASE_URL?.includes("nyps-api-test-")) {
+// .env's development database and the suite would trash seeded dev data —
+// fail loudly instead.
+if (!process.env.DATABASE_URL?.includes("nyps_api_test_")) {
   throw new Error(
     `Tests must run against the temp database from src/test/global-setup.ts, ` +
       `got DATABASE_URL=${process.env.DATABASE_URL ?? "(unset)"}. Run tests via vitest, not directly.`,
@@ -21,7 +21,6 @@ beforeAll(async () => {
   await prisma.pushToken.deleteMany();
   await prisma.bookmark.deleteMany();
   await prisma.mention.deleteMany();
-  await prisma.passwordResetToken.deleteMany();
   await prisma.block.deleteMany();
   await prisma.moderationLog.deleteMany();
   await prisma.report.deleteMany();

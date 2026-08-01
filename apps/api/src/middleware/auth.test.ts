@@ -1,8 +1,16 @@
+import { SignJWT } from "jose";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "../app";
 import { prisma } from "../db";
-import { createThread, promoteToAdmin, signup, signupVerified, TestUser } from "../test/helpers";
+import {
+  createThread,
+  promoteToAdmin,
+  signup,
+  signupUnseen,
+  signupVerified,
+  TestUser,
+} from "../test/helpers";
 
 describe("requireAuth", () => {
   it("rejects a request with no Authorization header", async () => {
@@ -15,9 +23,32 @@ describe("requireAuth", () => {
     expect(res.status).toBe(401);
   });
 
-  it("rejects a valid token whose user no longer exists", async () => {
+  /**
+   * The whole point of verifying against Supabase's JWKS: a well-formed token
+   * with every claim in the right place is still worthless unless Supabase
+   * signed it. This one is signed with an attacker's own HMAC secret.
+   */
+  it("rejects a well-formed token that Supabase did not sign", async () => {
+    const forged = await new SignJWT({ email: "impostor@test.nyphilosophy.org" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject("00000000-0000-0000-0000-000000000001")
+      .setIssuer(`${process.env.SUPABASE_URL}/auth/v1`)
+      .setAudience("authenticated")
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(new TextEncoder().encode("an-attacker-supplied-secret-at-least-32-bytes"));
+
+    const res = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${forged}`);
+    expect(res.status).toBe(401);
+    // And it must not have been quietly created as an account.
+    expect(
+      await prisma.user.findUnique({ where: { id: "00000000-0000-0000-0000-000000000001" } }),
+    ).toBeNull();
+  });
+
+  it("rejects a deleted account, whose row survives anonymized", async () => {
     const user = await signup("deleted");
-    await prisma.user.delete({ where: { id: user.id } });
+    await prisma.user.update({ where: { id: user.id }, data: { deletedAt: new Date() } });
     const res = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${user.token}`);
     expect(res.status).toBe(401);
   });
@@ -28,6 +59,38 @@ describe("requireAuth", () => {
     const res = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${user.token}`);
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/suspended/i);
+  });
+});
+
+/**
+ * Supabase owns identity; this table owns everything else about a person. The
+ * gap between "signed up" and "has a row here" is closed on first contact.
+ */
+describe("lazy account creation", () => {
+  it("creates the local row on the first authenticated request, then reuses it", async () => {
+    const { token, email, displayName } = await signupUnseen("first-contact");
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+
+    const first = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${token}`);
+    expect(first.status).toBe(200);
+    expect(first.body.user.displayName).toBe(displayName);
+
+    // Second request must reuse the same account, not make another one.
+    const second = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${token}`);
+    expect(second.body.user.id).toBe(first.body.user.id);
+    expect(await prisma.user.count({ where: { email } })).toBe(1);
+  });
+
+  /**
+   * The row is derived state, not the account. Losing it must not lock a
+   * legitimate Supabase user out of the forum.
+   */
+  it("recreates a row that was removed out from under a live session", async () => {
+    const user = await signup("row-dropped");
+    await prisma.user.delete({ where: { id: user.id } });
+    const res = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${user.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.user.id).toBe(user.id);
   });
 });
 
@@ -65,6 +128,22 @@ describe("optionalAuth", () => {
       .set("Authorization", "Bearer completely-bogus");
     expect(res.status).toBe(200);
     expect(res.body.thread.previewOnly).toBe(true);
+  });
+
+  /**
+   * optionalAuth shares requireAuth's account resolver for exactly this case.
+   * If it didn't, a brand-new member whose first click was a thread link would
+   * be shown the anonymous preview wall while signed in — and it would fix
+   * itself on the next request, making it unreproducible.
+   */
+  it("creates the account on first contact rather than showing the preview wall", async () => {
+    const { token } = await signupUnseen("first-click-is-a-thread");
+    const res = await request(app)
+      .get(`/api/threads/${threadId}`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.thread.previewOnly).toBe(false);
+    expect(res.body.thread.body).toContain("A body long enough to matter.");
   });
 });
 

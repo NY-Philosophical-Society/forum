@@ -7,7 +7,7 @@ import {
   type ModerationLogEntry,
   type PublicUser,
 } from "@nyps-forum/shared";
-import { prisma } from "../db";
+import { containsInsensitive, prisma } from "../db";
 import { requireAdmin, requireAuth } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
 
@@ -41,8 +41,8 @@ adminRouter.get("/users", async (req, res) => {
     ...(search
       ? {
           OR: [
-            { displayName: { contains: search } },
-            { email: { contains: search } },
+            { displayName: containsInsensitive(search) },
+            { email: containsInsensitive(search) },
           ],
         }
       : {}),
@@ -107,7 +107,7 @@ adminRouter.get("/threads", async (req, res) => {
   const offset = Math.max(Number(req.query.offset) || 0, 0);
 
   const where = {
-    ...(search ? { title: { contains: search } } : {}),
+    ...(search ? { title: containsInsensitive(search) } : {}),
     ...(req.query.pinned === "1" ? { pinnedAt: { not: null } } : {}),
     ...(req.query.locked === "1" ? { locked: true } : {}),
     // Deleted threads are hidden by default but reachable, since an admin may

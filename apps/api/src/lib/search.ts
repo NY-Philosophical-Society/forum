@@ -1,5 +1,5 @@
 import { stripMarkdown, type PostSearchResult, type PublicUser, type SearchSection, type ThreadSearchResult } from "@nyps-forum/shared";
-import { prisma } from "../db";
+import { containsInsensitive, prisma } from "../db";
 import { toPublicUser } from "./serialize";
 
 /**
@@ -45,7 +45,7 @@ export async function searchThreads(
   const where = {
     deletedAt: null,
     chapterId: null,
-    OR: [{ title: { contains: q } }, { body: { contains: q } }],
+    OR: [{ title: containsInsensitive(q) }, { body: containsInsensitive(q) }],
   };
   const [threads, total] = await Promise.all([
     prisma.thread.findMany({
@@ -80,7 +80,7 @@ export async function searchPosts(
   opts: { limit: number; offset: number },
 ): Promise<SearchSection<PostSearchResult>> {
   // Same chapter exclusion as searchThreads — replies leak content just as well.
-  const where = { deletedAt: null, body: { contains: q }, thread: { chapterId: null } };
+  const where = { deletedAt: null, body: containsInsensitive(q), thread: { chapterId: null } };
   const [posts, total] = await Promise.all([
     prisma.post.findMany({
       where,
@@ -109,7 +109,7 @@ export async function searchUsers(
   q: string,
   opts: { limit: number; offset: number },
 ): Promise<SearchSection<PublicUser>> {
-  const where = { deletedAt: null, displayName: { contains: q } };
+  const where = { deletedAt: null, displayName: containsInsensitive(q) };
   const [users, total] = await Promise.all([
     prisma.user.findMany({
       where,

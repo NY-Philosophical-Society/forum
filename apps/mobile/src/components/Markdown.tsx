@@ -34,7 +34,8 @@ export function Markdown({ children }: { children: string }) {
         onLinkPress={(url) => {
           // @mentions are markdown links to /u/<id> — every stack that can
           // show markdown has a UserProfile screen, so navigate in-app.
-          const mention = url.match(/^\/u\/([A-Za-z0-9]+)$/);
+          // Hyphens included: ids are Supabase auth uuids.
+          const mention = url.match(/^\/u\/([A-Za-z0-9-]+)$/);
           if (mention) {
             (navigation as any).navigate("UserProfile", { userId: mention[1] });
             return false;

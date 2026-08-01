@@ -27,6 +27,27 @@ describe("search", () => {
     expect(res.status).toBe(401);
   });
 
+  /**
+   * Postgres LIKE is case-sensitive where SQLite's was not, so every `contains`
+   * over human-typed text goes through containsInsensitive (src/db.ts).
+   * Dropping it doesn't throw — search just quietly returns nothing, which
+   * reads as "no results" rather than as a bug. Hence this test.
+   */
+  it("matches regardless of case", async () => {
+    const res = await request(app)
+      .get("/api/search?q=TROLLEY")
+      .set("Authorization", `Bearer ${author.token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.threads.items.some((t: { id: string }) => t.id === threadId)).toBe(true);
+
+    const posts = await request(app)
+      .get("/api/search?q=UTILITARIAN")
+      .set("Authorization", `Bearer ${author.token}`);
+    expect(
+      posts.body.posts.items.some((p: { threadId: string }) => p.threadId === threadId),
+    ).toBe(true);
+  });
+
   it("finds threads, replies, and users, each shaped for its destination", async () => {
     const res = await request(app)
       .get("/api/search?q=trolley")

@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import { verifyToken } from "../auth";
 import { prisma } from "../db";
+import { verifySupabaseToken, type SupabaseClaims } from "../lib/supabase";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -18,9 +18,14 @@ declare global {
         directoryVisible: boolean;
         directoryBio: string | null;
         openToPartners: boolean;
-        passwordHash: string | null;
         createdAt: Date;
       };
+      /**
+       * Verified claims from the Supabase token. Routes that need the token
+       * itself rather than the account read this — currently only account
+       * deletion, for its freshness check.
+       */
+      authClaims?: SupabaseClaims;
     }
   }
 }
@@ -40,9 +45,81 @@ function toRequestUser(user: DbUser): NonNullable<Request["user"]> {
     directoryVisible: user.directoryVisible,
     directoryBio: user.directoryBio,
     openToPartners: user.openToPartners,
-    passwordHash: user.passwordHash,
     createdAt: user.createdAt,
   };
+}
+
+function bearerToken(req: Request): string | null {
+  const header = req.headers.authorization;
+  return header?.startsWith("Bearer ") ? header.slice(7) : null;
+}
+
+/**
+ * Verify a Supabase token and return the local account row it belongs to,
+ * creating that row the first time we see the user.
+ *
+ * Supabase owns identity; this table owns everything the forum knows about a
+ * person (display name, verification, membership, role, ban). A Supabase user
+ * therefore has no local row until their first authenticated request, and this
+ * is the single place that gap is closed — which is why BOTH requireAuth and
+ * optionalAuth go through it. Creating the row only in requireAuth would mean a
+ * user whose first request after signing up hit an optionalAuth route (the feed,
+ * any thread page) held a valid token, had no row, and got served the anonymous
+ * preview wall while the UI showed them signed in. It would fix itself on the
+ * next request, which is worse than failing outright — an intermittent bug
+ * nobody can reproduce.
+ *
+ * Returns a discriminated result rather than throwing, because the two callers
+ * disagree about what a failure means: requireAuth rejects, optionalAuth
+ * silently continues as anonymous.
+ */
+type ResolveResult =
+  | { ok: true; user: DbUser; claims: SupabaseClaims }
+  | { ok: false; reason: "invalid" | "gone" | "banned" };
+
+async function resolveUser(token: string): Promise<ResolveResult> {
+  const claims = await verifySupabaseToken(token);
+  if (!claims) return { ok: false, reason: "invalid" };
+
+  const existing = await prisma.user.findUnique({ where: { id: claims.sub } });
+
+  if (existing) {
+    // A deleted account's row still exists (its content is anonymized, not
+    // removed), but as far as sessions are concerned the user is gone. Checked
+    // before the email sync below on purpose: a deleted row's email is
+    // deliberately tombstoned, and syncing the token's email over it would
+    // undo that.
+    if (existing.deletedAt) return { ok: false, reason: "gone" };
+    if (existing.bannedAt) return { ok: false, reason: "banned" };
+
+    // Supabase owns the email; mirror a change through on the first request
+    // that shows one. Only writes when it actually differs, so the common path
+    // stays a single read.
+    const user =
+      existing.email === claims.email
+        ? existing
+        : await prisma.user.update({
+            where: { id: existing.id },
+            data: { email: claims.email },
+          });
+    return { ok: true, user, claims };
+  }
+
+  const displayName = claims.displayName?.trim() || claims.email.split("@")[0];
+  try {
+    const user = await prisma.user.create({
+      data: { id: claims.sub, email: claims.email, displayName },
+    });
+    return { ok: true, user, claims };
+  } catch {
+    // Two concurrent first requests: the loser of the race reads the winner's
+    // row rather than failing on the unique constraint.
+    const raced = await prisma.user.findUnique({ where: { id: claims.sub } });
+    if (!raced) throw new Error("Could not create the account record");
+    if (raced.deletedAt) return { ok: false, reason: "gone" };
+    if (raced.bannedAt) return { ok: false, reason: "banned" };
+    return { ok: true, user: raced, claims };
+  }
 }
 
 export async function requireAuth(
@@ -50,28 +127,23 @@ export async function requireAuth(
   res: Response,
   next: NextFunction,
 ) {
-  const header = req.headers.authorization;
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  const token = bearerToken(req);
   if (!token) {
     return res.status(401).json({ error: "Missing Authorization header" });
   }
 
-  const payload = verifyToken(token);
-  if (!payload) {
-    return res.status(401).json({ error: "Invalid or expired token" });
+  const result = await resolveUser(token);
+  if (!result.ok) {
+    if (result.reason === "banned") {
+      return res.status(403).json({ error: "This account has been suspended." });
+    }
+    return res.status(401).json({
+      error: result.reason === "gone" ? "User no longer exists" : "Invalid or expired token",
+    });
   }
 
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  // A deleted account's row still exists (its content is anonymized, not
-  // removed), but as far as sessions are concerned the user is gone.
-  if (!user || user.deletedAt) {
-    return res.status(401).json({ error: "User no longer exists" });
-  }
-  if (user.bannedAt) {
-    return res.status(403).json({ error: "This account has been suspended." });
-  }
-
-  req.user = toRequestUser(user);
+  req.user = toRequestUser(result.user);
+  req.authClaims = result.claims;
   next();
 }
 
@@ -86,16 +158,13 @@ export async function optionalAuth(
   _res: Response,
   next: NextFunction,
 ) {
-  const header = req.headers.authorization;
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  const token = bearerToken(req);
   if (!token) return next();
 
-  const payload = verifyToken(token);
-  if (!payload) return next();
-
-  const user = await prisma.user.findUnique({ where: { id: payload.userId } });
-  if (user && !user.bannedAt && !user.deletedAt) {
-    req.user = toRequestUser(user);
+  const result = await resolveUser(token);
+  if (result.ok) {
+    req.user = toRequestUser(result.user);
+    req.authClaims = result.claims;
   }
   next();
 }

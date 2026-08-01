@@ -1,8 +1,34 @@
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { hotScore, recomputeThreadHotScore } from "../src/lib/ranking";
+import { supabaseAdmin } from "../src/lib/supabase";
 
 const prisma = new PrismaClient();
+
+/**
+ * Demo accounts need to exist in Supabase Auth, not just in our table — they
+ * are meant to be signed into. The auth user is created first and its id
+ * becomes User.id, which is the same order a real signup follows.
+ *
+ * Idempotent: re-seeding finds the existing auth user rather than failing on
+ * the duplicate email, so `npm run db:seed` stays repeatable.
+ */
+async function upsertAuthUser(email: string, displayName: string): Promise<string> {
+  const admin = supabaseAdmin();
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password: DEMO_PASSWORD,
+    email_confirm: true,
+    user_metadata: { display_name: displayName },
+  });
+  if (data?.user) return data.user.id;
+
+  // Already there from a previous seed — find it and carry on.
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) return existing.id;
+
+  throw new Error(`Could not create or find the auth user for ${email}: ${error?.message}`);
+}
 
 const TAGS = [
   { slug: "logic", name: "Logic", description: "Formal and informal reasoning, argumentation, paradoxes." },
@@ -53,11 +79,11 @@ async function upsertUser(handle: string) {
   const displayName = MEMBERS[handle];
   if (!displayName) throw new Error(`Unknown seed member: ${handle}`);
   const email = `${handle}@demo.nyphilosophy.org`;
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  const id = await upsertAuthUser(email, displayName);
   return prisma.user.upsert({
     where: { email },
     update: { displayName },
-    create: { email, displayName, passwordHash, verificationStatus: "VERIFIED" },
+    create: { id, email, displayName, verificationStatus: "VERIFIED" },
   });
 }
 
@@ -645,13 +671,15 @@ async function main() {
   // way (`role: "admin"`) via direct DB access until an admin UI exists.
   // Deliberately NOT a supporter: admins must be able to moderate chapters,
   // events, and the directory without donating, and the seed should prove it.
+  const adminEmail = "admin@demo.nyphilosophy.org";
+  const adminId = await upsertAuthUser(adminEmail, "Eleanor Vance");
   const admin = await prisma.user.upsert({
-    where: { email: "admin@demo.nyphilosophy.org" },
+    where: { email: adminEmail },
     update: { role: "admin" },
     create: {
-      email: "admin@demo.nyphilosophy.org",
+      id: adminId,
+      email: adminEmail,
       displayName: "Eleanor Vance",
-      passwordHash: await bcrypt.hash(DEMO_PASSWORD, 10),
       verificationStatus: "VERIFIED",
       role: "admin",
     },

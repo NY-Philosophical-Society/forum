@@ -1,5 +1,4 @@
 import { randomUUID } from "crypto";
-import bcrypt from "bcryptjs";
 import express, { Router } from "express";
 import sharp from "sharp";
 import {
@@ -11,10 +10,11 @@ import {
   updateProfileSchema,
   warnUserSchema,
 } from "@nyps-forum/shared";
-import { prisma } from "../db";
+import { containsInsensitive, prisma } from "../db";
 import { optionalAuth, requireAdmin, requireAuth } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
 import { storageProvider } from "../lib/storage-provider";
+import { isFreshlyAuthenticated, supabaseAdmin } from "../lib/supabase";
 import { adminLimiter, authLimiter, writeLimiter } from "../lib/rate-limit";
 import { logModeration } from "../lib/moderation-log";
 import { notify } from "../lib/notifications";
@@ -246,7 +246,7 @@ usersRouter.get("/", requireAuth, async (req, res) => {
 
   const users = await prisma.user.findMany({
     where: {
-      displayName: { contains: search },
+      displayName: containsInsensitive(search),
       id: { not: req.user!.id },
       deletedAt: null,
       blocking: { none: { blockedId: req.user!.id } },
@@ -264,6 +264,14 @@ usersRouter.get("/", requireAuth, async (req, res) => {
  * conversations get holes blown in them. The row itself stays (deletedAt
  * set) but can never sign in again; the email is tombstoned so it's free
  * for a future signup.
+ *
+ * This used to demand the account password. Supabase owns credentials now, so
+ * there is no password here to check — the equivalent bar is a *freshly
+ * authenticated* session: the client re-authenticates through Supabase
+ * (signInWithPassword, or the OAuth provider) immediately before calling this,
+ * which mints a new token, and we require that token to be minutes old. A
+ * borrowed or long-lived session cannot delete the account on its own. Checked
+ * server-side deliberately — a client-side prompt would be theatre.
  */
 usersRouter.delete("/me", requireAuth, authLimiter, async (req, res) => {
   const parsed = deleteAccountSchema.safeParse(req.body);
@@ -271,14 +279,11 @@ usersRouter.delete("/me", requireAuth, authLimiter, async (req, res) => {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
 
-  if (req.user!.passwordHash) {
-    if (!parsed.data.password) {
-      return res.status(400).json({ error: "Enter your password to delete your account" });
-    }
-    const ok = await bcrypt.compare(parsed.data.password, req.user!.passwordHash);
-    if (!ok) {
-      return res.status(401).json({ error: "Password is incorrect" });
-    }
+  if (!isFreshlyAuthenticated(req.authClaims!.issuedAt)) {
+    return res.status(401).json({
+      error: "Please sign in again to confirm you want to delete your account.",
+      reauthRequired: true,
+    });
   }
 
   const avatarKey = req.user!.avatarUrl ? storageProvider.keyForUrl(req.user!.avatarUrl) : null;
@@ -287,9 +292,6 @@ usersRouter.delete("/me", requireAuth, authLimiter, async (req, res) => {
     data: {
       displayName: "[deleted]",
       email: `deleted-${req.user!.id}@deleted.invalid`,
-      passwordHash: null,
-      googleId: null,
-      appleId: null,
       avatarUrl: null,
       bio: null,
       verificationStatus: "UNVERIFIED",
@@ -305,6 +307,15 @@ usersRouter.delete("/me", requireAuth, authLimiter, async (req, res) => {
   // A deleted account has no devices to push to and no inbox to read.
   await prisma.pushToken.deleteMany({ where: { userId: req.user!.id } });
   await prisma.notification.deleteMany({ where: { recipientId: req.user!.id } });
+
+  // Take the credentials with it. Our row is only anonymized, so without this
+  // the person could still sign in — landing on a live session whose account
+  // reads as "[deleted]". Last, so a failure here can't leave a half-deleted
+  // account: the local row is already tombstoned and requireAuth rejects it.
+  const { error } = await supabaseAdmin().auth.admin.deleteUser(req.user!.id);
+  if (error) {
+    console.error(`[account-deletion] auth user ${req.user!.id} survived:`, error.message);
+  }
 
   res.json({ deleted: true });
 });

@@ -1,7 +1,14 @@
 import request from "supertest";
 import { beforeAll, describe, expect, it } from "vitest";
 import { app } from "../app";
-import { createThread, promoteToAdmin, signup, signupVerified, TestUser } from "../test/helpers";
+import {
+  createThread,
+  promoteToAdmin,
+  reauthenticate,
+  signup,
+  signupVerified,
+  TestUser,
+} from "../test/helpers";
 
 let admin: TestUser;
 
@@ -144,7 +151,13 @@ describe("blocking", () => {
 });
 
 describe("banning", () => {
-  it("a banned user loses login and API access until unbanned", async () => {
+  /**
+   * A ban is enforced on every request, not at sign-in. Supabase will happily
+   * keep issuing that account tokens — it knows nothing about our bans — so
+   * the authorization ladder has to re-read bannedAt per request. A ban that
+   * only bit at login would leave every live session running until it expired.
+   */
+  it("a banned user loses API access on their next request, until unbanned", async () => {
     const target = await signupVerified("bannable");
 
     const ban = await request(app)
@@ -153,13 +166,17 @@ describe("banning", () => {
       .send({ reason: "Repeated harassment after a warning" });
     expect(ban.status).toBe(200);
 
-    const login = await request(app)
-      .post("/api/auth/login")
-      .send({ email: target.email, password: target.password });
-    expect(login.status).toBe(403);
-
+    // Same token that worked a moment ago, no re-authentication involved.
     const me = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${target.token}`);
     expect(me.status).toBe(403);
+    expect(me.body.error).toMatch(/suspended/i);
+
+    // And a token freshly minted by Supabase is refused just the same.
+    const freshlySignedIn = await reauthenticate(target);
+    const meFresh = await request(app)
+      .get("/api/auth/me")
+      .set("Authorization", `Bearer ${freshlySignedIn}`);
+    expect(meFresh.status).toBe(403);
 
     const unban = await request(app)
       .post(`/api/users/${target.id}/unban`)

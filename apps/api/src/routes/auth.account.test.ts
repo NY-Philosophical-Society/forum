@@ -1,132 +1,76 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { app } from "../app";
-import { createPost, createThread, signup, signupVerified, uniqueEmail } from "../test/helpers";
+import {
+  createPost,
+  createThread,
+  reauthenticate,
+  signup,
+  signupVerified,
+} from "../test/helpers";
 
-/** An account created via the dev-mock OAuth flow — passwordHash === null. */
-async function signupOAuth() {
-  const email = uniqueEmail("oauth");
-  const res = await request(app)
-    .post("/api/auth/oauth/dev-mock")
-    .send({ provider: "google", email, displayName: "OAuth Tester" });
-  if (res.status !== 200) throw new Error(`dev-mock signup failed: ${res.status}`);
-  return { token: res.body.token as string, id: res.body.user.id as string, email };
-}
+/**
+ * Password change, email change and OAuth account shapes used to be tested
+ * here. Supabase Auth owns all three now — there is no endpoint of ours left
+ * to assert against, and testing Supabase's own password rules would be
+ * testing someone else's code. What survives is what stayed ours: the private
+ * account read, account deletion, and the data export.
+ */
 
 describe("GET /api/auth/account", () => {
-  it("reports email and whether a password exists", async () => {
+  it("returns the caller's email and directory settings", async () => {
     const user = await signup("account");
     const res = await request(app)
       .get("/api/auth/account")
       .set("Authorization", `Bearer ${user.token}`);
-    const defaultDirectory = {
-      directoryVisible: false,
-      directoryBio: null,
-      openToPartners: false,
-    };
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ email: user.email, hasPassword: true, directory: defaultDirectory });
-
-    const oauth = await signupOAuth();
-    const res2 = await request(app)
-      .get("/api/auth/account")
-      .set("Authorization", `Bearer ${oauth.token}`);
-    expect(res2.body).toEqual({ email: oauth.email, hasPassword: false, directory: defaultDirectory });
-  });
-});
-
-describe("POST /api/auth/change-password", () => {
-  it("changes the password when the current one is correct", async () => {
-    const user = await signup("chpass");
-    const res = await request(app)
-      .post("/api/auth/change-password")
-      .set("Authorization", `Bearer ${user.token}`)
-      .send({ currentPassword: user.password, newPassword: "a-brand-new-password" });
-    expect(res.status).toBe(200);
-
-    const oldLogin = await request(app)
-      .post("/api/auth/login")
-      .send({ email: user.email, password: user.password });
-    expect(oldLogin.status).toBe(401);
-
-    const newLogin = await request(app)
-      .post("/api/auth/login")
-      .send({ email: user.email, password: "a-brand-new-password" });
-    expect(newLogin.status).toBe(200);
-  });
-
-  it("rejects a wrong current password", async () => {
-    const user = await signup("wrongpass");
-    const res = await request(app)
-      .post("/api/auth/change-password")
-      .set("Authorization", `Bearer ${user.token}`)
-      .send({ currentPassword: "not-my-password", newPassword: "whatever-else-here" });
-    expect(res.status).toBe(401);
-  });
-
-  it("lets an OAuth-only account set a first password without a current one", async () => {
-    const oauth = await signupOAuth();
-    const res = await request(app)
-      .post("/api/auth/change-password")
-      .set("Authorization", `Bearer ${oauth.token}`)
-      .send({ newPassword: "my-first-password" });
-    expect(res.status).toBe(200);
-
-    const login = await request(app)
-      .post("/api/auth/login")
-      .send({ email: oauth.email, password: "my-first-password" });
-    expect(login.status).toBe(200);
-  });
-});
-
-describe("POST /api/auth/change-email", () => {
-  it("changes email with the correct password and enforces uniqueness", async () => {
-    const user = await signup("chemail");
-    const other = await signup("taken");
-
-    const conflict = await request(app)
-      .post("/api/auth/change-email")
-      .set("Authorization", `Bearer ${user.token}`)
-      .send({ email: other.email, password: user.password });
-    expect(conflict.status).toBe(409);
-
-    const fresh = uniqueEmail("fresh");
-    const ok = await request(app)
-      .post("/api/auth/change-email")
-      .set("Authorization", `Bearer ${user.token}`)
-      .send({ email: fresh, password: user.password });
-    expect(ok.status).toBe(200);
-
-    const login = await request(app)
-      .post("/api/auth/login")
-      .send({ email: fresh, password: user.password });
-    expect(login.status).toBe(200);
-  });
-
-  it("rejects a wrong password", async () => {
-    const user = await signup("chemail-wrong");
-    const res = await request(app)
-      .post("/api/auth/change-email")
-      .set("Authorization", `Bearer ${user.token}`)
-      .send({ email: uniqueEmail("nope"), password: "wrong" });
-    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      email: user.email,
+      directory: { directoryVisible: false, directoryBio: null, openToPartners: false },
+    });
   });
 });
 
 describe("DELETE /api/users/me", () => {
-  it("requires the typed confirmation and the password", async () => {
+  it("requires the typed confirmation", async () => {
     const user = await signup("del-guard");
     const noConfirm = await request(app)
       .delete("/api/users/me")
       .set("Authorization", `Bearer ${user.token}`)
-      .send({ password: user.password });
+      .send({});
     expect(noConfirm.status).toBe(400);
+  });
 
-    const wrongPass = await request(app)
+  /**
+   * The credential check that used to guard this is Supabase's now, so the bar
+   * is a freshly-minted token instead. A token that is merely valid must not be
+   * enough — that is the whole point of the check.
+   */
+  it("rejects a session that has not re-authenticated recently", async () => {
+    const user = await signup("del-stale");
+
+    // The token is seconds-fresh by definition here, so age it rather than
+    // waiting: what's under test is that mere validity isn't sufficient.
+    // Only Date is faked — faking setTimeout too would hang supertest's HTTP.
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 30 * 60 * 1000 });
+    try {
+      const stale = await request(app)
+        .delete("/api/users/me")
+        .set("Authorization", `Bearer ${user.token}`)
+        .send({ confirm: "DELETE" });
+      expect(stale.status).toBe(401);
+      expect(stale.body.reauthRequired).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // Signing in again mints a fresh token, and the same request now passes.
+    const fresh = await reauthenticate(user);
+    const ok = await request(app)
       .delete("/api/users/me")
-      .set("Authorization", `Bearer ${user.token}`)
-      .send({ password: "not-it", confirm: "DELETE" });
-    expect(wrongPass.status).toBe(401);
+      .set("Authorization", `Bearer ${fresh}`)
+      .send({ confirm: "DELETE" });
+    expect(ok.status).toBe(200);
   });
 
   it("anonymizes the account but leaves other people's threads readable", async () => {
@@ -138,19 +82,16 @@ describe("DELETE /api/users/me", () => {
 
     const del = await request(app)
       .delete("/api/users/me")
-      .set("Authorization", `Bearer ${author.token}`)
-      .send({ password: author.password, confirm: "DELETE" });
+      .set("Authorization", `Bearer ${await reauthenticate(author)}`)
+      .send({ confirm: "DELETE" });
     expect(del.status).toBe(200);
 
-    // Their session is dead and their email no longer logs in.
+    // Their session is dead — the row is tombstoned, so even a token that has
+    // not expired yet stops working.
     const me = await request(app)
       .get("/api/auth/me")
       .set("Authorization", `Bearer ${author.token}`);
     expect(me.status).toBe(401);
-    const login = await request(app)
-      .post("/api/auth/login")
-      .send({ email: author.email, password: author.password });
-    expect(login.status).toBe(401);
 
     // The thread and both replies still render, authored by "[deleted]".
     const thread = await request(app)
@@ -171,19 +112,6 @@ describe("DELETE /api/users/me", () => {
       .set("Authorization", `Bearer ${reader.token}`)
       .send({ recipientId: author.id, body: "hello?" });
     expect(dm.status).toBe(404);
-  });
-
-  it("frees the email for a future signup", async () => {
-    const user = await signup("del-email");
-    await request(app)
-      .delete("/api/users/me")
-      .set("Authorization", `Bearer ${user.token}`)
-      .send({ password: user.password, confirm: "DELETE" });
-
-    const again = await request(app)
-      .post("/api/auth/signup")
-      .send({ email: user.email, password: "another-password-1", displayName: "New Person" });
-    expect(again.status).toBe(201);
   });
 });
 

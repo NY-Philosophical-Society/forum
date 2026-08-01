@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { createClient } from "@supabase/supabase-js";
 import request from "supertest";
 import { app } from "../app";
 import { prisma } from "../db";
@@ -15,18 +16,82 @@ export function uniqueEmail(prefix = "user"): string {
   return `${prefix}-${randomUUID().slice(0, 12)}@test.nyphilosophy.org`;
 }
 
-/** Create an account through POST /api/auth/signup. Starts UNVERIFIED. */
+/**
+ * The suite's single point of contact with Supabase Auth. Everything else in
+ * here — and every test — goes through the API, which is the point: the
+ * authorization bugs live in middleware, so tests must exercise real tokens
+ * against real routes rather than writing rows directly.
+ */
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_PUBLISHABLE_KEY!,
+  { auth: { persistSession: false, autoRefreshToken: false } },
+);
+
+/**
+ * Create an account through real Supabase Auth. Starts UNVERIFIED, and has no
+ * local User row yet — the API creates that on the first authenticated request
+ * (middleware/auth.ts resolveUser), exactly as it does for a real signup.
+ */
 export async function signup(prefix = "user"): Promise<TestUser> {
   const email = uniqueEmail(prefix);
   const password = "correct-horse-battery";
   const displayName = `Test ${prefix} ${randomUUID().slice(0, 6)}`;
-  const res = await request(app)
-    .post("/api/auth/signup")
-    .send({ email, password, displayName });
-  if (res.status !== 201) {
-    throw new Error(`signup failed (${res.status}): ${JSON.stringify(res.body)}`);
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { display_name: displayName } },
+  });
+  if (error || !data.session) {
+    throw new Error(`signup failed: ${error?.message ?? "no session returned"}`);
   }
-  return { token: res.body.token, id: res.body.user.id, email, password, displayName };
+
+  const token = data.session.access_token;
+  // Force the local row into existence now, so tests can rely on the id and on
+  // fixtures like promoteToAdmin that address the account directly.
+  const me = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${token}`);
+  if (me.status !== 200) {
+    throw new Error(`could not load the new account (${me.status}): ${JSON.stringify(me.body)}`);
+  }
+
+  return { token, id: me.body.user.id, email, password, displayName };
+}
+
+/**
+ * A Supabase account the API has never seen — no local User row exists yet.
+ * For testing the lazy-creation path itself; everything else wants signup().
+ */
+export async function signupUnseen(
+  prefix = "unseen",
+): Promise<{ token: string; email: string; displayName: string }> {
+  const email = uniqueEmail(prefix);
+  const displayName = `Test ${prefix} ${randomUUID().slice(0, 6)}`;
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password: "correct-horse-battery",
+    options: { data: { display_name: displayName } },
+  });
+  if (error || !data.session) {
+    throw new Error(`signup failed: ${error?.message ?? "no session returned"}`);
+  }
+  return { token: data.session.access_token, email, displayName };
+}
+
+/**
+ * A token minted right now. Account deletion requires a freshly-authenticated
+ * session (see routes/users.ts), which is what a client gets after prompting
+ * for the password again.
+ */
+export async function reauthenticate(user: TestUser): Promise<string> {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: user.password,
+  });
+  if (error || !data.session) {
+    throw new Error(`re-authentication failed: ${error?.message ?? "no session"}`);
+  }
+  return data.session.access_token;
 }
 
 /**
