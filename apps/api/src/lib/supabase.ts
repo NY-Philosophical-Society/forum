@@ -26,6 +26,40 @@ const SECRET_KEY = process.env.SUPABASE_SECRET_KEY ?? "";
 /** jose caches the fetched key set and refetches on an unknown `kid`. */
 const jwks = createRemoteJWKSet(new URL(`${SUPABASE_URL}/auth/v1/.well-known/jwks.json`));
 
+/**
+ * `fetch` with a deadline, for every outbound call to Supabase.
+ *
+ * Node's HTTP client keeps connections alive and will happily reuse a socket
+ * the other end has already dropped. When that happens the request doesn't
+ * fail — it hangs, for undici's 300-second header timeout, which is longer
+ * than any caller is prepared to wait. It surfaced first in the test suite as
+ * an occasional run where one arbitrary test sat there until the runner killed
+ * it, with nothing slow anywhere in the request path, because a call that
+ * never returns never logs. A bounded wait plus one retry turns that into a
+ * blip instead of a hang.
+ *
+ * Kept because an unbounded outbound call inside a request handler is a hazard
+ * on its own terms — account deletion calls Supabase — but be aware it did not
+ * cure the suite's intermittent hang, which turned out to be supertest. See
+ * docs/TESTING.md.
+ */
+export async function fetchWithTimeout(
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+  timeoutMs = 10_000,
+): Promise<Response> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await fetch(input, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (err) {
+      // Retry once: a stale pooled socket fails on use, and the replacement
+      // connection succeeds. A second failure is a real one — let it through.
+      const isTimeout = err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+      if (attempt >= 1 || !isTimeout) throw err;
+    }
+  }
+}
+
 export interface SupabaseClaims {
   /** auth.users.id — this is also our User.id. */
   sub: string;
@@ -91,6 +125,7 @@ export function supabaseAdmin() {
   }
   adminClient ??= createClient(SUPABASE_URL, SECRET_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
+    global: { fetch: (input, init) => fetchWithTimeout(input, init) },
   });
   return adminClient;
 }

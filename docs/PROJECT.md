@@ -1,7 +1,7 @@
 # The Forum — state of play
 
 **The single source of truth for where this project is and what's undecided.**
-Updated 2026-07-30.
+Updated 2026-07-31.
 
 Everything else in `docs/` is either a reference (`API.md`, `DESIGN_SYSTEM.md`,
 `TESTING.md`) or a record of a completed run (`runs/`). If a decision matters,
@@ -21,13 +21,18 @@ Separate from the marketing site (`nyphilosophy.org`); this is its own repo,
 `NY-Philosophical-Society/forum`.
 
 **Stack:** npm-workspaces monorepo — Express 4 + Prisma API, Next.js 14 web,
-Expo React Native mobile, shared types package. SQLite locally.
+Expo React Native mobile, shared types package. Supabase Postgres and Supabase
+Auth, run locally through the Supabase CLI.
 
 ---
 
 ## 2. Current state — what actually works
 
-Everything below is built, tested, and running locally. **184 API tests pass.**
+Everything below is built, tested, and running locally. **172 API tests pass.**
+(Down from 184: the ~20 tests covering password hashing, our own JWTs, and the
+OAuth mock went with the code they tested, and five new ones cover lazy account
+creation, forged-token rejection, re-authentication before deletion, and
+case-insensitive search on Postgres.)
 
 ### Reading and writing
 Single feed with hot/new ranking (a stored `hotScore` column, ordered by the
@@ -38,8 +43,9 @@ and delete your own posts, with tombstones so replies never orphan. @mentions.
 Image uploads with server-side validation and EXIF stripping.
 
 ### Accounts
-Email signup, Google and Apple sign-in (mocked locally), password reset.
-ID verification behind a provider interface with a local stub. Profile pages
+Email signup, Google and Apple sign-in, and password reset — all Supabase Auth
+since 2026-07-31; the API stores no password and signs no token. ID
+verification stays ours, behind a provider interface with a local stub. Profile pages
 with photos, bios, avatars. Account management: password, email, data export,
 and deletion that anonymises rather than orphans.
 
@@ -87,7 +93,7 @@ directly on the signup screen. `docs/API.md` documents the toggle.
 
 | Decision | Detail |
 | --- | --- |
-| **Backend host** | **Supabase** — database host and auth provider. Express stays as the API layer; no PostgREST, no RLS. See §5. |
+| **Backend host** | **Supabase** — database host and auth provider, migrated 2026-07-31. Express stays as the API layer; no PostgREST, no RLS. See §4. |
 | **Membership model** | Reading stays free. Membership buys member spaces, never a lock on the main feed. Supporter-gated reading was proposed and **rejected** — it inverts the funnel. |
 | **Single feed** | One feed with optional tags. Not boards. Chapters are separate access-controlled spaces, not a boards system by another name. |
 | **Likes only** | No downvotes, ever. |
@@ -99,15 +105,16 @@ directly on the signup screen. `docs/API.md` documents the toggle.
 
 ## 4. Open questions — backend
 
-**Owner: the backend engineer.** Full plan in `docs/SUPABASE-MIGRATION.md`.
+**Full plan in `docs/SUPABASE-MIGRATION.md`; executed 2026-07-31.**
 
-1. **`User` ↔ `auth.users` linkage** — database trigger on insert, or lazy
-   creation on first authenticated request? Engineer's call; lazy is easier to
-   test, a trigger is harder to get wrong in production.
-2. **When to migrate.** Currently deliberately not started: it would break
-   zero-setup local dev while the remaining product work barely touches auth.
-   The trigger is: project provisioned, linkage decided, project URL and anon
-   key available. Then the frontend swap happens in one pass.
+1. **`User` ↔ `auth.users` linkage — decided and built.** No linking column at
+   all: `User.id` *is* the Supabase auth uuid, and the row is created lazily on
+   the first authenticated request by a resolver shared by `requireAuth` and
+   `optionalAuth`. No database trigger.
+2. **Migration done.** API, web and mobile all moved in one pass. Local dev now
+   requires Docker and `supabase start` — the cost that was being deferred. The
+   local stack runs on the 544xx port block so it can coexist with another
+   Supabase project on the same machine.
 3. **Storage** — Supabase Storage or Cloudflare R2? Both sit behind the existing
    `storage-provider` interface, so this is reversible. R2 has no egress fees;
    Supabase is one fewer vendor.
@@ -220,8 +227,10 @@ non-member) · `wenli@` (member, LA chapter).
 
 In the order they block things:
 
-1. **Engineer starts the Supabase migration** — everything else waits on the
-   backend being real.
+1. **Point the hosted project at the new migration.** Local is done and green;
+   `izvomynkpvguisjdintq` still holds an unmanaged `prisma db push` schema with
+   no `_prisma_migrations` table. It is empty, so the fix is to drop the public
+   schema and run `prisma migrate deploy` — an owner decision, not Claude's.
 2. **Owner picks which undecided perks to commit to** (§5) — this determines
    the next build queue.
 3. **Owner runs `xcode-select`** so mobile can finally be seen.

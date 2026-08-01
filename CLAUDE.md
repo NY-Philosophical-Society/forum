@@ -17,9 +17,15 @@ Read these before non-trivial work — they are maintained and authoritative:
 ```bash
 npm install                     # root; npm workspaces
 
+# Local Supabase — the database AND the auth server. Needed for dev and tests.
+# Runs on the 544xx port block under project_id "nyps-forum" so it can coexist
+# with another local Supabase stack; see supabase/config.toml.
+supabase gen signing-key --algorithm ES256   # first run; writes supabase/signing_keys.json
+supabase start
+
 # API (first run)
 cp apps/api/.env.example apps/api/.env
-npm run db:migrate              # creates apps/api/prisma/dev.db
+npm run db:migrate              # applies the migration to the local Supabase Postgres
 npm run db:seed                 # 12 tags, 5 demo threads, demo admin, 2 open reports
 
 npm run dev:api                 # :4000
@@ -40,7 +46,7 @@ Typecheck: `cd apps/api && npm run build` (tsc), `cd apps/web && npx next build`
 
 ## Architecture
 
-npm-workspaces monorepo. `apps/api` (Express 4 + Prisma/SQLite) is the only backend;
+npm-workspaces monorepo. `apps/api` (Express 4 + Prisma/Postgres on Supabase) is the only backend;
 `apps/web` (Next.js 14 App Router) and `apps/mobile` (Expo RN) are thin HTTP clients over it.
 `packages/shared` is consumed as **TypeScript source** (`main: src/index.ts`, no build step) —
 zod schemas, types, `thread-tree`, `format-date`, `strip-markdown`, `mentions`.
@@ -54,6 +60,14 @@ zod schemas, types, `thread-tree`, `format-date`, `strip-markdown`, `mentions`.
   `requireAuth` (re-reads `bannedAt`/`deletedAt` per request, so a ban bites live sessions) →
   `requireVerified` → `requireMember` (supporter or admin) → `requireAdmin`.
   `optionalAuth` never rejects — an invalid token reads as logged out (anonymous preview).
+- **Supabase Auth owns identity; the `User` table owns everything else.** `User.id` *is* the
+  Supabase `auth.users` id — no linking column. A Supabase user has no local row until their first
+  authenticated request, created by `resolveUser` in `middleware/auth.ts`; both `requireAuth` and
+  `optionalAuth` go through it, and splitting them reintroduces a signed-in-but-walled-off bug.
+  The API verifies tokens against JWKS and signs nothing.
+- **Postgres is not SQLite, in two places that fail silently.** `contains` is case-sensitive here —
+  use `containsInsensitive` from `src/db.ts` for anything a human typed. And `NULLS` sort *first*
+  on DESC, so `pinnedAt` ordering must say `nulls: "last"` or pinned threads sort last.
 - **Posting is on the honor system.** `requireVerified` is a no-op unless
   `REQUIRE_ID_VERIFICATION=true`. The ID-verification flow is fully built behind that one switch;
   don't remove the middleware from write routes.
@@ -62,9 +76,9 @@ zod schemas, types, `thread-tree`, `format-date`, `strip-markdown`, `mentions`.
 - **`Thread.hotScore` is a stored column**, recomputed on like/reply (`src/lib/ranking.ts`) and used
   as a DB `ORDER BY`. Never sort in JS. Pinned threads sort as a separate column so they don't
   distort the score.
-- **Four provider interfaces** follow the same shape — a zero-credential local stub, a real
+- **Three provider interfaces** follow the same shape — a zero-credential local stub, a real
   implementation gated behind env vars, and the stub refuses to run once real credentials appear:
-  `verification-provider.ts`, `storage-provider.ts`, `push-provider.ts`, `oauth.ts`. Each file's top
+  `verification-provider.ts`, `storage-provider.ts`, `push-provider.ts`. Each file's top
   comment has the exact production wiring steps. The rest of the app never touches vendor details.
 - **Every admin mutation writes a `ModerationLog` row** via `src/lib/moderation-log.ts`, and nothing
   may edit or delete one. Destructive admin actions require a typed reason.
@@ -81,9 +95,12 @@ zod schemas, types, `thread-tree`, `format-date`, `strip-markdown`, `mentions`.
 
 ### Tests
 
-Vitest + supertest, colocated as `*.test.ts`. Global setup builds a throwaway migrated SQLite DB in
-`$TMPDIR/nyps-api-test-*`; the worker setup refuses to run if `DATABASE_URL` lacks that marker, so
-`dev.db` can never be hit. Files run serially in fresh forks and the DB is wiped per file.
+Vitest + supertest, colocated as `*.test.ts`. **`supabase start` must be running.** Global setup
+creates a throwaway `nyps_api_test_*` database on the local stack and migrates it; the worker setup
+refuses to run if `DATABASE_URL` lacks that marker, so the dev database can never be hit, and it
+refuses a non-loopback `SUPABASE_URL` so a hosted project can't be signed up against. Files run
+serially in fresh forks and the DB is wiped per file. Auth users live in the stack's shared `auth`
+schema, not the throwaway database — deliberate, and why there's no FK to `auth.users`.
 
 Test through the routes, not Prisma — the authorization bugs live in middleware. Mint verified users
 via the real signup → `/api/verification/start` → mock-complete flow, not by writing

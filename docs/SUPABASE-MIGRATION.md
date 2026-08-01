@@ -1,5 +1,17 @@
 # Supabase migration plan
 
+> **Executed 2026-07-31.** Kept as the record of what was decided and why. Two
+> things went differently from the plan below and are worth knowing:
+> **(1)** there is no `supabaseId` column — `User.id` *is* the Supabase auth
+> uuid; **(2)** account deletion could not simply "keep working", because it
+> authenticated with the password hash being deleted. It now requires a
+> freshly-issued token instead. The linkage question is settled: lazy creation,
+> in a resolver shared by `requireAuth` and `optionalAuth`.
+>
+> Current state lives in `docs/PROJECT.md`; the execution design, including the
+> Postgres behaviour changes that fail silently, is in
+> `docs/superpowers/specs/2026-07-31-supabase-migration-design.md`.
+
 **Decision (2026-07-30):** Supabase is the **database host and auth provider**.
 Express stays as the API layer. This is narrower than "Supabase for everything"
 and it avoids the objections in `docs/BACKEND-OPTIONS.md` — we are not adopting

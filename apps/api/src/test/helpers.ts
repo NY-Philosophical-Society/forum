@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import request from "supertest";
 import { app } from "../app";
 import { prisma } from "../db";
+import { fetchWithTimeout } from "../lib/supabase";
 
 export interface TestUser {
   token: string;
@@ -25,7 +26,14 @@ export function uniqueEmail(prefix = "user"): string {
 const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_PUBLISHABLE_KEY!,
-  { auth: { persistSession: false, autoRefreshToken: false } },
+  {
+    auth: { persistSession: false, autoRefreshToken: false },
+    // Bounded, retrying fetch — see lib/supabase.ts. Without it a stale keep-
+    // alive socket occasionally makes one fixture call hang for undici's
+    // 300s header timeout, which shows up as a random unrelated test timing
+    // out and reads as flakiness in the code under test.
+    global: { fetch: (input, init) => fetchWithTimeout(input, init) },
+  },
 );
 
 /**

@@ -5,6 +5,54 @@ the backend engineer can rebuild it properly without reading diffs. Shapes are
 the source of truth in `packages/shared/src/types.ts` (responses) and
 `schemas.ts` (request validation); this file is the map.
 
+## 2026-07-31 — Supabase Auth replaces our identity layer
+
+**Breaking.** The API no longer issues, signs, or verifies its own sessions and
+stores no credential. Clients authenticate with Supabase and send the
+Supabase-issued JWT as the bearer token; the API verifies it against the
+project's JWKS (`src/lib/supabase.ts`).
+
+### Endpoints removed
+
+All under `/api/auth`, all now Supabase's own client-side calls:
+
+`POST /signup` · `POST /login` · `POST /change-password` · `POST /change-email` ·
+`GET /oauth/config` · `POST /oauth/google` · `POST /oauth/apple` ·
+`POST /oauth/dev-mock` · `POST /password-reset/request` ·
+`POST /password-reset/confirm`
+
+### Endpoints changed
+
+- `GET /api/auth/account` — **dropped `hasPassword`**. Whether an account has a
+  password is Supabase's business; clients read `user.identities` off their own
+  session instead.
+- `DELETE /api/users/me` — **no longer accepts `password`**, which it used to
+  verify against the stored hash. It now requires the caller's JWT to have been
+  issued within the last 5 minutes, and returns
+  `401 { reauthRequired: true }` otherwise. Clients re-authenticate through
+  Supabase immediately before calling. It also deletes the Supabase auth user
+  after anonymizing our row.
+
+### Data model
+
+- `User.id` **is** the Supabase `auth.users` id (a uuid), not a cuid. There is
+  no linking column and no foreign key to `auth.users`.
+- Dropped: `User.passwordHash`, `User.googleId`, `User.appleId`, and the whole
+  `PasswordResetToken` model.
+- A `User` row is created lazily on the first authenticated request, from the
+  token's `sub`, `email` and `user_metadata.display_name`. Clients must send
+  `display_name` at signup or the account falls back to the email local-part.
+- `User.email` is mirrored from the token on each request, so an email changed
+  in Supabase propagates.
+
+### Behaviour worth re-testing after any Postgres change
+
+Two things changed silently with the move off SQLite, neither of which throws:
+case-insensitive `contains` (now explicit, `containsInsensitive` in `src/db.ts`)
+and `NULLS`-first ordering on `DESC` (pinned threads need `nulls: "last"`).
+`@mentions` also broke until the id pattern in `packages/shared/src/mentions.ts`
+accepted hyphens.
+
 ## 2026-07-30 — Posting moves to the honor system (ID verification made optional)
 
 **Owner decision:** posting no longer requires a completed ID-verification

@@ -233,6 +233,14 @@ excluded from `GET /api/search` user results or `GET /api/users?search=`.
 
 ## Auth
 
+> **Superseded 2026-07-31.** This section describes the hand-rolled identity
+> layer that Supabase Auth replaced. Sections *Middleware* and *The access-tier
+> model* below are still accurate — the authorization ladder did not change,
+> because it reads the `User` row, not the token. Everything about JWT issuance,
+> password hashing, OAuth linking and password reset is gone; see
+> `docs/API-CHANGES.md` (2026-07-31) for what replaced it and which endpoints
+> no longer exist.
+
 ### JWT
 
 `apps/api/src/auth.ts` — 19 lines, the whole session mechanism:
@@ -511,7 +519,13 @@ real EAS build.
 **Refusal:** `StubPushProvider`'s constructor **throws if `EXPO_ACCESS_TOKEN`
 is set** — silently logging instead of sending would mask a misconfiguration.
 
-### `oauth.ts` — Google / Apple sign-in
+### `oauth.ts` — Google / Apple sign-in *(removed 2026-07-31)*
+
+> This provider is gone. Google and Apple sign-in are configured in Supabase
+> now, and neither the API nor the clients hold a provider secret. Three
+> provider interfaces remain: storage, verification, push.
+
+#### Historical
 
 Not an interface but the same shape. `isGoogleConfigured()` is
 `GOOGLE_WEB_CLIENT_ID || GOOGLE_IOS_CLIENT_ID`; `isAppleConfigured()` is
@@ -644,15 +658,16 @@ cd apps/api && npx vitest run src/routes/threads.access.test.ts   # one file
 cd packages/shared && npm test
 ```
 
-No env setup and no credentials are needed — the suite configures itself
-(stub providers, no OAuth). `docs/TESTING.md` has the full detail; the short
-version:
+`supabase start` must be running — the suite needs the local stack for the
+database and the auth server both. `docs/TESTING.md` has the full detail; the
+short version:
 
-- `src/test/global-setup.ts` points `DATABASE_URL` at a throwaway
-  `$TMPDIR/nyps-api-test-*/test.db`, runs `prisma migrate deploy` against it,
-  and deletes it afterwards. `src/test/setup.ts` **refuses to run** unless
-  `DATABASE_URL` carries the `nyps-api-test-` marker, so a broken env can never
-  fall back to `dev.db`. Files run one at a time in fresh forks.
+- `src/test/global-setup.ts` creates a throwaway `nyps_api_test_*` database on
+  the local Supabase Postgres, runs `prisma migrate deploy` against it, and
+  drops it afterwards. `src/test/setup.ts` **refuses to run** unless
+  `DATABASE_URL` carries the `nyps_api_test_` marker, so a broken env can never
+  fall back to the dev database, and global setup refuses a non-loopback
+  `SUPABASE_URL`. Files run one at a time in fresh forks.
 - Behaviour is exercised **through the routes**, so middleware — where the
   authorization bugs live — is always in the loop. Direct Prisma access is
   reserved for fixtures with no API path and for asserting persistence.

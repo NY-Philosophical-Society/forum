@@ -52,11 +52,12 @@ missing before launch" below before you show this to real users.
   reply, like, or DM. This is enforced server-side (`requireVerified` in
   `apps/api/src/middleware/auth.ts`), not just in the UI. See "Read access" below for how *reading*
   is gated differently — that's a distinct question from verification.
-- **Google / Apple sign-in verify a provider-issued identity token server-side** (same trust model
-  as the identity-verification piece: verify a signed assertion, never touch a password). See
-  `apps/api/src/lib/oauth.ts`. Neither works without real credentials from Google Cloud Console /
-  Apple Developer, which only you can create — see "Going to production" below. Until then, both
-  buttons fall back to a local mock sign-in screen so the UX can be built and demoed today.
+- **Supabase Auth is the identity provider.** Email/password and Google/Apple sign-in are all
+  Supabase's; this API stores no password hash and signs no token of its own. It verifies the
+  incoming Supabase JWT against the project's JWKS (`apps/api/src/lib/supabase.ts`) and looks up the
+  account. The local stack signs with asymmetric keys exactly so this is one code path in
+  development and production. Google/Apple still need real provider credentials, configured in
+  Supabase rather than here — see "Going to production" below.
 - **Profiles and photos.** The founding requirement was a real name *and* a photo. Every author
   name links to a profile (`/u/[userId]` on web, a matching screen on mobile) showing avatar, bio,
   badges, and paginated threads/replies. Avatars upload from web (canvas crop/resize) and mobile
@@ -65,7 +66,11 @@ missing before launch" below before you show this to real users.
   real-name forum. Image storage follows the same provider pattern as verification
   (`apps/api/src/lib/storage-provider.ts`): a zero-credential local-disk stub in dev, S3/R2 gated
   behind env vars for production. Account management (change/set password, change email, JSON data
-  export, anonymizing account deletion) lives in Settings on both platforms.
+  export, anonymizing account deletion) lives in Settings on both platforms; the credential parts
+  call Supabase directly, while deletion stays ours and additionally deletes the auth user.
+- **Deleting your account requires a fresh sign-in.** The API demands a recently-issued token
+  (`apps/api/src/routes/users.ts`), so a borrowed or long-idle session can't delete an account.
+  This replaces the password check it used to run itself, now that Supabase owns the password.
 - **Writing is markdown, with an audit trail.** Threads, replies, and bios render markdown
   (bold, italic, links, blockquotes, lists, code, headings) through safe-by-default renderers —
   `react-markdown` without `rehype-raw` on web, `react-native-markdown-display` on mobile — so
@@ -103,9 +108,10 @@ missing before launch" below before you show this to real users.
 
 ```
 apps/
-  api/      Express + Prisma (SQLite locally) + JWT auth + verification stub + feed/likes/DM API
-  web/      Next.js app (App Router), talks to the API over HTTP, JWT stored in localStorage
-  mobile/   Expo/React Native app, same API, JWT stored via AsyncStorage
+  api/      Express + Prisma (Supabase Postgres) + Supabase Auth + verification stub + feed/likes/DM API
+  web/      Next.js app (App Router), talks to the API over HTTP; supabase-js owns the session
+  mobile/   Expo/React Native app, same API; supabase-js persists the session via AsyncStorage
+supabase/   local stack config (config.toml) — ports, auth settings, email templates
 packages/
   shared/   zod schemas + TS types shared by api/web/mobile (signup/login/thread/post/like/DM shapes)
 docs/
@@ -119,19 +125,32 @@ docs/
 
 ## Running it locally
 
-Requires Node 20+. From the repo root:
+Requires Node 20+, the [Supabase CLI](https://supabase.com/docs/guides/local-development), and
+Docker running. From the repo root:
 
 ```bash
 npm install
 ```
+
+**Supabase** (first time only — the database and the auth server both live here):
+
+```bash
+supabase gen signing-key --algorithm ES256   # writes supabase/signing_keys.json, gitignored
+supabase start
+```
+
+This project deliberately runs on the **544xx** port block rather than Supabase's 543xx default,
+and under its own `project_id`, so it can run alongside another local Supabase stack without
+colliding on ports or container names — see `supabase/config.toml`. Studio is at
+http://127.0.0.1:54423, and captured emails (password resets) at http://127.0.0.1:54424.
 
 **API** (first time only: copy env, migrate, seed):
 
 ```bash
 cd apps/api
 cp .env.example .env
-npm run db:migrate   # creates apps/api/prisma/dev.db (SQLite)
-npm run db:seed       # seeds 12 tags + 5 demo threads with nested replies
+npm run db:migrate    # applies the Prisma migration to the local Supabase Postgres
+npm run db:seed       # seeds 12 tags + 5 demo threads, and the demo accounts in Supabase Auth
 cd ../..
 npm run dev:api        # http://localhost:4000
 ```
@@ -191,26 +210,28 @@ way on every platform:
 
 ## Sign-in options
 
-Email/password, Google, and Apple all produce the exact same kind of account (a `User` row with a
-JWT session) — Google/Apple sign-in is just a faster way to create or return to that account, not
-a separate system, and doesn't skip identity verification. A user who signs up via Google is just
-as `UNVERIFIED` as one who used a password, and faces the same wall the first time they try to
-post.
+Email/password, Google, and Apple all produce the exact same kind of account. Supabase issues the
+session in every case; Google/Apple sign-in is just a faster way to create or return to that
+account, not a separate system, and doesn't skip identity verification. A user who signs up via
+Google is just as `UNVERIFIED` as one who used a password, and faces the same wall the first time
+they try to post — because that wall reads our `User` row, not the token.
 
-- Web: Google uses [Google Identity Services](https://developers.google.com/identity/gsi/web)
-  (`apps/web/src/app/oauth-buttons.tsx`); Apple uses
-  [Sign in with Apple JS](https://developer.apple.com/documentation/sign_in_with_apple/sign_in_with_apple_js).
-  Both POST the resulting identity token to the API, which verifies it and returns our own JWT —
-  same session mechanism as email/password.
-- Mobile: Google uses `expo-auth-session`; Apple uses `expo-apple-authentication`
-  (`apps/mobile/src/components/OAuthButtons.tsx`). Apple Sign-In specifically **requires a custom
-  dev client build (EAS Build)** — it does not work in plain Expo Go, since it needs the "Sign In
-  with Apple" capability tied to a real bundle identifier.
-- Without real credentials configured, both platforms fall back to a mock sign-in screen
-  (`/oauth/mock/[provider]` on web, `MockOAuthScreen` on mobile) backed by
-  `POST /api/auth/oauth/dev-mock` — good enough to build and demo the flow, never a substitute for
-  the real thing. That route refuses to run at all once real credentials are configured, so it
-  can't become an accidental backdoor in production.
+A Supabase user has **no forum account until their first authenticated request**. The API creates
+that row from the token's claims (`resolveUser` in `apps/api/src/middleware/auth.ts`), which is why
+both `requireAuth` and `optionalAuth` route through it — a new member whose first click is a thread
+link would otherwise see the anonymous preview wall while signed in.
+
+- Web: `apps/web/src/lib/auth-context.tsx` holds the session via supabase-js; OAuth is
+  `signInWithOAuth` (`apps/web/src/app/oauth-buttons.tsx`).
+- Mobile: same shape in `apps/mobile/src/lib/auth-context.tsx`, with AsyncStorage as the session
+  store. OAuth opens Supabase's authorize URL through `expo-web-browser` and hands the returned
+  tokens to `setSession`; the redirect scheme is declared in `app.json` **and** allow-listed in
+  `supabase/config.toml`, and the flow silently fails to return if those disagree. Apple Sign-In
+  still **requires a custom dev client build (EAS Build)** — it does not work in plain Expo Go.
+- Password reset on web is Supabase's emailed link; on mobile it's the emailed **code**, since the
+  app has no web page to land on. That code only reaches the user because the recovery email
+  template includes `{{ .Token }}` — see `supabase/templates/recovery.html`. The hosted project
+  needs the same template, or mobile password reset breaks while web keeps working.
 
 ## Going to production
 
@@ -223,28 +244,31 @@ Five things need real decisions before this goes live — flagged here rather th
    events to use in its top comment). Point the vendor's webhook at
    `POST /api/verification/webhook` (not yet implemented — the stub's `/mock-complete` route is
    not safe to expose in production; it has no signature verification).
-2. **Google / Apple OAuth credentials.** In
-   [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials,
-   create a "Web application" OAuth client (for `apps/web`) and an "iOS" OAuth client (for
-   `apps/mobile`, using its bundle identifier `org.nyphilosophy.forum`). Set
-   `GOOGLE_WEB_CLIENT_ID` / `GOOGLE_IOS_CLIENT_ID` in `apps/api/.env`,
-   `NEXT_PUBLIC_GOOGLE_CLIENT_ID` in `apps/web/.env.local`, and
-   `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` in `apps/mobile/.env`. In
-   [Apple Developer](https://developer.apple.com/account) → Certificates, IDs & Profiles, create a
-   Services ID (with your web domain + redirect URL registered) for web, and enable the "Sign In
-   with Apple" capability on the app's Bundle ID for mobile. Set `APPLE_SERVICES_ID` /
-   `APPLE_BUNDLE_ID` in `apps/api/.env`. Full detail in `apps/api/src/lib/oauth.ts`.
+2. **Google / Apple OAuth credentials.** These are configured **in Supabase now**, not here — the
+   apps never see a provider secret. In [Google Cloud Console](https://console.cloud.google.com)
+   → APIs & Services → Credentials create a "Web application" OAuth client, and in
+   [Apple Developer](https://developer.apple.com/account) create a Services ID with the
+   "Sign In with Apple" capability on the app's Bundle ID (`org.nyphilosophy.forum`). Paste the
+   client id/secret of each into the Supabase project's Authentication → Providers page, and add
+   the app's redirect URLs to that project's allow-list. Locally the equivalents are the
+   `[auth.external.*]` blocks and `additional_redirect_urls` in `supabase/config.toml`.
+   Also copy `supabase/templates/recovery.html` into Authentication → Email Templates, or mobile
+   password reset (which needs the `{{ .Token }}` code) will break.
 3. **Image storage bucket.** Avatars and post-image embeds are stored via the
    provider in `apps/api/src/lib/storage-provider.ts`. Locally they sit on disk under
    `apps/api/uploads/` and are served by the API itself — fine for one dev machine, not for
    production. Create an S3 or Cloudflare R2 bucket, set `STORAGE_PROVIDER=s3` plus the
    `STORAGE_S3_*` variables in `apps/api/.env`, and implement `S3StorageProvider` (the file's top
    comment has the exact steps). The local stub refuses to run once real credentials are set.
-4. **Real database + hosting.** Swap `apps/api/prisma/schema.prisma`'s datasource from `sqlite`
-   to `postgresql`, point `DATABASE_URL` at a real Postgres instance, and host the API somewhere
-   that runs a long-lived Node process (Railway, Render, Fly.io — not Vercel serverless, which
-   doesn't suit a stateful Express app well). Ship `apps/mobile` via EAS Build once the API has a
-   stable public URL.
+4. **Hosting.** The database is already Postgres on Supabase; point `DATABASE_URL` at the hosted
+   project's **pooled** connection (Supavisor, port 6543, with
+   `?pgbouncer=true&connection_limit=1`) and `DIRECT_URL` at the direct one on 5432 — Prisma runs
+   migrations over the direct URL, and aiming migrations at the pooled one is the classic way to
+   break this. Set `SUPABASE_URL` and `SUPABASE_SECRET_KEY` to the hosted project's values, and the
+   `NEXT_PUBLIC_SUPABASE_*` / `EXPO_PUBLIC_SUPABASE_*` pairs to its URL and publishable key. Host
+   the API somewhere that runs a long-lived Node process (Railway, Render, Fly.io — not Vercel
+   serverless, which doesn't suit a stateful Express app well). Ship `apps/mobile` via EAS Build
+   once the API has a stable public URL.
 
    **Deploying `apps/web` to Vercel — two gotchas, both already hit:**
    - Set **Root Directory** to `apps/web` in Settings → General. This is a workspaces monorepo;
