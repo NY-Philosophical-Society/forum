@@ -24,6 +24,7 @@ export const DELETED_AUTHOR: PublicUser = {
   bio: null,
   verificationStatus: "UNVERIFIED",
   canWrite: false,
+  canMessage: false,
   role: "user",
   isSupporter: false,
   createdAt: new Date(0).toISOString(),
@@ -37,6 +38,8 @@ export function toPublicUser(user: UserLike): PublicUser {
     bio: user.bio,
     verificationStatus: user.verificationStatus as PublicUser["verificationStatus"],
     canWrite: idVerificationRequired() ? user.verificationStatus === "VERIFIED" : true,
+    // Always strict — DMs are private, so the honor system does not apply.
+    canMessage: user.verificationStatus === "VERIFIED",
     role: user.role as PublicUser["role"],
     isSupporter: user.isSupporter,
     createdAt: user.createdAt.toISOString(),

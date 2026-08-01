@@ -25,6 +25,14 @@ export interface PublicUser {
    * two are deliberately not the same thing.
    */
   canWrite: boolean;
+  /**
+   * Whether this account may start or continue a direct message. Unlike
+   * `canWrite`, this always requires a completed ID check — public posting is
+   * on the honor system, but private messages are not, because an abusive DM
+   * is invisible to everyone except its recipient. Check this rather than
+   * `verificationStatus` when gating messaging in the UI.
+   */
+  canMessage: boolean;
   role: "user" | "admin";
   isSupporter: boolean;
   createdAt: string;

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { sendMessageSchema } from "@nyps-forum/shared";
 import { prisma } from "../db";
-import { requireAuth, requireVerified } from "../middleware/auth";
+import { requireAuth, requireIdVerified } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
 import { writeLimiter } from "../lib/rate-limit";
 import { notify, toSnippet } from "../lib/notifications";
@@ -123,7 +123,7 @@ messagesRouter.get("/:userId", requireAuth, async (req, res) => {
   });
 });
 
-messagesRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, res) => {
+messagesRouter.post("/", requireAuth, requireIdVerified, writeLimiter, async (req, res) => {
   const parsed = sendMessageSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });

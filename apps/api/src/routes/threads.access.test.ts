@@ -115,6 +115,33 @@ describe("write access tiers", () => {
     expect(reply.status).toBe(201);
   });
 
+  // DMs are the deliberate exception to the honor system: public posting is
+  // visible and moderatable, a private message is not.
+  it("blocks an unverified account from sending a DM even under the honor system", async () => {
+    const unverified = await signup("tier-unverified-dm");
+    const res = await request(app)
+      .post("/api/messages")
+      .set("Authorization", `Bearer ${unverified.token}`)
+      .send({ recipientId: author.id, body: "unsolicited" });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/verified identity/i);
+
+    // And nothing was delivered.
+    const inbox = await request(app)
+      .get(`/api/messages/${author.id}`)
+      .set("Authorization", `Bearer ${unverified.token}`);
+    expect(inbox.body.messages).toEqual([]);
+  });
+
+  it("lets a verified account send a DM", async () => {
+    const verified = await signupVerified("tier-verified-dm");
+    const res = await request(app)
+      .post("/api/messages")
+      .set("Authorization", `Bearer ${verified.token}`)
+      .send({ recipientId: author.id, body: "a real question" });
+    expect(res.status).toBe(201);
+  });
+
   describe("with REQUIRE_ID_VERIFICATION=true", () => {
     const original = process.env.REQUIRE_ID_VERIFICATION;
     beforeAll(() => {

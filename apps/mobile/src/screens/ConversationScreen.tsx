@@ -87,7 +87,7 @@ export function ConversationScreen({ route, navigation }: Props) {
     }
   }
 
-  const canSend = user?.canWrite && !blocked;
+  const canSend = user?.canMessage && !blocked;
 
   return (
     <View style={styles.container}>

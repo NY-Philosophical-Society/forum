@@ -97,7 +97,7 @@ export default function ConversationPage() {
     );
   }
 
-  const canSend = user?.canWrite && !blocked;
+  const canSend = user?.canMessage && !blocked;
 
   return (
     <div>
