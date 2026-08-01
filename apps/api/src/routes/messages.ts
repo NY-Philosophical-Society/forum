@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { sendMessageSchema } from "@nyps-forum/shared";
 import { prisma } from "../db";
-import { requireAuth, requireIdVerified } from "../middleware/auth";
+import { requireAuth } from "../middleware/auth";
 import { toPublicUser } from "../lib/serialize";
 import { writeLimiter } from "../lib/rate-limit";
 import { notify, toSnippet } from "../lib/notifications";
@@ -120,10 +120,16 @@ messagesRouter.get("/:userId", requireAuth, async (req, res) => {
     limit,
     offset,
     hasMore: offset + messages.length < total,
+    // An existing conversation is open to both sides; only opening a new one
+    // needs a verified identity. Mirrors the POST check above.
+    canReply:
+      total > 0 ||
+      req.user!.verificationStatus === "VERIFIED" ||
+      req.user!.role === "admin",
   });
 });
 
-messagesRouter.post("/", requireAuth, requireIdVerified, writeLimiter, async (req, res) => {
+messagesRouter.post("/", requireAuth, writeLimiter, async (req, res) => {
   const parsed = sendMessageSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -151,6 +157,31 @@ messagesRouter.post("/", requireAuth, requireIdVerified, writeLimiter, async (re
   });
   if (block) {
     return res.status(403).json({ error: "You can't message this user" });
+  }
+
+  // Verification gates *first contact*, not messaging in general. Unsolicited
+  // contact is the abuse vector; a reply is consented-to by definition,
+  // because the other person opened the conversation. So an unverified member
+  // can always answer someone who wrote to them — they just can't cold-open a
+  // conversation themselves. A conversation can therefore only ever be
+  // started by someone whose identity is established.
+  const priorMessage = await prisma.message.findFirst({
+    where: {
+      OR: [
+        { senderId: req.user!.id, recipientId },
+        { senderId: recipientId, recipientId: req.user!.id },
+      ],
+    },
+    select: { id: true },
+  });
+  const isFirstContact = !priorMessage;
+  const identityEstablished =
+    req.user!.verificationStatus === "VERIFIED" || req.user!.role === "admin";
+  if (isFirstContact && !identityEstablished) {
+    return res.status(403).json({
+      error:
+        "Starting a new conversation needs a verified identity. Verify from your account settings — it's a one-time check. You can always reply to someone who messages you first.",
+    });
   }
 
   const message = await prisma.message.create({

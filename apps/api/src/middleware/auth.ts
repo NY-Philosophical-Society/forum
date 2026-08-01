@@ -130,29 +130,6 @@ export function requireVerified(req: Request, res: Response, next: NextFunction)
 }
 
 /**
- * Always requires a completed ID check, regardless of the honor-system toggle.
- *
- * This is deliberately NOT the same as requireVerified. Public posting runs on
- * the honor system — a bad actor there is visible, on the record, and can be
- * moderated in the open. A direct message is private: nobody sees it, so the
- * only real deterrent is that the sender's identity is genuinely established.
- * Verification is expensive to fake, which is exactly what makes it work as an
- * anti-abuse gate — it removes the disposable accounts that harassment and
- * spam depend on.
- *
- * Must run after requireAuth.
- */
-export function requireIdVerified(req: Request, res: Response, next: NextFunction) {
-  if (req.user?.verificationStatus !== "VERIFIED") {
-    return res.status(403).json({
-      error:
-        "Direct messages need a verified identity. Verify from your account settings — it's a one-time check.",
-    });
-  }
-  next();
-}
-
-/**
  * Member-only surfaces (chapters, the member directory). Admins pass without
  * isSupporter — moderating must never require donating. Must run after
  * requireAuth. This gates *member features* only; it must never be added to

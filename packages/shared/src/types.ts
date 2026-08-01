@@ -211,6 +211,13 @@ export interface ConversationResponse {
   limit: number;
   offset: number;
   hasMore: boolean;
+  /**
+   * Whether the viewer may send in *this* conversation. True once it exists,
+   * even for an unverified member — replying to someone who wrote to you is
+   * consented-to. Distinct from `PublicUser.canMessage`, which is about
+   * opening a brand-new conversation.
+   */
+  canReply: boolean;
 }
 
 export interface OAuthConfig {

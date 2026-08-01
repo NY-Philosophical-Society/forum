@@ -24,6 +24,7 @@ export function ConversationScreen({ route, navigation }: Props) {
   const [messagesWindow, setMessagesWindow] = useState(MESSAGES_PAGE);
   const [loadingMore, setLoadingMore] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [canReply, setCanReply] = useState(true);
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -36,6 +37,7 @@ export function ConversationScreen({ route, navigation }: Props) {
         .then((res) => {
           setMessages(res.messages);
           setHasMore(res.hasMore);
+          setCanReply(res.canReply);
         })
         .catch((e) => setError(e.message));
     },
@@ -87,7 +89,7 @@ export function ConversationScreen({ route, navigation }: Props) {
     }
   }
 
-  const canSend = user?.canMessage && !blocked;
+  const canSend = canReply && !blocked;
 
   return (
     <View style={styles.container}>
@@ -143,6 +145,14 @@ export function ConversationScreen({ route, navigation }: Props) {
         )}
       />
 
+      {/* They can answer here, but can't open conversations of their own yet. */}
+      {canSend && user && !user.canMessage && (
+        <Text style={styles.notice}>
+          You can reply here because they wrote to you first. Verify your identity from the
+          Profile tab to start conversations of your own.
+        </Text>
+      )}
+
       {canSend ? (
         <View style={styles.composeRow}>
           <TextInput
@@ -159,7 +169,8 @@ export function ConversationScreen({ route, navigation }: Props) {
       ) : (
         !blocked && (
           <Text style={styles.notice}>
-            Verify your identity from the Profile tab to send messages.
+            Verify your identity from the Profile tab to start a conversation. You can always
+            reply to anyone who messages you first.
           </Text>
         )
       )}

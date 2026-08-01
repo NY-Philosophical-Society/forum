@@ -20,6 +20,7 @@ export default function ConversationPage() {
   const [messagesWindow, setMessagesWindow] = useState(MESSAGES_PAGE);
   const [loadingMore, setLoadingMore] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [canReply, setCanReply] = useState(true);
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -34,6 +35,7 @@ export default function ConversationPage() {
       setOtherUser(res.otherUser);
       setMessages(res.messages);
       setHasMore(res.hasMore);
+      setCanReply(res.canReply);
     } catch (e: any) {
       setError(e.message);
     }
@@ -97,7 +99,7 @@ export default function ConversationPage() {
     );
   }
 
-  const canSend = user?.canMessage && !blocked;
+  const canSend = canReply && !blocked;
 
   return (
     <div>
@@ -145,6 +147,14 @@ export default function ConversationPage() {
         ))}
       </div>
 
+      {/* They can answer here, but can't open conversations of their own yet. */}
+      {canSend && user && !user.canMessage && (
+        <p className="notice" style={{ marginBottom: "1rem" }}>
+          You can reply here because {otherUser.displayName} wrote to you first.{" "}
+          <a href="/verify">Verify your identity</a> to start conversations of your own.
+        </p>
+      )}
+
       {canSend ? (
         <form onSubmit={send} style={{ maxWidth: "none" }}>
           <label>
@@ -166,7 +176,8 @@ export default function ConversationPage() {
           <p className="notice">
             {user ? (
               <>
-                <a href="/verify">Verify your identity</a> to send messages.
+                <a href="/verify">Verify your identity</a> to start a conversation. You can always
+                reply to anyone who messages you first.
               </>
             ) : (
               <>

@@ -115,9 +115,9 @@ describe("write access tiers", () => {
     expect(reply.status).toBe(201);
   });
 
-  // DMs are the deliberate exception to the honor system: public posting is
-  // visible and moderatable, a private message is not.
-  it("blocks an unverified account from sending a DM even under the honor system", async () => {
+  // DMs are the deliberate exception to the honor system — but the gate is on
+  // *first contact*, not on messaging generally. Replying is consented-to.
+  it("blocks an unverified account from cold-opening a conversation", async () => {
     const unverified = await signup("tier-unverified-dm");
     const res = await request(app)
       .post("/api/messages")
@@ -126,14 +126,38 @@ describe("write access tiers", () => {
     expect(res.status).toBe(403);
     expect(res.body.error).toMatch(/verified identity/i);
 
-    // And nothing was delivered.
-    const inbox = await request(app)
+    // Nothing delivered, and the UI is told it can't reply here.
+    const convo = await request(app)
       .get(`/api/messages/${author.id}`)
       .set("Authorization", `Bearer ${unverified.token}`);
-    expect(inbox.body.messages).toEqual([]);
+    expect(convo.body.messages).toEqual([]);
+    expect(convo.body.canReply).toBe(false);
   });
 
-  it("lets a verified account send a DM", async () => {
+  it("lets an unverified account REPLY once a verified member opens the conversation", async () => {
+    const unverified = await signup("tier-unverified-replier");
+
+    // The verified side opens it.
+    const opened = await request(app)
+      .post("/api/messages")
+      .set("Authorization", `Bearer ${author.token}`)
+      .send({ recipientId: unverified.id, body: "I liked your point about necessity." });
+    expect(opened.status).toBe(201);
+
+    // Now the unverified recipient may answer.
+    const convo = await request(app)
+      .get(`/api/messages/${author.id}`)
+      .set("Authorization", `Bearer ${unverified.token}`);
+    expect(convo.body.canReply).toBe(true);
+
+    const reply = await request(app)
+      .post("/api/messages")
+      .set("Authorization", `Bearer ${unverified.token}`)
+      .send({ recipientId: author.id, body: "Thanks — here's what I meant." });
+    expect(reply.status).toBe(201);
+  });
+
+  it("lets a verified account open a conversation", async () => {
     const verified = await signupVerified("tier-verified-dm");
     const res = await request(app)
       .post("/api/messages")
