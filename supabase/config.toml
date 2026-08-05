@@ -167,10 +167,15 @@ site_url = "http://localhost:3000"
 # Post-OAuth redirect allow-list: the web app on either hostname, and the
 # mobile app's scheme (apps/mobile/app.json) so expo-auth-session can hand the
 # session back to the native app.
+# The default web dev port is 3000. If you run the web app somewhere else
+# because another project holds that port, put your origin in WEB_DEV_URL in
+# the repo-root .env — an unset variable resolves to "", which matches nothing
+# and leaves the defaults below untouched.
 additional_redirect_urls = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "nypsforum://auth-callback",
+  "env(WEB_DEV_URL)",
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
