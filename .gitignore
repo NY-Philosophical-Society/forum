@@ -6,8 +6,11 @@ build/
 .expo-shared/
 *.log
 *.tsbuildinfo
+# Catches .env, .env.local, .env.development.local, .env.*.local — everything
+# but the committed .env.example files.
 .env
-.env.local
+.env.*
+!.env*.example
 apps/api/prisma/dev.db
 apps/api/prisma/dev.db-journal
 # Local storage-provider stub writes uploaded images here
