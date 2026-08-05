@@ -85,7 +85,7 @@ without erasing the choices.
 **Auth:** `requireAuth` · **Limiter:** `writeLimiter`
 
 **Not JSON.** Raw bytes with `Content-Type: image/jpeg | image/png | image/webp`;
-parser is `express.raw({ type: [...], limit: "8MB" })`.
+parser is `express.raw({ type: [...], limit: "4MB" })`.
 
 **200** `{ "user": PublicUser }` with `avatarUrl` set.
 

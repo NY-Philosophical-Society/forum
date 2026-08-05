@@ -76,7 +76,7 @@ export default function FormattingPage() {
 
       <h3>Images</h3>
       <p className="meta" style={{ marginBottom: "var(--space-3)" }}>
-        Use the 🖼 toolbar button to upload a picture (JPEG, PNG, or WebP, up to 8MB) — it is
+        Use the 🖼 toolbar button to upload a picture (JPEG, PNG, or WebP, up to 4MB) — it is
         inserted as <code>![image](url)</code> where your cursor is. Only images uploaded here
         render inline; a link to an image elsewhere on the web stays a link, so nobody can use a
         post to track its readers.

@@ -11,7 +11,11 @@ export const uploadsRouter = Router();
 // is on the raw parser AND re-checked against the sniffed format, so a
 // mislabeled Content-Type can't smuggle another file type through.
 const IMAGE_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+// 4MB, not the 8MB this used to be: Vercel caps a serverless function's whole
+// request at 4.5MB, and that ceiling is enforced by the platform before our
+// handler runs — an over-limit upload would fail with a platform error page
+// instead of our 413. The margin below 4.5 leaves room for headers.
+const IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const IMAGE_MIN_DIMENSION = 10;
 const IMAGE_MAX_DIMENSION = 10_000;
 // Wide enough for any reading column at 2x; anything larger is downscaled.

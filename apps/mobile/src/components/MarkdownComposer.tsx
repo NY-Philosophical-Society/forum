@@ -23,7 +23,7 @@ import { fonts, radius, spacing, type, type ThemeColors } from "../lib/theme";
 import { Markdown } from "./Markdown";
 import { MarkdownHint } from "./MarkdownHint";
 
-/** Server cap is 1600px; downscaling on-device keeps camera shots under the 8MB limit. */
+/** Server cap is 1600px; downscaling on-device keeps camera shots under the 4MB limit. */
 const IMAGE_MAX_EDGE = 1600;
 
 type Wrap = { before: string; after?: string; line?: boolean; placeholder: string };

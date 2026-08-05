@@ -161,7 +161,9 @@ usersRouter.patch("/me", requireAuth, writeLimiter, async (req, res) => {
 // against the sniffed format below, so a mislabeled Content-Type can't
 // smuggle another file type through.
 const AVATAR_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const AVATAR_MAX_BYTES = 8 * 1024 * 1024;
+// Matches the embed cap in routes/uploads.ts — 4MB, under Vercel's 4.5MB
+// serverless request ceiling. See the comment there.
+const AVATAR_MAX_BYTES = 4 * 1024 * 1024;
 const AVATAR_MIN_DIMENSION = 100;
 const AVATAR_MAX_DIMENSION = 10_000;
 const AVATAR_SIZE = 512;
