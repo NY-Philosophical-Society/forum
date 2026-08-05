@@ -275,7 +275,9 @@ otp_expiry = 3600
 # change in its dashboard, or password reset silently breaks on mobile.
 [auth.email.template.recovery]
 subject = "Reset your Forum password"
-content_path = "./templates/recovery.html"
+# Resolved against the directory you run `supabase` from, not against this file,
+# so it needs the supabase/ prefix — matching the commented invite example above.
+content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
