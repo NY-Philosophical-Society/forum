@@ -2,6 +2,7 @@ node_modules/
 dist/
 build/
 .next/
+.vercel/
 .expo/
 .expo-shared/
 *.log
