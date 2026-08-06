@@ -11,8 +11,6 @@ build/
 .env
 .env.*
 !.env*.example
-apps/api/prisma/dev.db
-apps/api/prisma/dev.db-journal
 # Local storage-provider stub writes uploaded images here
-apps/api/uploads/
+apps/web/uploads/
 .DS_Store

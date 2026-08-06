@@ -1,13 +1,13 @@
 # Chapters & the member directory
 
-`apps/api/src/routes/chapters.ts` · `directory.ts` · `apps/api/src/lib/chapter-access.ts`
+`apps/web/src/server/routes/chapters.ts` · `directory.ts` · `apps/web/src/server/chapter-access.ts`
 Product decisions: `docs/MEMBERSHIP.md`. Cross-cutting rules: [`../API.md`](../API.md).
 
 ---
 
 ## The chapter access rule
 
-One module owns it — `apps/api/src/lib/chapter-access.ts` — and every gate in
+One module owns it — `apps/web/src/server/chapter-access.ts` — and every gate in
 the API calls into it. Rebuild it as one module too.
 
 ```

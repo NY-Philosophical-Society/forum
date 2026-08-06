@@ -8,10 +8,9 @@
   ],
   "scripts": {
     "test": "npm run test --workspaces --if-present",
-    "dev:api": "npm run dev --workspace=apps/api",
     "dev:web": "npm run dev --workspace=apps/web",
     "dev:mobile": "npm run start --workspace=apps/mobile",
-    "db:migrate": "npm run db:migrate --workspace=apps/api",
-    "db:seed": "npm run db:seed --workspace=apps/api"
+    "db:migrate": "npm run db:migrate --workspace=apps/web",
+    "db:seed": "npm run db:seed --workspace=apps/web"
   }
 }

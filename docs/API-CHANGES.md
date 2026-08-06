@@ -5,12 +5,33 @@ the backend engineer can rebuild it properly without reading diffs. Shapes are
 the source of truth in `packages/shared/src/types.ts` (responses) and
 `schemas.ts` (request validation); this file is the map.
 
+## 2026-08-05 — API and web consolidate into one Next.js application
+
+**The endpoint contract is unchanged.** The Express process and `apps/api`
+workspace are gone. The existing `/api/*` surface now runs through Node-runtime
+Next.js route handlers in `apps/web`; the browser client calls those paths on
+the same origin and no longer has an API base-URL variable.
+
+- Prisma, guards, providers, and domain routes live under
+  `apps/web/src/server`; the schema and seed live under `apps/web/prisma`.
+- JSON requests retain a 100 KiB bound; raw image uploads retain their 4 MB
+  MIME/size checks and sharp re-encoding.
+- Unexpected errors, missing routes, and unsupported methods now return bounded
+  JSON 500, 404, and 405 responses instead of relying on Express fallthrough.
+- Rate limits retain their three policies and per-request test bypass, but the
+  in-memory counters are per serverless instance until a shared store replaces
+  them.
+- Local uploads remain at `/uploads/*`; production deployment refuses the
+  local-disk provider because a function filesystem is not durable storage.
+- The 19-file, 172-test suite now drives the same Web Request/Response
+  dispatcher without opening ephemeral sockets.
+
 ## 2026-07-31 — Supabase Auth replaces our identity layer
 
 **Breaking.** The API no longer issues, signs, or verifies its own sessions and
 stores no credential. Clients authenticate with Supabase and send the
 Supabase-issued JWT as the bearer token; the API verifies it against the
-project's JWKS (`src/lib/supabase.ts`).
+project's JWKS (`apps/web/src/server/supabase.ts`).
 
 ### Endpoints removed
 
@@ -48,7 +69,7 @@ All under `/api/auth`, all now Supabase's own client-side calls:
 ### Behaviour worth re-testing after any Postgres change
 
 Two things changed silently with the move off SQLite, neither of which throws:
-case-insensitive `contains` (now explicit, `containsInsensitive` in `src/db.ts`)
+case-insensitive `contains` (now explicit, `containsInsensitive` in `apps/web/src/server/db.ts`)
 and `NULLS`-first ordering on `DESC` (pinned threads need `nulls: "last"`).
 `@mentions` also broke until the id pattern in `packages/shared/src/mentions.ts`
 accepted hyphens.
@@ -63,7 +84,7 @@ can opt into.
 
 ### The single toggle
 
-`apps/api/src/middleware/auth.ts` — `requireVerified` now calls a new
+`apps/web/src/server/guards.ts` — `requireVerified` now calls a new
 `idVerificationRequired()` (exported), which reads
 `process.env.REQUIRE_ID_VERIFICATION === "true"` **per request**, not cached at
 module load. When false (the default), `requireVerified` becomes a pass-through
@@ -75,7 +96,7 @@ code path that changed; every route that already called `requireVerified`
 ### New field: `PublicUser.canWrite`
 
 `packages/shared/src/types.ts` — `PublicUser` gained `canWrite: boolean`,
-computed server-side in `apps/api/src/lib/serialize.ts`'s `toPublicUser()` as
+computed server-side in `apps/web/src/server/serialize.ts`'s `toPublicUser()` as
 `idVerificationRequired() ? verificationStatus === "VERIFIED" : true`. **Every
 client-side write gate now checks `user.canWrite`, never `verificationStatus`
 directly** — the two are deliberately decoupled so the client never has to
@@ -173,7 +194,7 @@ Rules (all server-enforced):
   `DELETE /api/threads/:id/attendees/:userId` — logged as
   `event_attendee_added` / `event_attendee_removed` in the moderation log.
 
-Tests: `apps/api/src/routes/directory-events.test.ts` (9 tests across the
+Tests: `apps/web/src/server/routes/directory-events.test.ts` (9 tests across the
 tier matrix).
 
 ## 2026-07-30 — Membership part 1: chapters (member-only sub-forums)
@@ -196,7 +217,7 @@ back. Nothing any existing tier could do yesterday was reduced.
 - **`Thread.chapterId String?`** — a thread belongs to the main feed (null) or
   exactly one chapter, never both.
 
-### The access rule (single module: `apps/api/src/lib/chapter-access.ts`)
+### The access rule (single module: `apps/web/src/server/chapter-access.ts`)
 
 Chapter content is readable/writable only by that chapter's **active** members
 and **admins** (admins bypass member gating — moderating must not require
@@ -254,7 +275,7 @@ join request (the admin UI polls pending counts instead), pin cap remains
 global rather than per-chapter, and revoking `isSupporter` does **not** cascade
 into chapter memberships — admins remove members explicitly.
 
-Tier-gate test matrix: `apps/api/src/routes/chapters.test.ts` (13 tests —
+Tier-gate test matrix: `apps/web/src/server/routes/chapters.test.ts` (13 tests —
 anonymous/free/verified/pending/active/admin against every surface above).
 
 ## 2026-07-30 — Brief 05 backfill: notifications, push tokens, search, bookmarks
@@ -264,7 +285,7 @@ anonymous/free/verified/pending/active/admin against every surface above).
 > brief 05's mobile layer. No endpoint below changed on 2026-07-30 — only tests
 > were added.
 
-### New Prisma models (SQLite; all fields in `apps/api/prisma/schema.prisma`)
+### New Prisma models (SQLite; all fields in `apps/web/prisma/schema.prisma`)
 
 - **`Notification`** — `recipientId`, `actorId` (most recent actor), `type`
   (a `NotificationType` string: `reply_thread` · `reply_post` · `like_thread` ·
@@ -282,7 +303,7 @@ anonymous/free/verified/pending/active/admin against every surface above).
   a different account moves with it.
 - **`Bookmark`** — `(userId, threadId)` unique, `createdAt` for sort.
 
-### Emission — one `notify()` helper (`apps/api/src/lib/notifications.ts`)
+### Emission — one `notify()` helper (`apps/web/src/server/notifications.ts`)
 
 Every create path (reply, like, DM, mention; moderation warning from brief 06)
 calls `notify()` rather than creating rows inline. The rules live there and
@@ -327,7 +348,7 @@ detail, bookmark list) and notification snippets reuse `stripMarkdown` from
 
 ### Search implementation note
 
-`apps/api/src/lib/search.ts` isolates the query logic behind three functions
+`apps/web/src/server/search.ts` isolates the query logic behind three functions
 (`searchThreads/searchPosts/searchUsers`) precisely so the SQLite
 `LIKE '%term%'` implementation can be swapped for Postgres full-text
 (`tsvector`/`websearch_to_tsquery`) without touching the route or clients. The
@@ -335,7 +356,7 @@ documented upgrade path is in that file's top comment.
 
 ### Push provider
 
-`apps/api/src/lib/push-provider.ts` follows the house provider pattern:
+`apps/web/src/server/push-provider.ts` follows the house provider pattern:
 `PUSH_PROVIDER=stub` (default) logs pushes to the console with zero
 credentials; the Expo path activates when `EXPO_ACCESS_TOKEN` is set, and the
 stub **refuses to run** once it is. Real delivery needs an Apple Developer

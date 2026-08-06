@@ -1,7 +1,7 @@
 # Messages, notifications, push, search & bookmarks
 
-`apps/api/src/routes/messages.ts` · `notifications.ts` · `push-tokens.ts` ·
-`search.ts` · `bookmarks.ts` · `apps/api/src/lib/notifications.ts` · `lib/search.ts`
+`apps/web/src/server/routes/messages.ts` · `notifications.ts` · `push-tokens.ts` ·
+`search.ts` · `bookmarks.ts` · `apps/web/src/server/notifications.ts` · `lib/search.ts`
 Cross-cutting rules: [`../API.md`](../API.md).
 
 ---
@@ -87,7 +87,7 @@ markdown.
 
 ## Emission — `notify()` is the only writer
 
-`apps/api/src/lib/notifications.ts`. Every create path (reply, like, DM,
+`apps/web/src/server/notifications.ts`. Every create path (reply, like, DM,
 mention, moderation warning) calls it rather than inserting rows inline.
 Rebuild it as one function too — these rules only work if there is one place
 they live.
@@ -220,7 +220,7 @@ and cannot be switched off.
 
 # Push tokens
 
-`apps/api/src/lib/push-provider.ts` — stub by default, Expo when configured.
+`apps/web/src/server/push-provider.ts` — stub by default, Expo when configured.
 
 ## POST /api/push-tokens
 

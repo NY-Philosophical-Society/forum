@@ -1,7 +1,31 @@
 # Next.js consolidation — design
 
+**Status: implemented locally on 2026-08-05.** Hosted schema migration,
+Preview/Production deployment, durable storage configuration, the shared
+production rate-limit store, and the mobile base-URL follow-up remain separate
+approval-gated work.
+
+**Implementation refinement.** The sections below preserve the reviewed design
+record, but the completed branch narrows one migration risk: instead of
+splitting 72 handlers into dozens of filesystem modules and simultaneously
+rewriting every guard as a wrapper, one Node-runtime
+`app/api/[...path]/route.ts` delegates to a typed `ApiApplication` dispatcher.
+The 72 method/path registrations and their existing ordered guard/limiter
+policies remain in focused domain modules under `src/server/routes`. This still
+removes Express and the separate process, gives Next ownership of the HTTP
+boundary, bounded bodies, JSON 404/405/500 behavior, same-origin calls, and
+serverless deployment; it avoids changing the business handlers and
+authorization composition in the same pass. Dedicated Next handlers still own
+`/health` and local `/uploads/*`. `CLAUDE.md` and `docs/TESTING.md` describe the
+implemented shape.
+
 Fold `apps/api` into `apps/web`. One deployable, one Vercel project, one set of
 environment variables. The Express server stops existing.
+
+This changes the deployment boundary, not the trust boundary. Next route
+handlers become the only server-side database client; browser and mobile code
+still never talk to Prisma or Supabase's Data API. The existing decision not to
+duplicate application authorization in Postgres RLS remains unchanged.
 
 The motivation is operational, not technical: this project is maintained by
 someone who is not an engineer, and "deploy the frontend, then separately deploy
@@ -41,6 +65,8 @@ apps/web/
         threads/route.ts
         threads/[id]/route.ts
         …
+      health/route.ts           ← preserves GET /health (not /api/health)
+      uploads/[...path]/route.ts ← local stub only; preserves /uploads/*
     server/                     ← was apps/api/src/{lib,middleware}, plus db.ts
       guards.ts                 ← was middleware/auth.ts
       db.ts
@@ -84,18 +110,26 @@ export type Actor = {
   isSupporter: boolean; verificationStatus: string; /* …as req.user is today */
 };
 
-type Ctx<A> = {
+type AuthCtx = {
   req: NextRequest;
   params: Record<string, string>;
-  actor: A;
+  actor: Actor;
   claims: SupabaseClaims;
 };
 
-export function withAuth<T>(h: (c: Ctx<Actor>) => Promise<T>): RouteHandler
-export function withOptionalAuth<T>(h: (c: Ctx<Actor | null>) => Promise<T>): RouteHandler
-export function withVerified<T>(h: (c: Ctx<Actor>) => Promise<T>): RouteHandler
-export function withMember<T>(h: (c: Ctx<Actor>) => Promise<T>): RouteHandler
-export function withAdmin<T>(h: (c: Ctx<Actor>) => Promise<T>): RouteHandler
+type PublicCtx = Omit<AuthCtx, "actor" | "claims">;
+
+type OptionalAuthCtx = Omit<AuthCtx, "actor" | "claims"> & {
+  actor: Actor | null;
+  claims: SupabaseClaims | null;
+};
+
+export function withPublic(h: (c: PublicCtx) => Promise<Response>): RouteHandler
+export function withAuth(h: (c: AuthCtx) => Promise<Response>): RouteHandler
+export function withOptionalAuth(h: (c: OptionalAuthCtx) => Promise<Response>): RouteHandler
+export function withVerified(h: (c: AuthCtx) => Promise<Response>): RouteHandler
+export function withMember(h: (c: AuthCtx) => Promise<Response>): RouteHandler
+export function withAdmin(h: (c: AuthCtx) => Promise<Response>): RouteHandler
 ```
 
 Call site:
@@ -122,10 +156,18 @@ and *deny*, which is safe, but only by luck. `withAdmin` performs the
 authentication itself. There is no ordering to get wrong and no `?.` on the
 actor: inside a wrapped handler `actor` is non-null by type.
 
-**`withOptionalAuth` is the only one that yields a nullable actor**, and it is
-a distinct type, so a handler cannot accidentally treat an anonymous request as
-authenticated. This is what protects the `previewOnly` truncation in the threads
-route.
+**`withOptionalAuth` is the only one that yields a nullable actor and nullable
+claims**, and it is a distinct type, so a handler cannot accidentally treat an
+anonymous request as authenticated. This is what protects the `previewOnly`
+truncation in the threads route. Account deletion continues to receive
+non-null, verified claims through `withAuth` for its token-freshness check.
+
+**Every exported method uses one of these wrappers, including public routes.**
+`withPublic` does no authentication, but it shares the same top-level exception
+boundary. Expected input errors keep the existing `{ error: string }` envelope;
+unexpected errors are logged server-side and return a generic JSON 500 without
+leaking a stack, Prisma error, query, token, or environment value. There is no
+unwrapped handler path with different error semantics.
 
 `idVerificationRequired()` stays a per-request read of
 `REQUIRE_ID_VERIFICATION`, unchanged, so the honor system remains one switch.
@@ -147,6 +189,14 @@ is not where the risk lives.
 A `json(data, status)` helper in `src/server/http.ts` keeps the diff to one
 token per response.
 
+The `req.body` row is shorthand, not a license to call `req.json()` directly.
+Express currently applies its default 100 KiB JSON-body limit before every JSON
+handler. `jsonBody(req, { maxBytes: 100 * 1024 })` preserves that bound and
+content-type behavior, distinguishes malformed JSON (400) from an oversized
+body (413), and returns the same error envelope as the rest of the API. It
+checks `Content-Length` early when present and also enforces the limit while
+reading, because that header is optional and untrusted.
+
 Every handler file declares:
 
 ```ts
@@ -161,7 +211,7 @@ regardless of file order, so `app/api/users/me/route.ts` still wins over
 two different resolution models, and every static-vs-dynamic pair in the tree
 gets an explicit test rather than a shrug.
 
-## 4. The five places a mechanical port silently drops behaviour
+## 4. The six places a mechanical port silently drops behaviour
 
 Each of these compiles, passes type-checking, and is wrong. They are the
 reason this is a design document and not a ticket.
@@ -173,11 +223,13 @@ express.raw({ type: IMAGE_ALLOWED_TYPES, limit: IMAGE_MAX_BYTES })
 ```
 
 That single line enforces the MIME allowlist *and* the byte cap before the
-handler runs. `await req.arrayBuffer()` enforces neither. Both checks are
-re-implemented explicitly in `src/server/http.ts` as `rawBody(req, { types,
-maxBytes })`, returning a 415 or 413 exactly as Express did. The sniffed-format
-re-check inside the handler stays — it was always the second line of defence,
-never the first.
+handler runs. `await req.arrayBuffer()` enforces neither and buffers an
+oversized request before it can be rejected. Both checks are re-implemented in
+`src/server/http.ts` as a streaming `rawBody(req, { types, maxBytes })`: reject
+an oversized `Content-Length` early, count bytes while reading when the header
+is absent or false, cancel the reader at the cap, and return a 415 or 413. The
+sniffed-format re-check inside the handler stays — it was always the second line
+of defence, never the first.
 
 This applies to both upload paths: `/api/uploads/image` and
 `/api/users/me/avatar`.
@@ -195,12 +247,21 @@ to move re-encoding to a background job, never to skip it.
 
 ### 4.3 The local storage stub served its own files
 
-`app.ts` mounts `express.static(LOCAL_UPLOADS_DIR)` when
+`app.ts` mounts `express.static(LOCAL_UPLOADS_DIR)` at **`/uploads/*`** when
 `storageProvider.name === "local"`. Nothing in Next replaces that implicitly.
-A route handler at `app/api/uploads/[...path]/route.ts` serves the stub's
-directory with the same `immutable`, one-year cache headers, and only when the
-stub is active. Without it, every locally uploaded image 404s — and only
-locally, so it would pass review and break the next developer's machine.
+A route handler at `app/uploads/[...path]/route.ts` serves the stub's directory
+with the same `immutable`, one-year cache headers, and only when the stub is
+active. Putting this handler under `app/api/uploads` would silently change every
+stored URL. The catch-all rejects traversal and encoded-separator attempts,
+serves files only from the configured root, supports `GET` and `HEAD`, and
+returns 404 when the provider is not local.
+
+This provider remains development-only. Vercel's function filesystem is not
+durable object storage, and the currently documented S3/R2 provider is not yet
+implemented. A production or Preview deployment must therefore fail startup
+validation when `STORAGE_PROVIDER=local`; implementing and configuring durable
+storage is a **deployment prerequisite for this consolidation**, not an
+optional post-deploy improvement.
 
 ### 4.4 `cors()` goes away, and that is correct
 
@@ -221,17 +282,36 @@ where it keeps working. Deferring the *fix* is fine; silently deferring the
   `writeLimiter`, `adminLimiter`) reimplemented as a `withRateLimit(kind)`
   wrapper over an **in-memory store** — identical behaviour to today, including
   the per-request `DISABLE_RATE_LIMIT` check.
-- All 45 existing call sites keep their limiter, and `rate-limit.test.ts`
-  survives with its assertion that the 429 path still fires.
+- Every existing limiter application is accounted for in the generated route
+  inventory, and `rate-limit.test.ts` survives with its assertion that the 429
+  path still fires.
 - The store is the only thing left to swap. `docs/API-CHANGES.md` records that
   in-memory counters are per-instance and therefore approximately unenforced
   once this is running on serverless.
+
+The port also makes the rate-limit key explicit. In production it uses
+Vercel's platform-supplied client IP (`x-vercel-forwarded-for`, falling back to
+`x-forwarded-for`); in local tests the call helper supplies a deterministic
+address. Arbitrary forwarding headers are not trusted outside the Vercel
+environment. Tests cover two clients independently, the threshold, window
+reset, and `DISABLE_RATE_LIMIT`.
 
 The seams stay in place and the tests keep proving the limiter fires. What is
 knowingly accepted is that, in production, the counters are per-lambda. That is
 a real weakening of an abuse control and it will not announce itself — the code
 looks correct and the test suite stays green. It goes on the follow-up list at
 the top, not the bottom.
+
+### 4.6 Next may cache public `GET` route handlers
+
+This API is request-sensitive even when a route is public: thread responses
+depend on optional bearer auth, and all mutable resources must reflect database
+writes immediately. Route-handler caching must not become an accidental new
+data layer. Every API route exports `dynamic = "force-dynamic"` (or otherwise
+uses an equivalent explicitly verified no-cache configuration), and mutable or
+viewer-specific responses carry `Cache-Control: private, no-store`. The local
+upload route is the deliberate exception and keeps its one-year immutable
+cache header.
 
 ## 5. Prisma in a serverless runtime
 
@@ -255,6 +335,11 @@ is case-sensitive on Postgres.
 **`maxDuration`** is set explicitly on the handful of handlers that do real
 work (uploads, search, the admin dashboard queries) rather than relying on the
 plan default.
+
+**Deployment region** is pinned to the region nearest the Supabase database.
+Without this, consolidation can turn every Prisma query into a cross-region
+round trip. The chosen Vercel region is recorded beside the Supabase project
+region in the deployment notes and verified on the Preview deployment.
 
 ## 6. One deployable means the secret key shares a bundle
 
@@ -281,7 +366,10 @@ Three mitigations, all mechanical:
 
 ## 7. Tests
 
-19 files, 172 tests, 3,499 lines. This is the project's only proof that the
+19 files, 172 tests, 3,499 lines at design time. These numbers are a baseline,
+not a frozen acceptance target; the implementation first regenerates an
+endpoint/auth/limiter inventory from the source and reconciles it against
+`docs/API.md`. This is the project's primary proof that the
 authorization ladder is correct, and the ladder is exactly what is being
 rewritten. None of it is skipped or thinned.
 
@@ -317,6 +405,23 @@ The wrappers run inside `handler`, so the ladder is still exercised at the HTTP
 boundary — which `CLAUDE.md` requires, and which is the whole point of testing
 through routes rather than through Prisma.
 
+Direct handler calls do **not** prove that Next discovered the right filesystem
+route, preferred static segments, generated 405 responses, applied runtime
+configuration, or enforced platform request handling. A second, small
+black-box suite therefore runs against `next build && next start` and covers:
+
+- the generated endpoint inventory, including `GET /health` and `GET/HEAD
+  /uploads/*`;
+- every static-vs-dynamic collision (`/users/me`,
+  `/messages/conversations`, notification static actions, and any others found
+  by the inventory), plus an unsupported method returning 405;
+- one public, optional-auth, authenticated, verified, member, and admin route;
+- malformed and oversized JSON, both raw-upload content types, the 4 MB upload
+  boundary, 404s, and the JSON 500 envelope.
+
+The full behavioral suite stays fast by calling handlers directly; the
+black-box suite proves the framework wiring that direct calls necessarily skip.
+
 **This deletes the flaky hang.** `docs/TESTING.md` and `vitest.config.ts` both
 document a test that hangs roughly one run in five, reproduced on a bare Express
 app, caused by supertest opening an ephemeral server per request with no
@@ -330,26 +435,37 @@ out with it.
 ## 8. What is deleted
 
 - `apps/api/` entirely, after its contents move.
-- `express`, `cors`, `supertest`, `@types/*` for each, `express-rate-limit`,
-  `tsx` from the dependency tree.
+- `express`, `cors`, `supertest`, `@types/*` for each, and
+  `express-rate-limit` from the dependency tree. `tsx` stays as a dev dependency
+  because the moved Prisma seed is still TypeScript; remove it only if the seed
+  receives a different explicit runner.
 - `npm run dev:api`, and the root script that runs it.
 - `NEXT_PUBLIC_API_URL`, from `.env.local.example` and from Vercel — both
   Preview and Production.
 - The `?? "http://localhost:4000"` fallback in `apps/web/src/lib/api.ts`, which
   becomes `const API_URL = ""`.
+- Any stale generated Prisma client or build output under the old workspace;
+  a clean install and clean build must succeed without relying on either.
 
 ## 9. Environment and deployment
 
 `apps/web/.env.local` absorbs the server-side variables from `apps/api/.env`:
 `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`,
-`SUPABASE_PUBLISHABLE_KEY`, `WEB_APP_URL`, and the three provider switches.
+`WEB_APP_URL`, `REQUIRE_ID_VERIFICATION`, and the provider configuration and
+credentials actually read by the moved modules. `SUPABASE_PUBLISHABLE_KEY` is
+test-only on the server side; the application continues to expose only
+`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to the
+browser. The implementation adds a checked-in, secret-free environment matrix
+that labels each variable client, server, test-only, local-only, or production
+required. Startup validation fails clearly for missing production secrets or
+dev-only providers instead of silently choosing a stub.
 The API's `PORT=4000` goes away; `PORT` still selects the web app's dev port,
 which is how this machine runs it on 4100 instead of the committed 3000
 default.
 
-On Vercel (`ren168/forum-web`) the same set is added for Preview and
-Production, pointing at the hosted project. Two things that are currently
-untrue and must be true before the first deploy of this branch:
+On Vercel (`ren168/forum-web`) the applicable production subset is added for
+Preview and Production, pointing at the hosted project. Three things that are
+currently untrue and must be true before the first deploy of this branch:
 
 - The hosted project still carries the unmanaged `prisma db push` schema with
   no `_prisma_migrations` table. Wiring it properly means dropping the public
@@ -357,6 +473,14 @@ untrue and must be true before the first deploy of this branch:
   before it runs, even at zero rows.**
 - The hosted project needs the `{{ .Token }}` recovery email template, or
   mobile password reset breaks while web keeps working.
+- A durable storage provider must be implemented and configured. Preview and
+  Production must refuse `STORAGE_PROVIDER=local`; Preview uses a separate
+  bucket or key prefix so test uploads cannot overwrite production objects.
+
+Deployment is a separate approval gate after local acceptance. The first step
+creates a Preview deployment and runs the black-box contract checks against its
+real origin. No hosted schema reset, migration, production deployment, or DNS
+change is implied by implementing the branch.
 
 ## 10. Documentation to update
 
@@ -375,46 +499,95 @@ Also: `README.md` (commands, ports, what's stubbed), `docs/API.md` and
 reference is), `docs/TESTING.md` (the whole supertest section, including the
 flaky-hang note), `docs/PROJECT.md`.
 
+## 10.1 Implementation sequence on the branch
+
+Big bang describes the merge boundary, not how the work is reviewed. The
+branch is built in checkpoints that leave a narrow diff to inspect even though
+none is merged independently:
+
+1. **Freeze the contract.** Generate the 72-route inventory with method, path,
+   auth tier, limiter, body mode, and test coverage; reconcile it with
+   `docs/API.md` before moving code.
+2. **Move the runtime foundation.** Merge manifests, move Prisma and server
+   modules, add `server-only`, the Prisma singleton, environment validation,
+   HTTP/body helpers, guard wrappers, rate-limit keying, health, and local
+   upload serving. Port their focused unit tests first.
+3. **Port routes by domain.** Move auth/verification, content, chapters,
+   messaging, users, and moderation in reviewable slices. After each slice,
+   compare exported methods to the frozen inventory and run that slice's
+   direct-handler tests. No compatibility proxy or partial merge is added.
+4. **Prove framework wiring.** Finish the filesystem tree, run a clean Next
+   build/start, then run the black-box routing and body-boundary suite.
+5. **Delete the old workspace.** Remove Express and obsolete dependencies,
+   regenerate the lockfile and Prisma client, and prove there are no stale
+   `apps/api`, port-4000, or `NEXT_PUBLIC_API_URL` references except historical
+   records that are deliberately labelled as such.
+6. **Reconcile documentation and run acceptance.** Update the authoritative
+   docs, run the complete suite five times, verify the client bundle, and stop
+   for owner review. Preview deployment and hosted database work remain separate
+   approvals under §9.
+
 ## Acceptance
 
-1. All 172 tests pass, run five times consecutively with no failures — the
+1. All baseline tests plus the new framework-boundary tests pass. The full suite
+   runs five times consecutively with no failures — the
    flake is expected to be gone, and five clean runs is the evidence.
-2. All 72 endpoints respond at their existing paths with their existing status
-   codes. The endpoint contract in `docs/API.md` does not change.
+2. The generated inventory accounts for all 72 baseline endpoints plus
+   `GET /health` and local `GET/HEAD /uploads/*`; every API endpoint responds at
+   its existing path with its existing auth tier, limiter, status codes, headers,
+   and response shape. The endpoint contract in `docs/API.md` does not change.
 3. `npx next build` succeeds from a clean tree.
-4. `grep -r "sb_secret_" apps/web/.next/static/` returns nothing.
+4. Built client chunks do not contain the configured secret key's exact value;
+   the check reports only pass/fail and never prints the secret. A raw
+   `sb_secret_` prefix check is not valid because the browser-side
+   `@supabase/supabase-js` package itself contains that literal while
+   classifying key formats.
 5. The authorization ladder is proven by test at every tier: anonymous,
    authenticated-unverified, verified, member, admin, banned, deleted.
 6. Anonymous thread reads still return the truncated body and no replies.
 7. A locally uploaded image renders, and its EXIF is stripped.
-8. `apps/api` no longer exists and nothing references it.
+8. Malformed/oversized JSON and raw uploads retain bounded, JSON error behavior;
+   unsupported methods return 405 and unexpected failures return a generic JSON
+   500.
+9. A production-mode configuration refuses all dev-only providers, especially
+   local filesystem storage.
+10. `apps/api` no longer exists and no source, script, workspace metadata, docs,
+    lockfile entry, or generated artifact references it.
+11. A clean dependency install, Prisma generation/migration against the local
+    throwaway database, `next build`, `next start`, and the black-box suite all
+    succeed from the consolidated workspace.
 
 ## Risks
 
-- **The ladder is rewritten wholesale.** 134 middleware applications become 134
-  wrappers — `requireAuth` ×85, `requireAdmin` ×24, `requireVerified` ×10,
-  `requireMember` ×10, `optionalAuth` ×5. A single wrong wrapper is a silent
-  authorization hole. Mitigated by
+- **The ladder is rewritten wholesale.** Every middleware application becomes
+  a wrapper recorded in the generated route inventory. A single wrong wrapper
+  is a silent authorization hole. Mitigated by
   the wrappers being total (§2) and by tier-by-tier tests (Acceptance 5), but
   this is the risk that matters and it deserves a slow review.
-- **Big bang means no partial signal.** Nothing runs until everything runs. The
-  first green test run is also the first integration test. This was chosen with
-  eyes open; the mitigation is that the branch is reviewed in slices even
-  though it lands in one piece.
+- **Big bang means no releasable partial application.** Focused server-module
+  and direct-handler tests provide intermediate signal, but the first complete
+  Next build plus black-box run arrives only after the filesystem route tree is
+  assembled. The branch is reviewed in slices even though it lands in one
+  piece.
 - **Rate limiting is knowingly weakened in production** (§4.5) while the tests
   continue to pass. Highest-priority follow-up.
 - **Mobile breaks the moment Express is deleted** and stays broken until
   picked up (§11).
 - **Vercel's platform limits are now ours.** 4.5MB request bodies (handled),
   function duration, and a cold start that now includes `sharp`.
+- **Local storage cannot survive serverless deployment.** This blocks Preview
+  and Production until the real provider exists; startup validation prevents a
+  deceptively successful deploy that loses uploads.
 
 ## 11. Out of scope, tracked
 
 - **Mobile.** `EXPO_PUBLIC_API_URL` → the web origin, then re-verify auth,
   threads, posts, DMs, push tokens, uploads and deep links.
 - **Rate-limit store.** Postgres-backed or Upstash, replacing the in-memory one.
-- **Signed direct-to-storage uploads**, which would also move `sharp` off the
-  request path.
+- **Signed direct-to-storage uploads.** This is distinct from the durable
+  server-side storage provider required before deployment; direct uploads would
+  later avoid the function request-size limit, but must retain trusted
+  server-side re-encoding before an image becomes public.
 - **Server components.** The app stays a client-rendered SPA; RSC and cookie
   sessions are a separate project, and one that would have to keep bearer
   tokens working for mobile regardless.

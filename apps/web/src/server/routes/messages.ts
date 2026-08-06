@@ -1,0 +1,198 @@
+import { Router } from "../router";
+import { sendMessageSchema } from "@nyps-forum/shared";
+import { prisma } from "../db";
+import { requireAuth } from "../guards";
+import { toPublicUser } from "../serialize";
+import { writeLimiter } from "../rate-limit";
+import { notify, toSnippet } from "../notifications";
+
+export const messagesRouter = Router();
+
+const DEFAULT_MESSAGES_LIMIT = 30;
+
+function serializeMessage(m: {
+  id: string;
+  senderId: string;
+  recipientId: string;
+  body: string;
+  createdAt: Date;
+  readAt: Date | null;
+}) {
+  return {
+    id: m.id,
+    senderId: m.senderId,
+    recipientId: m.recipientId,
+    body: m.body,
+    createdAt: m.createdAt.toISOString(),
+    readAt: m.readAt ? m.readAt.toISOString() : null,
+  };
+}
+
+/** One row per person you've exchanged messages with, most recent first. */
+messagesRouter.get("/conversations", requireAuth, async (req, res) => {
+  const myId = req.user!.id;
+
+  const messages = await prisma.message.findMany({
+    where: { OR: [{ senderId: myId }, { recipientId: myId }] },
+    orderBy: { createdAt: "desc" },
+    include: { sender: true, recipient: true },
+  });
+
+  const byOtherUser = new Map<
+    string,
+    { otherUser: (typeof messages)[number]["sender"]; lastMessage: (typeof messages)[number]; unreadCount: number }
+  >();
+
+  for (const m of messages) {
+    const otherUser = m.senderId === myId ? m.recipient : m.sender;
+    const existing = byOtherUser.get(otherUser.id);
+    const isUnreadIncoming = m.recipientId === myId && !m.readAt;
+
+    if (!existing) {
+      byOtherUser.set(otherUser.id, {
+        otherUser,
+        lastMessage: m,
+        unreadCount: isUnreadIncoming ? 1 : 0,
+      });
+    } else if (isUnreadIncoming) {
+      existing.unreadCount += 1;
+    }
+  }
+
+  res.json({
+    conversations: Array.from(byOtherUser.values()).map((c) => ({
+      otherUser: toPublicUser(c.otherUser),
+      lastMessage: serializeMessage(c.lastMessage),
+      unreadCount: c.unreadCount,
+    })),
+  });
+});
+
+/**
+ * Message thread with one other user, most recent page first; marks their
+ * messages to you as read. `offset` pages further back into history —
+ * `offset=0` (the default) is the most recent `limit` messages.
+ */
+messagesRouter.get("/:userId", requireAuth, async (req, res) => {
+  const myId = req.user!.id;
+  const otherId = req.params.userId;
+  const limit = Math.min(Number(req.query.limit) || DEFAULT_MESSAGES_LIMIT, 100);
+  const offset = Math.max(Number(req.query.offset) || 0, 0);
+
+  const otherUser = await prisma.user.findUnique({ where: { id: otherId } });
+  if (!otherUser) return res.status(404).json({ error: "User not found" });
+
+  // Opening the conversation reads the messages, so the bell's collapsed
+  // "N new messages" notification for this sender reads with them.
+  await Promise.all([
+    prisma.message.updateMany({
+      where: { senderId: otherId, recipientId: myId, readAt: null },
+      data: { readAt: new Date() },
+    }),
+    prisma.notification.updateMany({
+      where: { recipientId: myId, actorId: otherId, type: "message", readAt: null },
+      data: { readAt: new Date() },
+    }),
+  ]);
+
+  const where = {
+    OR: [
+      { senderId: myId, recipientId: otherId },
+      { senderId: otherId, recipientId: myId },
+    ],
+  };
+
+  const [messages, total] = await Promise.all([
+    prisma.message.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: offset,
+      take: limit,
+    }),
+    prisma.message.count({ where }),
+  ]);
+  messages.reverse(); // oldest-first for display, having fetched newest-first for pagination
+
+  res.json({
+    otherUser: toPublicUser(otherUser),
+    messages: messages.map(serializeMessage),
+    total,
+    limit,
+    offset,
+    hasMore: offset + messages.length < total,
+    // An existing conversation is open to both sides; only opening a new one
+    // needs a verified identity. Mirrors the POST check above.
+    canReply:
+      total > 0 ||
+      req.user!.verificationStatus === "VERIFIED" ||
+      req.user!.role === "admin",
+  });
+});
+
+messagesRouter.post("/", requireAuth, writeLimiter, async (req, res) => {
+  const parsed = sendMessageSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  const { recipientId, body } = parsed.data;
+
+  if (recipientId === req.user!.id) {
+    return res.status(400).json({ error: "You can't message yourself" });
+  }
+
+  const recipient = await prisma.user.findUnique({ where: { id: recipientId } });
+  // A deleted account can still be *read* in old conversations, but new
+  // messages to it would land in a void.
+  if (!recipient || recipient.deletedAt) {
+    return res.status(404).json({ error: "Recipient not found" });
+  }
+
+  const block = await prisma.block.findFirst({
+    where: {
+      OR: [
+        { blockerId: req.user!.id, blockedId: recipientId },
+        { blockerId: recipientId, blockedId: req.user!.id },
+      ],
+    },
+  });
+  if (block) {
+    return res.status(403).json({ error: "You can't message this user" });
+  }
+
+  // Verification gates *first contact*, not messaging in general. Unsolicited
+  // contact is the abuse vector; a reply is consented-to by definition,
+  // because the other person opened the conversation. So an unverified member
+  // can always answer someone who wrote to them — they just can't cold-open a
+  // conversation themselves. A conversation can therefore only ever be
+  // started by someone whose identity is established.
+  const priorMessage = await prisma.message.findFirst({
+    where: {
+      OR: [
+        { senderId: req.user!.id, recipientId },
+        { senderId: recipientId, recipientId: req.user!.id },
+      ],
+    },
+    select: { id: true },
+  });
+  const isFirstContact = !priorMessage;
+  const identityEstablished =
+    req.user!.verificationStatus === "VERIFIED" || req.user!.role === "admin";
+  if (isFirstContact && !identityEstablished) {
+    return res.status(403).json({
+      error:
+        "Starting a new conversation needs a verified identity. Verify from your account settings — it's a one-time check. You can always reply to someone who messages you first.",
+    });
+  }
+
+  const message = await prisma.message.create({
+    data: { senderId: req.user!.id, recipientId, body },
+  });
+  await notify({
+    type: "message",
+    recipientId,
+    actorId: req.user!.id,
+    snippet: toSnippet(body),
+  });
+
+  res.status(201).json({ message: serializeMessage(message) });
+});

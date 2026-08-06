@@ -1,6 +1,6 @@
 # Users, profiles, accounts & blocking
 
-`apps/api/src/routes/users.ts` (everything under `/api/users`).
+`apps/web/src/server/routes/users.ts` (everything under `/api/users`).
 Cross-cutting rules: [`../API.md`](../API.md). The admin mutations at the bottom
 of this file are also indexed from [`moderation.md`](moderation.md).
 

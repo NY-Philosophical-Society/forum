@@ -51,7 +51,7 @@ major_version = 17
 # exhaust Postgres directly; Supavisor in transaction mode multiplexes them.
 # Prisma's `url` points here (with ?pgbouncer=true, which disables prepared
 # statements); `directUrl` stays on the direct port because migrations need a
-# session-mode connection. See apps/api/prisma/schema.prisma.
+# session-mode connection. See apps/web/prisma/schema.prisma.
 enabled = true
 # Port to use for the local connection pooler.
 port = 54429

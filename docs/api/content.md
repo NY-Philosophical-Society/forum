@@ -1,6 +1,6 @@
 # Tags, threads, posts & uploads
 
-`apps/api/src/routes/tags.ts` · `threads.ts` · `posts.ts` · `uploads.ts`
+`apps/web/src/server/routes/tags.ts` · `threads.ts` · `posts.ts` · `uploads.ts`
 Cross-cutting rules live in [`../API.md`](../API.md); chapter visibility is
 detailed in [`chapters.md`](chapters.md).
 
@@ -500,7 +500,7 @@ Content-Type: image/png
 **201**
 
 ```json
-{ "url": "http://localhost:4000/uploads/post-images/clx8k…-3f9a2b71-1600x1067.jpg",
+{ "url": "http://localhost:3000/uploads/post-images/clx8k…-3f9a2b71-1600x1067.jpg",
   "width": 1600, "height": 1067 }
 ```
 
@@ -516,7 +516,7 @@ Errors:
 | 400 | `That image is too small to embed` (< 10px on an edge) |
 | 400 | `That image's dimensions are too large` (> 10000px on an edge) |
 | 400 | `That file doesn't look like a valid image` — sharp threw |
-| 413 | payload over 4 MB (from `express.raw`, Express's own HTML error) |
+| 413 | payload over 4 MB (from the bounded raw-body reader, JSON error) |
 
 Processing (`sharp`): `.rotate()` bakes EXIF orientation into pixels, resize to
 fit within 1600×1600 without enlargement, re-encode as JPEG q85 — the re-encode

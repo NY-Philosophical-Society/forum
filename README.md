@@ -28,20 +28,20 @@ missing before launch" below before you show this to real users.
   a thread can have zero, one, or several tags.
 - **Hot / New sort, like Reddit** — `GET /api/threads?sort=hot|new`. "Hot" uses the same shape as
   Reddit's original ranking formula (`log10(engagement) + seconds/45000`, see
-  `apps/api/src/lib/ranking.ts`), just without the sign term since there's no downvoting to push a
+  `apps/web/src/server/ranking.ts`), just without the sign term since there's no downvoting to push a
   score negative.
 - **Likes only, no downvotes.** Voting is a plain toggle (`POST /api/threads/:id/like`,
   `POST /api/posts/:id/like`) — like or unlike, nothing else. This applies to both top-level
   threads and replies.
-- **DMs.** Real-name-verified users can message each other directly (`apps/api/src/routes/messages.ts`).
+- **DMs.** Real-name-verified users can message each other directly (`apps/web/src/server/routes/messages.ts`).
   Gated the same way as posting: you must be `VERIFIED` to send, though anyone with an account can
   receive and read.
-- **One backend, two clients.** `apps/api` is a plain REST API; `apps/web` (Next.js) and
-  `apps/mobile` (Expo/React Native) are both thin clients over it, sharing types/validation via
-  `packages/shared`. Nothing platform-specific lives in the API.
+- **One deployable web application, one additional client.** `apps/web` contains both the
+  Next.js UI and its same-origin REST route handlers; `apps/mobile` (Expo/React Native) remains
+  an HTTP client. Both share types and validation through `packages/shared`.
 - **Identity verification is delegated, not built.** Parsing government IDs from ~190 countries,
   detecting forged documents, and matching a live selfie to a photo ID is a specialized,
-  adversarial problem — not something to hand-roll. `apps/api/src/lib/verification-provider.ts`
+  adversarial problem — not something to hand-roll. `apps/web/src/server/verification-provider.ts`
   defines a small provider interface; the rest of the app only ever asks "is this user
   UNVERIFIED / PENDING / VERIFIED / REJECTED?" and never touches documents directly. Locally this
   runs against a stub provider so the whole product can be built and tested without a live vendor
@@ -50,11 +50,11 @@ missing before launch" below before you show this to real users.
 - **Sign up is deliberately easy; verification is deliberately separate.** Creating an account
   (email/password, Google, or Apple) never requires ID verification — that's only needed to post,
   reply, like, or DM. This is enforced server-side (`requireVerified` in
-  `apps/api/src/middleware/auth.ts`), not just in the UI. See "Read access" below for how *reading*
+  `apps/web/src/server/guards.ts`), not just in the UI. See "Read access" below for how *reading*
   is gated differently — that's a distinct question from verification.
 - **Supabase Auth is the identity provider.** Email/password and Google/Apple sign-in are all
   Supabase's; this API stores no password hash and signs no token of its own. It verifies the
-  incoming Supabase JWT against the project's JWKS (`apps/api/src/lib/supabase.ts`) and looks up the
+  incoming Supabase JWT against the project's JWKS (`apps/web/src/server/supabase.ts`) and looks up the
   account. The local stack signs with asymmetric keys exactly so this is one code path in
   development and production. Google/Apple still need real provider credentials, configured in
   Supabase rather than here — see "Going to production" below.
@@ -64,12 +64,12 @@ missing before launch" below before you show this to real users.
   (camera or library); the server independently validates format/dimensions/size, square-crops to
   512px, and strips EXIF metadata — embedded GPS coordinates are a real privacy leak on a
   real-name forum. Image storage follows the same provider pattern as verification
-  (`apps/api/src/lib/storage-provider.ts`): a zero-credential local-disk stub in dev, S3/R2 gated
+  (`apps/web/src/server/storage-provider.ts`): a zero-credential local-disk stub in dev, S3/R2 gated
   behind env vars for production. Account management (change/set password, change email, JSON data
   export, anonymizing account deletion) lives in Settings on both platforms; the credential parts
   call Supabase directly, while deletion stays ours and additionally deletes the auth user.
 - **Deleting your account requires a fresh sign-in.** The API demands a recently-issued token
-  (`apps/api/src/routes/users.ts`), so a borrowed or long-idle session can't delete an account.
+  (`apps/web/src/server/routes/users.ts`), so a borrowed or long-idle session can't delete an account.
   This replaces the password check it used to run itself, now that Supabase owns the password.
 - **Writing is markdown, with an audit trail.** Threads, replies, and bios render markdown
   (bold, italic, links, blockquotes, lists, code, headings) through safe-by-default renderers —
@@ -90,7 +90,7 @@ missing before launch" below before you show this to real users.
   report can be judged without navigating away, member administration (ban/unban, warn, grant or
   revoke supporter, promote/demote), content management (pin, lock, delete), and a read-only
   moderation log. Every admin mutation writes one `ModerationLog` row through
-  `apps/api/src/lib/moderation-log.ts` — who, to whom, when, and why — and nothing in the API or
+  `apps/web/src/server/moderation-log.ts` — who, to whom, when, and why — and nothing in the API or
   the UI can edit or delete a row there. Every destructive action needs a typed reason before it
   will commit, so the confirmation step and the audit record are the same interaction. Bans are
   reversible and bite an existing session immediately (`requireAuth` re-reads `bannedAt`). Threads
@@ -108,12 +108,11 @@ missing before launch" below before you show this to real users.
 
 ```
 apps/
-  api/      Express + Prisma (Supabase Postgres) + Supabase Auth + verification stub + feed/likes/DM API
-  web/      Next.js app (App Router), talks to the API over HTTP; supabase-js owns the session
+  web/      Next.js App Router UI + REST handlers + Prisma; supabase-js owns the session
   mobile/   Expo/React Native app, same API; supabase-js persists the session via AsyncStorage
 supabase/   local stack config (config.toml) — ports, auth settings, email templates
 packages/
-  shared/   zod schemas + TS types shared by api/web/mobile (signup/login/thread/post/like/DM shapes)
+  shared/   zod schemas + TS types shared by web/mobile (signup/login/thread/post/like/DM shapes)
 docs/
   API.md            the API contract — start here for backend work (endpoint detail in docs/api/)
   API-CHANGES.md    dated log of everything added to the API since
@@ -144,22 +143,15 @@ and under its own `project_id`, so it can run alongside another local Supabase s
 colliding on ports or container names — see `supabase/config.toml`. Studio is at
 http://127.0.0.1:54423, and captured emails (password resets) at http://127.0.0.1:54424.
 
-**API** (first time only: copy env, migrate, seed):
+**Web application** (first time only: copy env, migrate, seed, run):
 
 ```bash
-cd apps/api
-cp .env.example .env
+cd apps/web
+cp .env.local.example .env.local
 npm run db:migrate    # applies the Prisma migration to the local Supabase Postgres
 npm run db:seed       # seeds 12 tags + 5 demo threads, and the demo accounts in Supabase Auth
 cd ../..
-npm run dev:api        # http://localhost:4000
-```
-
-**Web:**
-
-```bash
-cd apps/web && cp .env.local.example .env.local && cd ../..
-npm run dev:web        # http://localhost:3000
+npm run dev:web       # pages and /api at http://localhost:3000
 ```
 
 **Mobile** (needs Xcode + iOS Simulator, or Expo Go on a physical device):
@@ -170,7 +162,7 @@ npm run dev:mobile     # opens Expo dev tools; press i for iOS simulator
 ```
 
 On a physical device, `localhost` refers to the device itself — set `EXPO_PUBLIC_API_URL` in
-`apps/mobile/.env` to your machine's LAN IP instead (e.g. `http://192.168.1.23:4000`).
+`apps/mobile/.env` to your machine's LAN IP instead (e.g. `http://192.168.1.23:3000`).
 
 ## Read access
 
@@ -181,7 +173,7 @@ way on every platform:
   the "little bit" they see for free. Opening a thread's full text and replies requires an
   account: `GET /api/threads/:id` returns a truncated body (first ~220 characters) and no replies
   at all when the request is unauthenticated (`previewOnly: true` in the response — see
-  `apps/api/src/routes/threads.ts`), and the web app renders a "sign up to keep reading" wall card
+  `apps/web/src/server/routes/threads.ts`), and the web app renders a "sign up to keep reading" wall card
   instead of the reply list (`apps/web/src/app/t/[id]/page.tsx`). This is enforced by the API, not
   just hidden in the UI — hitting the endpoint directly without a token gets the same truncated
   response.
@@ -199,7 +191,7 @@ way on every platform:
 1. Sign up with your real name, email, password. Account starts `UNVERIFIED`.
 2. Any signed-up user, verified or not, can **read** everything (see "Read access" above), but
    posting a thread, replying, liking, or sending a DM returns 403 until verification completes
-   (`requireVerified` middleware, `apps/api/src/middleware/auth.ts`).
+   (`requireVerified` middleware, `apps/web/src/server/guards.ts`).
 3. `/verify` calls `POST /api/verification/start`, which asks the configured
    `VerificationProvider` for a session and hosted verification URL, and flips the user to
    `PENDING`.
@@ -217,7 +209,7 @@ Google is just as `UNVERIFIED` as one who used a password, and faces the same wa
 they try to post — because that wall reads our `User` row, not the token.
 
 A Supabase user has **no forum account until their first authenticated request**. The API creates
-that row from the token's claims (`resolveUser` in `apps/api/src/middleware/auth.ts`), which is why
+that row from the token's claims (`resolveUser` in `apps/web/src/server/guards.ts`), which is why
 both `requireAuth` and `optionalAuth` route through it — a new member whose first click is a thread
 link would otherwise see the anonymous preview wall while signed in.
 
@@ -239,8 +231,8 @@ Five things need real decisions before this goes live — flagged here rather th
 
 1. **Identity verification vendor.** Create a Stripe Identity (or Persona / Veriff) account,
    set `VERIFICATION_PROVIDER=stripe` + `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` in
-   `apps/api/.env`, and implement `StripeVerificationProvider` in
-   `apps/api/src/lib/verification-provider.ts` (the file has the exact API calls and webhook
+   `apps/web/.env.local`, and implement `StripeVerificationProvider` in
+   `apps/web/src/server/verification-provider.ts` (the file has the exact API calls and webhook
    events to use in its top comment). Point the vendor's webhook at
    `POST /api/verification/webhook` (not yet implemented — the stub's `/mock-complete` route is
    not safe to expose in production; it has no signature verification).
@@ -255,10 +247,10 @@ Five things need real decisions before this goes live — flagged here rather th
    Also copy `supabase/templates/recovery.html` into Authentication → Email Templates, or mobile
    password reset (which needs the `{{ .Token }}` code) will break.
 3. **Image storage bucket.** Avatars and post-image embeds are stored via the
-   provider in `apps/api/src/lib/storage-provider.ts`. Locally they sit on disk under
-   `apps/api/uploads/` and are served by the API itself — fine for one dev machine, not for
+   provider in `apps/web/src/server/storage-provider.ts`. Locally they sit on disk under
+   `apps/web/uploads/` and are served by the API itself — fine for one dev machine, not for
    production. Create an S3 or Cloudflare R2 bucket, set `STORAGE_PROVIDER=s3` plus the
-   `STORAGE_S3_*` variables in `apps/api/.env`, and implement `S3StorageProvider` (the file's top
+   `STORAGE_S3_*` variables in `apps/web/.env.local`, and implement `S3StorageProvider` (the file's top
    comment has the exact steps). The local stub refuses to run once real credentials are set.
 4. **Hosting.** The database is already Postgres on Supabase; point `DATABASE_URL` at the hosted
    project's **pooled** connection (Supavisor, port 6543, with
@@ -266,16 +258,16 @@ Five things need real decisions before this goes live — flagged here rather th
    migrations over the direct URL, and aiming migrations at the pooled one is the classic way to
    break this. Set `SUPABASE_URL` and `SUPABASE_SECRET_KEY` to the hosted project's values, and the
    `NEXT_PUBLIC_SUPABASE_*` / `EXPO_PUBLIC_SUPABASE_*` pairs to its URL and publishable key. Host
-   the API somewhere that runs a long-lived Node process (Railway, Render, Fly.io — not Vercel
-   serverless, which doesn't suit a stateful Express app well). Ship `apps/mobile` via EAS Build
-   once the API has a stable public URL.
+   the consolidated `apps/web` project on Vercel. Ship `apps/mobile` via EAS Build once the
+   application has a stable public URL.
 
    **Deploying `apps/web` to Vercel — two gotchas, both already hit:**
    - Set **Root Directory** to `apps/web` in Settings → General. This is a workspaces monorepo;
      the repo root has no `next` dependency, so a root-level build fails with
      *"No Next.js version detected."*
-   - Set `NEXT_PUBLIC_API_URL` to the deployed API's URL. Without it the build succeeds but every
-     page talks to `http://localhost:4000` and shows nothing.
+   - Server-side database, Supabase secret, and provider variables belong in Vercel; only
+     `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` are browser-visible.
+     There is no separate API URL: web requests are same-origin.
    - Any page using `useSearchParams()` must sit inside a `<Suspense>` boundary or `next build`
      fails at static prerender (`next dev` won't catch this). Run `npx next build` locally before
      pushing.
@@ -291,7 +283,7 @@ Five things need real decisions before this goes live — flagged here rather th
 - Google/Apple sign-in is also a local mock until you add real credentials — the "Continue with
   Google/Apple" buttons currently create an account from whatever name/email you type in, no
   actual Google/Apple involved.
-- The web preview wall truncates by character count only (`apps/api/src/routes/threads.ts`) — it
+- The web preview wall truncates by character count only (`apps/web/src/server/routes/threads.ts`) — it
   doesn't try to cut at a sentence/word boundary, so the teaser can end mid-word.
 - **No admin bootstrap.** The *first* admin still has to be promoted by setting `role: "admin"`
   directly in the database — after that, admins promote each other from `/admin/users`. The seed
@@ -314,7 +306,7 @@ Five things need real decisions before this goes live — flagged here rather th
   embeds make this surface much larger than avatars alone: any verified member can now put an
   arbitrary picture in front of every reader. Decide on a review policy (and ideally an
   automated screen) before launch.
-- Avatar files uploaded via the local storage stub live in `apps/api/uploads/` and die with the
+- Avatar files uploaded via the local storage stub live in `apps/web/uploads/` and die with the
   machine — see "Image storage bucket" above before pointing real users at this.
 - Account deletion anonymizes to "[deleted]" rather than erasing content. A deleted author's
   threads/replies/messages remain readable; whether that satisfies a legal erasure request is a
@@ -322,7 +314,7 @@ Five things need real decisions before this goes live — flagged here rather th
 - **Push notifications are a log-only stub.** In-app notifications, search, and saved threads
   work on both platforms, but real push delivery needs an Apple Developer APNs key (plus FCM
   for Android) uploaded to an Expo project and `EXPO_ACCESS_TOKEN` set — see
-  `apps/api/src/lib/push-provider.ts`. Until then pushes are logged to the API console, and
+  `apps/web/src/server/push-provider.ts`. Until then pushes are logged to the API console, and
   nothing push-related can be verified end to end.
 - iOS app has not been run in a Simulator in this environment (Xcode is installed but not selected
   as the active developer directory — run

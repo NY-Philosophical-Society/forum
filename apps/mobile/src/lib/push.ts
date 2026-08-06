@@ -4,7 +4,7 @@ import { api } from "./api";
 
 /**
  * Device-side half of push notifications (server half:
- * apps/api/src/lib/push-provider.ts — a log-only stub until real APNs/FCM
+ * apps/web/src/server/push-provider.ts — a log-only stub until real APNs/FCM
  * credentials exist, so nothing here can be verified end-to-end locally
  * beyond token registration).
  *
