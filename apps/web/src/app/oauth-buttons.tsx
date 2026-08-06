@@ -19,7 +19,9 @@ export function OAuthButtons() {
   async function signInWith(provider: "google" | "apple") {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin },
+      // Keep the trailing slash so this exactly matches the production root
+      // registered in Supabase's redirect URL allow list.
+      options: { redirectTo: new URL("/", window.location.href).toString() },
     });
     if (error) setError(error.message);
   }
