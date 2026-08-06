@@ -56,7 +56,7 @@ zero-setup local dev; that cost was accepted when Supabase was chosen.
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")      // pooled (Supavisor 6543) in production
-  directUrl = env("DIRECT_URL")        // direct (5432), used for migrations
+  directUrl = env("DIRECT_DATABASE_URL") // direct (5432), used for migrations
 }
 ```
 

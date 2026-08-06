@@ -91,10 +91,10 @@ express that. Keeping Express keeps that logic where it works.
 
 ### 4. Storage
 
-Supabase Storage can replace Cloudflare R2 if you want one fewer vendor —
-`lib/storage-provider.ts` is already an interface with a local-disk stub, so
-this is one new implementation behind the existing contract. R2 remains fine.
-Either way the interface does not change.
+Production image storage also uses Supabase. `src/server/storage-provider.ts`
+keeps the local-disk development stub and implements the same contract with the
+public `forum-images` bucket for hosted environments. Writes and deletes remain
+server-side through `SUPABASE_SECRET_KEY`; clients receive only public URLs.
 
 ## Cost: the test suite
 

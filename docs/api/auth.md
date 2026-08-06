@@ -1,6 +1,6 @@
 # Auth & verification
 
-`apps/api/src/routes/auth.ts` · `apps/api/src/routes/verification.ts`
+`apps/web/src/server/routes/auth.ts` · `apps/web/src/server/routes/verification.ts`
 Cross-cutting rules (JWT shape, hashing, tiers, limiters) live in [`../API.md`](../API.md).
 
 All request bodies are `application/json` unless stated. Every validation
@@ -228,7 +228,7 @@ for Apple). That guard is the reason it cannot become a production backdoor —
 
 ## Provider linking
 
-`apps/api/src/lib/oauth-user.ts`, shared by the real and mock paths:
+`apps/web/src/server/oauth-user.ts`, shared by the real and mock paths:
 
 1. Match on `googleId` / `appleId` → return that user, `linked: false`.
 2. Otherwise match on `email` → write the provider id onto that row,
@@ -271,7 +271,7 @@ carries the token, because no mailer is configured:
 The link is `console.log`ged in every environment. **`devResetUrl`/`devToken`
 are the production guard: they are gated on `NODE_ENV !== "production"` and
 nothing else.** Wire a real mailer (SES / Postmark / Resend) and drop both
-fields; `apps/api/src/routes/auth.password-reset.test.ts` has a test that
+fields; `apps/web/src/server/routes/auth.password-reset.test.ts` has a test that
 asserts they are absent under `NODE_ENV=production` — keep it.
 
 Token semantics — `PasswordResetToken`:

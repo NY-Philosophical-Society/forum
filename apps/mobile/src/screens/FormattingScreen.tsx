@@ -72,7 +72,7 @@ export function FormattingScreen() {
       <View style={styles.example}>
         <Text style={styles.exampleTitle}>Images</Text>
         <Text style={styles.notice}>
-          Use the 🖼 toolbar button to add a photo from your camera or library (up to 8MB). Only
+          Use the 🖼 toolbar button to add a photo from your camera or library (up to 4MB). Only
           images uploaded here render inline; a link to an image elsewhere stays a link.
         </Text>
       </View>

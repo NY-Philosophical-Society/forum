@@ -1,6 +1,6 @@
 # NYPS Forum API — reference
 
-**The running Express + Prisma + SQLite implementation in `apps/api` is the
+**The running Next.js route-handler + Prisma implementation in `apps/web` is the
 specification.** This document is that implementation written down, walked out
 of the code route by route, so it doesn't have to be reverse-engineered. Where
 this file and the code disagree, the code is right and this file is a bug.
@@ -47,26 +47,25 @@ response types in `packages/shared/src/types.ts` — both are imported by the AP
 
 ## Conventions
 
-**Base URL.** `http://localhost:4000` in dev (`PORT`, default 4000). Everything
+**Base URL.** Same-origin `http://localhost:3000` in dev. Everything
 is under `/api`, except `GET /health` → `{ "ok": true }` and the static
 `/uploads/*` mount.
 
-**`/uploads/*`** is served by the API itself (`express.static`, `maxAge: 365d`,
-`immutable`, `fallthrough: false`) **only when `storageProvider.name === "local"`**.
+**`/uploads/*`** is served by a dedicated Next route with a one-year immutable
+cache header **only when `storageProvider.name === "local"`**.
 With a real bucket the provider returns its own URLs and this mount doesn't
-exist. `app.ts` is where that branch lives.
+exist.
 
-**Content type.** `application/json` in and out, via a global
-`express.json()` (default 100 kB body limit). Two routes are the exception and
-take **raw image bytes** with `express.raw`: `POST /api/users/me/avatar` and
+**Content type.** `application/json` in and out, with a shared 100 KiB bounded
+body reader. Two routes are the exception and take **raw image bytes** with a
+4 MB bounded reader: `POST /api/users/me/avatar` and
 `POST /api/uploads/image`.
 
 **Auth header.** `Authorization: Bearer <jwt>`. Nothing uses cookies. The
 clients keep the token in `localStorage` (web) / `AsyncStorage` (mobile).
 
-**CORS.** `app.use(cors())` — wide open (`Access-Control-Allow-Origin: *`,
-credentials off). Fine while the token travels in a header and there are no
-cookies; lock it to the real web origins before launch anyway.
+**CORS.** The web client is same-origin and no permissive CORS headers are
+added. React Native is not subject to browser CORS.
 
 **Error shape.** Always `{ "error": "<human-readable sentence>" }` with the
 status code. Validation failures return **only the first zod issue**
@@ -86,9 +85,9 @@ the user's MM/DD/YYYY vs DD/MM/YYYY setting, never showing seconds.
 
 **IDs** are Prisma `cuid()`s.
 
-**No global error handler and no 404 handler.** An unhandled rejection inside an
-async route handler is not caught by Express 4 — the request hangs. Add both
-when you rebuild.
+**Errors and missing routes.** Unexpected exceptions are logged server-side and
+return `500 { "error": "Internal server error" }`; missing routes return JSON
+404s and recognized paths reject unsupported methods with 405.
 
 **Route ordering matters** in one place: `GET /api/messages/conversations` is
 registered before `GET /api/messages/:userId`.
@@ -97,7 +96,7 @@ registered before `GET /api/messages/:userId`.
 
 ## Endpoint index
 
-Auth tiers, from the middleware in `apps/api/src/middleware/auth.ts`:
+Auth tiers, from the middleware in `apps/web/src/server/guards.ts`:
 
 | Tier | Meaning |
 | --- | --- |
@@ -243,7 +242,7 @@ excluded from `GET /api/search` user results or `GET /api/users?search=`.
 
 ### JWT
 
-`apps/api/src/auth.ts` — 19 lines, the whole session mechanism:
+`apps/web/src/auth.ts` — 19 lines, the whole session mechanism:
 
 ```ts
 signToken({ userId })  // jwt.sign(payload, JWT_SECRET, { expiresIn: "30d" })
@@ -273,7 +272,7 @@ Apple — every code path that touches it branches on that (an OAuth account
 
 ### Middleware
 
-`apps/api/src/middleware/auth.ts`. `requireAuth` attaches a `req.user` carrying
+`apps/web/src/server/guards.ts`. `requireAuth` attaches a `req.user` carrying
 `{ id, email, displayName, avatarUrl, bio, verificationStatus, role,
 isSupporter, directoryVisible, directoryBio, openToPartners, passwordHash,
 createdAt }` — note `passwordHash` and `email` are on the request object, so be
@@ -387,8 +386,8 @@ Everything else is all-or-nothing:
 
 ## Rate limits
 
-`apps/api/src/lib/rate-limit.ts`, `express-rate-limit` v8, **in-memory store**,
-keyed by IP, `standardHeaders: true` / `legacyHeaders: false`.
+`apps/web/src/server/rate-limit.ts`, **in-memory store**, keyed by Vercel's
+platform-supplied client IP in production and a deterministic test key locally.
 
 | Limiter | Window | Max | Applied to |
 | --- | --- | --- | --- |
@@ -412,12 +411,13 @@ Two things to fix when you rebuild:
 1. **In-memory means single-instance.** Two app instances halve the effective
    limit per attacker and lose all counters on restart. Move to a shared store
    (Redis) or the platform's edge rate limiting.
-2. **`app.set("trust proxy", …)` is never called.** Behind a load balancer or
-   CDN, `req.ip` is the proxy's address and every user shares one bucket.
+2. **Serverless instances do not share counters.** The code preserves the
+   enforcement seam and headers, but a shared store remains required before
+   production abuse controls can be considered reliable.
 
 `DISABLE_RATE_LIMIT=1` makes every limiter `skip`, checked **per request** (not
 at module load) so a test can unset it and prove the 429 path still fires. The
-test suite sets it globally; `src/lib/rate-limit.test.ts` is the one that
+test suite sets it globally; `src/server/rate-limit.test.ts` is the one that
 doesn't.
 
 ---
@@ -449,20 +449,19 @@ Consumers: avatars (`routes/users.ts`) and post image embeds
 (`routes/uploads.ts`). Callers only ever store the returned public URL.
 
 **Stub (`name: "local"`, default):** writes under `LOCAL_UPLOADS_DIR`
-(`UPLOADS_DIR` env override, else `apps/api/uploads/`), returns
+(`UPLOADS_DIR` env override, else `apps/web/uploads/`), returns
 `${API_PUBLIC_URL ?? "http://localhost:<PORT>"}/uploads/<key>`, and `app.ts`
 serves that directory. It normalizes and path-checks every key before writing,
 even though keys are server-generated.
 
-**Real path:** `STORAGE_PROVIDER=s3` plus `STORAGE_S3_BUCKET`,
-`STORAGE_S3_REGION`, `STORAGE_S3_ENDPOINT` (R2), `STORAGE_S3_ACCESS_KEY_ID`,
-`STORAGE_S3_SECRET_ACCESS_KEY`, `STORAGE_S3_PUBLIC_URL`. `S3StorageProvider`
-is **not implemented** — the loader throws a message telling you so. The file's
-top comment has the exact bucket/IAM steps.
+**Real path:** `STORAGE_PROVIDER=supabase` plus
+`SUPABASE_STORAGE_BUCKET=forum-images`. `SupabaseStorageProvider` uploads and
+deletes through the server-only `SUPABASE_SECRET_KEY` client and returns stable
+public-bucket URLs. Files are content-unique, so uploads never use upsert.
 
-**Refusal:** if `STORAGE_S3_BUCKET` or `STORAGE_S3_ACCESS_KEY_ID` is set while
-`STORAGE_PROVIDER` is still `local`, the module **throws at import** rather than
-quietly writing to disk.
+**Refusal:** if `SUPABASE_STORAGE_BUCKET` is set while `STORAGE_PROVIDER` is
+still `local`, or the provider is `supabase` without a bucket, the module
+**throws at import** rather than quietly writing to disk.
 
 ### `verification-provider.ts` — identity verification
 
@@ -544,8 +543,8 @@ why its refusal guard matters most.
 
 ## Data model
 
-`apps/api/prisma/schema.prisma`, 20 models, SQLite. Migrations are in
-`apps/api/prisma/migrations/` (11 of them, ending `20260730145811_event_threads`).
+`apps/web/prisma/schema.prisma`, 20 models, SQLite. Migrations are in
+`apps/web/prisma/migrations/` (11 of them, ending `20260730145811_event_threads`).
 
 | Model | What it is |
 | --- | --- |
@@ -628,7 +627,7 @@ decision before launch.
 | --- | --- | --- |
 | **SQLite** | `schema.prisma` datasource | Postgres. A single file can't be shared between instances or survive a container restart. Change the provider, re-generate migrations, re-check every `contains` filter (SQLite `LIKE` is case-insensitive for ASCII; Postgres `LIKE` is not — use `mode: "insensitive"`). |
 | **In-memory rate limiting** | `lib/rate-limit.ts` | Correct on **one** instance only; also no `trust proxy`. Shared store or platform limiting. |
-| **Local-disk uploads** | `lib/storage-provider.ts` | S3 or R2. Container filesystems are ephemeral — uploads vanish on redeploy. `S3StorageProvider` is unimplemented. |
+| **Local-disk uploads** | `src/server/storage-provider.ts` | Development only. Production uses the public `forum-images` Supabase Storage bucket. |
 | **Stub identity verification** | `lib/verification-provider.ts` | A real vendor **and** a signature-verifying `POST /api/verification/webhook`. The current `mock-complete` route is unauthenticated. **No identity in this prototype has ever been checked.** |
 | **Dev-mode OAuth mock** | `POST /api/auth/oauth/dev-mock` | Real Google/Apple credentials. The route refuses to run once they exist — keep that guard or delete the route. |
 | **`WISDOMKEY`** | `POST /api/auth/redeem-code` | The payment placeholder. A standing, unlimited-use, unrate-limited code that grants `isSupporter` — swap it for a real donation/subscription API check before membership means anything. |
@@ -639,7 +638,7 @@ decision before launch.
 | **No image content moderation** | uploads | Files are validated and EXIF-stripped; nothing reviews what the picture *shows*. |
 | **N+1 and unpaginated queries** | `GET /api/messages/conversations`, `GET /api/reports`, `GET /api/threads/:id` | Listed per endpoint in the area files. All are prototype-scale acceptable and production-scale not. |
 | **No transactions around multi-step moderation** | `POST /api/reports/:id/resolve` | Action + report close + two log rows are separate writes. |
-| **No global error handler / 404 handler** | `app.ts` | An async throw hangs the request. |
+| **Per-instance rate-limit counters** | `src/server/rate-limit.ts` | Move counters to a shared production store. |
 
 Hosting trade-offs and a recommendation: `docs/BACKEND-OPTIONS.md`.
 Anything added to the API after this document: `docs/API-CHANGES.md`.
@@ -648,13 +647,13 @@ Anything added to the API after this document: `docs/API-CHANGES.md`.
 
 ## Test suite
 
-Vitest + supertest, driving the real Express app. **21 files, 179 tests,
-currently all passing.**
+Vitest driving the same Web Request/Response dispatcher used by Next.
+**19 files, 172 tests, currently all passing.**
 
 ```bash
 npm test                      # everything, from the repo root
-cd apps/api && npm test       # the API suite (npx vitest run)
-cd apps/api && npx vitest run src/routes/threads.access.test.ts   # one file
+cd apps/web && npm test       # the web/server suite (npx vitest run)
+cd apps/web && npx vitest run src/server/routes/threads.access.test.ts
 cd packages/shared && npm test
 ```
 
@@ -662,9 +661,9 @@ cd packages/shared && npm test
 database and the auth server both. `docs/TESTING.md` has the full detail; the
 short version:
 
-- `src/test/global-setup.ts` creates a throwaway `nyps_api_test_*` database on
+- `src/server/test/global-setup.ts` creates a throwaway `nyps_api_test_*` database on
   the local Supabase Postgres, runs `prisma migrate deploy` against it, and
-  drops it afterwards. `src/test/setup.ts` **refuses to run** unless
+  drops it afterwards. `src/server/test/setup.ts` **refuses to run** unless
   `DATABASE_URL` carries the `nyps_api_test_` marker, so a broken env can never
   fall back to the dev database, and global setup refuses a non-loopback
   `SUPABASE_URL`. Files run one at a time in fresh forks.

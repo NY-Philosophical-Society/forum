@@ -1,6 +1,6 @@
 # Users, profiles, accounts & blocking
 
-`apps/api/src/routes/users.ts` (everything under `/api/users`).
+`apps/web/src/server/routes/users.ts` (everything under `/api/users`).
 Cross-cutting rules: [`../API.md`](../API.md). The admin mutations at the bottom
 of this file are also indexed from [`moderation.md`](moderation.md).
 
@@ -85,7 +85,7 @@ without erasing the choices.
 **Auth:** `requireAuth` · **Limiter:** `writeLimiter`
 
 **Not JSON.** Raw bytes with `Content-Type: image/jpeg | image/png | image/webp`;
-parser is `express.raw({ type: [...], limit: "8MB" })`.
+parser is `express.raw({ type: [...], limit: "4MB" })`.
 
 **200** `{ "user": PublicUser }` with `avatarUrl` set.
 

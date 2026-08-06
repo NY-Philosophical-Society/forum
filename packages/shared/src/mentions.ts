@@ -4,7 +4,7 @@
  * as links for free and no second syntax needs parsing. These helpers are
  * the single definition of that convention: composers insert with
  * mentionMarkdown(), the API re-parses with extractMentionUserIds() to keep
- * the structural Mention table in sync (see apps/api/src/lib/mentions.ts).
+ * the structural Mention table in sync (see apps/web/src/server/mentions.ts).
  */
 
 // Hyphens matter: user ids are Supabase auth uuids, not the cuids this

@@ -1,7 +1,7 @@
 # The Forum — state of play
 
 **The single source of truth for where this project is and what's undecided.**
-Updated 2026-07-31.
+Updated 2026-08-05.
 
 Everything else in `docs/` is either a reference (`API.md`, `DESIGN_SYSTEM.md`,
 `TESTING.md`) or a record of a completed run (`runs/`). If a decision matters,
@@ -20,9 +20,10 @@ spaces.
 Separate from the marketing site (`nyphilosophy.org`); this is its own repo,
 `NY-Philosophical-Society/forum`.
 
-**Stack:** npm-workspaces monorepo — Express 4 + Prisma API, Next.js 14 web,
-Expo React Native mobile, shared types package. Supabase Postgres and Supabase
-Auth, run locally through the Supabase CLI.
+**Stack:** npm-workspaces monorepo — one Next.js 14 App Router application with
+same-origin REST handlers and Prisma, Expo React Native mobile, and a shared
+types package. Supabase Postgres and Supabase Auth run locally through the
+Supabase CLI.
 
 ---
 
@@ -93,7 +94,7 @@ directly on the signup screen. `docs/API.md` documents the toggle.
 
 | Decision | Detail |
 | --- | --- |
-| **Backend host** | **Supabase** — database host and auth provider, migrated 2026-07-31. Express stays as the API layer; no PostgREST, no RLS. See §4. |
+| **Backend host** | **Supabase** provides database and auth; Next.js route handlers are the only application API/database client. No PostgREST and no duplicate RLS authorization. |
 | **Membership model** | Reading stays free. Membership buys member spaces, never a lock on the main feed. Supporter-gated reading was proposed and **rejected** — it inverts the funnel. |
 | **Single feed** | One feed with optional tags. Not boards. Chapters are separate access-controlled spaces, not a boards system by another name. |
 | **Likes only** | No downvotes, ever. |
@@ -115,16 +116,17 @@ directly on the signup screen. `docs/API.md` documents the toggle.
    requires Docker and `supabase start` — the cost that was being deferred. The
    local stack runs on the 544xx port block so it can coexist with another
    Supabase project on the same machine.
-3. **Storage** — Supabase Storage or Cloudflare R2? Both sit behind the existing
-   `storage-provider` interface, so this is reversible. R2 has no egress fees;
-   Supabase is one fewer vendor.
-4. **Rate limiting is single-instance only.** `express-rate-limit` with the
-   default memory store — two instances silently double what an attacker gets.
-   Needs Redis, or an explicit single-instance constraint, before scaling.
+3. **Storage — decided and built.** Production uses a public `forum-images`
+   Supabase Storage bucket through the existing `storage-provider` interface.
+   The server sanitizes every upload and performs writes and deletes with the
+   server-only Supabase secret; clients receive stable public URLs.
+4. **Rate limiting is per-instance only.** The Next server uses an in-memory
+   store keyed by Vercel's client-IP header; serverless instances do not share
+   counters. It needs a shared store before scaling.
 5. **Region is fixed at project creation** — `us-east-1` for New York.
 
-**Not open:** whether to use RLS. Express is the only database client, so
-policies would duplicate middleware. Don't build them.
+**Not open:** whether to use RLS for application authorization. Next's server
+route layer is the only database client, so policies would duplicate guards.
 
 ---
 
@@ -213,8 +215,10 @@ question is settled; kept for the reasoning), `docs/MEMBERSHIP.md` (folded into
 ### Running it locally
 ```
 npm install
-cd apps/api && npx prisma migrate dev && npm run db:seed && npm run dev
-cd apps/web && npm run dev
+cp apps/web/.env.local.example apps/web/.env.local
+npm run db:migrate
+npm run db:seed
+npm run dev:web
 ```
 Demo accounts, all `demo-password-123`:
 `admin@demo.nyphilosophy.org` (admin) · `marguerite@` (member, NYC chapter,

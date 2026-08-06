@@ -1,6 +1,6 @@
 # Reports, admin dashboard & the moderation log
 
-`apps/api/src/routes/reports.ts` · `admin.ts` · `apps/api/src/lib/moderation.ts` ·
+`apps/web/src/server/routes/reports.ts` · `admin.ts` · `apps/web/src/server/moderation.ts` ·
 `lib/moderation-log.ts`
 Cross-cutting rules: [`../API.md`](../API.md).
 
@@ -14,7 +14,7 @@ locking/pinning/deleting a thread is under `/api/threads`
 ## The moderation log invariant
 
 Every admin mutation in the API writes exactly one `ModerationLog` row through
-`logModeration()` in `apps/api/src/lib/moderation-log.ts`. One helper rather
+`logModeration()` in `apps/web/src/server/moderation-log.ts`. One helper rather
 than an inline `prisma.create` per endpoint, so adding a moderation route and
 forgetting the audit record takes a deliberate omission rather than an
 oversight.
@@ -317,6 +317,6 @@ action still happened. `detail` is stored but **not** returned by this
 endpoint; read it from the database if you need it.
 
 This is the only route for this resource. There is no write, edit, or delete
-counterpart, by design — `apps/api/src/routes/admin.test.ts` has a test that
+counterpart, by design — `apps/web/src/server/routes/admin.test.ts` has a test that
 asserts it (`"is read-only — no route writes, edits, or deletes an entry"`).
 Keep that test.
