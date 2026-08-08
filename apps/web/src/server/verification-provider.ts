@@ -24,6 +24,7 @@
  */
 
 import { randomUUID } from "crypto";
+import Stripe from "stripe";
 import type { VerificationStatus } from "@nyps-forum/shared";
 
 export interface VerificationSessionResult {
@@ -60,15 +61,71 @@ class StubVerificationProvider implements VerificationProvider {
   }
 }
 
+/**
+ * Stripe Identity.
+ *
+ * The identity document and selfie go to Stripe's hosted flow and never touch
+ * our servers — we hold the session id and, once the webhook fires, a
+ * pass/fail. That split is what the privacy policy promises, so keep it.
+ *
+ * `metadata.userId` is how the webhook finds its way back to an account
+ * without trusting anything the browser sends.
+ */
+class StripeVerificationProvider implements VerificationProvider {
+  readonly name = "stripe";
+
+  async createSession(input: {
+    userId: string;
+    email: string;
+  }): Promise<VerificationSessionResult> {
+    const session = await stripeClient().identity.verificationSessions.create({
+      type: "document",
+      // A document alone proves the document exists; the selfie is what ties
+      // it to the person holding it. Without this the check is near-useless.
+      options: { document: { require_matching_selfie: true } },
+      metadata: { userId: input.userId },
+    });
+
+    if (!session.url) {
+      // Only returned for sessions created in the hosted flow; if it is
+      // missing there is nowhere to send the member, so fail loudly rather
+      // than store a session that can never complete.
+      throw new Error("Stripe did not return a hosted verification URL.");
+    }
+
+    return {
+      providerSessionId: session.id,
+      verificationUrl: session.url,
+      status: "PENDING",
+    };
+  }
+}
+
+/**
+ * Built on demand rather than at import time: the module is imported by the
+ * whole API surface, and a missing key should fail the one request that needs
+ * Stripe, not every route in the app.
+ */
+let cachedStripe: Stripe | null = null;
+export function stripeClient(): Stripe {
+  if (cachedStripe) return cachedStripe;
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    throw new Error(
+      'VERIFICATION_PROVIDER is "stripe" but STRIPE_SECRET_KEY is not set.',
+    );
+  }
+  cachedStripe = new Stripe(key);
+  return cachedStripe;
+}
+
 function loadProvider(): VerificationProvider {
   const configured = process.env.VERIFICATION_PROVIDER ?? "stub";
-  if (configured === "stub") {
-    return new StubVerificationProvider();
-  }
+  if (configured === "stub") return new StubVerificationProvider();
+  if (configured === "stripe") return new StripeVerificationProvider();
   throw new Error(
-    `VERIFICATION_PROVIDER="${configured}" is not implemented in this prototype. ` +
-      `Implement a StripeVerificationProvider in src/server/verification-provider.ts ` +
-      `(see the file's top comment) before switching this on.`,
+    `VERIFICATION_PROVIDER="${configured}" is not implemented. ` +
+      `Supported values are "stub" and "stripe".`,
   );
 }
 
