@@ -14,7 +14,7 @@ export function Nav() {
         <Link href="/" className="brand">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/nypc-icon.png" alt="The New York Philosophy Club" className="brand-logo" />
-          <span>New York Philosophy Club</span>
+          <span>Philosophy Club</span>
         </Link>
         <div className="nav-links">
           {!loading && user && (
@@ -28,9 +28,9 @@ export function Nav() {
           )}
           {!loading && !user && (
             <>
-              <Link className="nav-link" href="/settings">
-                Settings
-              </Link>
+              {/* Settings is intentionally not linked here — it belongs to an
+                  account, and a signed-out visitor has nothing to configure
+                  yet. Signed-in members reach it from the profile menu. */}
               <Link className="nav-link" href="/login">
                 Log in
               </Link>

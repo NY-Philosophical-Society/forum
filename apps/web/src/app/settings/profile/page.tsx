@@ -12,7 +12,8 @@ export default function EditProfilePage() {
   const { user, token, loading, refreshUser } = useAuth();
   const fileInput = useRef<HTMLInputElement>(null);
   const [bio, setBio] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [seeded, setSeeded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -20,10 +21,17 @@ export default function EditProfilePage() {
   const [saved, setSaved] = useState(false);
 
   // Seed the form once the session is known; don't clobber edits on refreshUser.
+  //
+  // The account stores one `displayName`, so the two fields are a presentation
+  // split: everything up to the first space is the first name, the remainder
+  // is the last name. That keeps multi-part surnames ("van der Berg") intact,
+  // which the naive "split on every space" version would mangle.
   useEffect(() => {
     if (user && !seeded) {
       setBio(user.bio ?? "");
-      setDisplayName(user.displayName);
+      const [first = "", ...rest] = user.displayName.trim().split(/\s+/);
+      setFirstName(first);
+      setLastName(rest.join(" "));
       setSeeded(true);
     }
   }, [user, seeded]);
@@ -77,6 +85,7 @@ export default function EditProfilePage() {
     setSaved(false);
     setSaving(true);
     try {
+      const displayName = `${firstName.trim()} ${lastName.trim()}`.trim();
       await api.patch<{ user: PublicUser }>(
         "/api/users/me",
         nameLocked ? { bio } : { bio, displayName },
@@ -134,28 +143,40 @@ export default function EditProfilePage() {
       <form onSubmit={save}>
         <div className="card settings-section" style={{ maxWidth: "none" }}>
           <h3>About you</h3>
-          <label>
-            Display name
-            <input
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              disabled={nameLocked}
-              required
-              minLength={2}
-              maxLength={80}
-            />
-            {nameLocked ? (
-              <p className="field-hint">
-                Your display name is the legal name your identity was verified against, so it
-                can&apos;t be changed while verified. Contact the Society if your legal name has
-                changed.
-              </p>
-            ) : (
-              <p className="field-hint">
-                Your real first and last name — it becomes permanent once your identity is verified.
-              </p>
-            )}
-          </label>
+          <div className="field-pair">
+            <label>
+              First name
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                disabled={nameLocked}
+                placeholder="Jane"
+                required
+                maxLength={40}
+              />
+            </label>
+            <label>
+              Last name
+              <input
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                disabled={nameLocked}
+                placeholder="Doe"
+                required
+                maxLength={40}
+              />
+            </label>
+          </div>
+          {nameLocked ? (
+            <p className="field-hint">
+              This is the legal name your identity was verified against, so it can&apos;t be
+              changed while verified. Contact the Society if your legal name has changed.
+            </p>
+          ) : (
+            <p className="field-hint">
+              Your real name — it becomes permanent once your identity is verified.
+            </p>
+          )}
           <label>
             Bio
             <textarea

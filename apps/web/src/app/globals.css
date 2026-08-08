@@ -400,6 +400,31 @@ label {
   color: var(--ink);
 }
 
+/*
+ * Two fields on one line (first name / last name).
+ *
+ * Not `.row` — flex and grid items both default to a minimum size of their
+ * content, and an <input>'s intrinsic width is around 200px. Two of those
+ * refuse to shrink and overflow the 420px auth card, so the pair ends up
+ * wider than the Email and Password fields below it. `minmax(0, 1fr)` is
+ * what lets the columns shrink to the form's width instead.
+ */
+.field-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.field-pair input {
+  min-width: 0;
+}
+
+@media (max-width: 380px) {
+  .field-pair {
+    grid-template-columns: 1fr;
+  }
+}
+
 input,
 textarea,
 select {
@@ -895,6 +920,23 @@ textarea {
   font-size: var(--text-sm);
   color: var(--muted);
   text-align: center;
+}
+
+/*
+ * The real-name explanation under the signup form. `.auth-footer` renders as
+ * grey small print, which is where the eye goes last — wrong for the one
+ * thing on this page we actually want read. Full body size, full-strength
+ * text colour, and a rule above it to separate it from the form.
+ */
+.auth-note {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--ink);
+  text-align: left;
 }
 
 /* ---------------------------------------------------------------------------

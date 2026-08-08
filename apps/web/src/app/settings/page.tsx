@@ -17,7 +17,7 @@ import { hasPasswordIdentity, supabase } from "~/lib/supabase";
 
 export default function SettingsPage() {
   const { dateFormat, setDateFormat, theme, setTheme } = useSettings();
-  const { user, token, refreshUser } = useAuth();
+  const { user, token, loading, refreshUser } = useAuth();
   const [code, setCode] = useState("");
   const [redeeming, setRedeeming] = useState(false);
   const [redeemError, setRedeemError] = useState<string | null>(null);
@@ -38,6 +38,28 @@ export default function SettingsPage() {
     } finally {
       setRedeeming(false);
     }
+  }
+
+  // Settings belong to an account. The appearance controls do work signed
+  // out, but showing a half-empty Settings page to a visitor who has nothing
+  // to configure reads as broken — so the whole page waits for a session.
+  if (loading) return null;
+  if (!user) {
+    return (
+      <div>
+        <h1 className="page-title">Settings</h1>
+        <p className="meta" style={{ marginTop: "1rem" }}>
+          <Link href="/login" className="inline-link">
+            Log in
+          </Link>{" "}
+          or{" "}
+          <Link href="/signup" className="inline-link">
+            create an account
+          </Link>{" "}
+          to change your settings.
+        </p>
+      </div>
+    );
   }
 
   return (

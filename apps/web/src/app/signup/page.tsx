@@ -43,8 +43,8 @@ export default function SignupPage() {
         <OAuthButtons />
 
         <form onSubmit={onSubmit}>
-          <div className="row" style={{ gap: "0.75rem" }}>
-            <label style={{ flex: 1 }}>
+          <div className="field-pair">
+            <label>
               First name
               <input
                 value={firstName}
@@ -53,7 +53,7 @@ export default function SignupPage() {
                 required
               />
             </label>
-            <label style={{ flex: 1 }}>
+            <label>
               Last name
               <input
                 value={lastName}
@@ -88,13 +88,10 @@ export default function SignupPage() {
           </button>
         </form>
 
-        <p className="auth-footer">
-          We ask for your real name because we think philosophy is better when people stand behind
-          their words. A name you'd say out loud in a seminar room changes how you argue and how
-          you listen — it's harder to be cruel, and easier to be taken seriously. For now that
-          runs on the honor system: we trust the name you give us, and you can post as soon as you
-          sign up. If you'd like your identity confirmed rather than simply asserted, a one-time ID
-          verification is built in and available any time from your account.
+        <p className="auth-note">
+          We ask for your real name because too much of the internet is anonymous and one-off.
+          Philosophy works better when people answer for what they say and can trust the person
+          across from them.
         </p>
       </div>
     </div>

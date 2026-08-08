@@ -60,7 +60,7 @@ export function NewThreadScreen({ route, navigation }: Props) {
         style={styles.input}
         value={title}
         onChangeText={setTitle}
-        placeholder="Frame it as a question worth arguing about"
+        placeholder="Frame it as a question worth discussing"
         placeholderTextColor={colors.muted}
       />
       <Text style={styles.label}>Opening post</Text>

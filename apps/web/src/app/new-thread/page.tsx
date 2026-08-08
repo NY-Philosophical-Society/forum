@@ -148,7 +148,7 @@ function NewThreadForm() {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Frame it as a question worth arguing about"
+            placeholder="Frame it as a question worth discussing"
             required
           />
         </label>
