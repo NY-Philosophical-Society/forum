@@ -145,7 +145,7 @@ export default function UserProfilePage() {
           </span>
           <p className="wall-title">See what {user.displayName} has written</p>
           <p className="meta">
-            NYPS Forum is free to join — read members&apos; threads and replies once you have an
+            The forum is free to join — read members&apos; threads and replies once you have an
             account.
           </p>
           <div className="row" style={{ marginTop: "1rem" }}>

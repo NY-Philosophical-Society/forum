@@ -462,12 +462,12 @@ export default function ThreadPage() {
           </span>
           <p className="wall-title">
             {thread.postCount > 0
-              ? `${thread.postCount} ${thread.postCount === 1 ? "reply" : "replies"} await`
+              ? `${thread.postCount} ${thread.postCount === 1 ? "reply awaits" : "replies await"}`
               : "Join this discussion"}
           </p>
           <p className="meta">
-            NYPS Forum is free to join — read the full discussion, like posts, and reply once
-            you've verified your identity.
+            The forum is free to join — read the full discussion, like posts, and reply as soon as
+            you sign up.
           </p>
           <div className="row" style={{ marginTop: "1rem" }}>
             <a href="/signup">

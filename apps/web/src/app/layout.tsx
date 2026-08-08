@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Libre_Baskerville, Newsreader } from "next/font/google";
 import { AuthProvider } from "~/lib/auth-context";
 import { SettingsProvider } from "~/lib/settings-context";
+import { Footer } from "./footer";
 import { Nav } from "./nav";
 import "./globals.css";
 
@@ -27,7 +28,7 @@ const display = Newsreader({
 
 export const metadata: Metadata = {
   title: "Forum — The New York Philosophy Club",
-  description: "The New York Philosophy Club's verified-identity discussion forum.",
+  description: "The New York Philosophy Club's real-name discussion forum.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <Nav />
             <div className="container">{children}</div>
+            <Footer />
           </AuthProvider>
         </SettingsProvider>
       </body>

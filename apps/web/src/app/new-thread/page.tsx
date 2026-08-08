@@ -49,7 +49,17 @@ function NewThreadForm() {
   }, [chapterSlug, token]);
 
   if (loading) return <p className="meta">Loading...</p>;
-  if (!user) return <p className="meta">Log in first.</p>;
+  if (!user) {
+    // A bare "Log in first." is a dead end — give them the way out.
+    return (
+      <div>
+        <h1 className="page-title">Start a thread</h1>
+        <p className="meta" style={{ marginTop: "1rem" }}>
+          <a href="/login">Log in</a> or <a href="/signup">create an account</a> to post.
+        </p>
+      </div>
+    );
+  }
   if (!user.canWrite) {
     return (
       <p className="notice">

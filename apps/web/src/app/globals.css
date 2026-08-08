@@ -419,12 +419,6 @@ label {
   min-width: 0;
 }
 
-@media (max-width: 380px) {
-  .field-pair {
-    grid-template-columns: 1fr;
-  }
-}
-
 input,
 textarea,
 select {
@@ -2356,4 +2350,79 @@ mark {
   font-size: 0.72rem;
   letter-spacing: 0.15em;
   text-transform: uppercase;
+}
+
+/* ---------------------------------------------------------------------------
+   Legal pages and site footer
+--------------------------------------------------------------------------- */
+
+/*
+ * Privacy and Terms are long-form reading, not app chrome: a narrower measure
+ * than `.container` gives, and generous spacing between sections.
+ */
+.prose-page {
+  max-width: 680px;
+  margin: 0 auto;
+  padding-bottom: var(--space-7);
+}
+
+.prose-page h2 {
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-3);
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
+}
+
+.prose-page h3 {
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-2);
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
+}
+
+.prose-page p,
+.prose-page li {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.prose-page p {
+  margin-bottom: var(--space-3);
+}
+
+.prose-page ul {
+  margin: 0 0 var(--space-3) var(--space-4);
+  padding: 0;
+  list-style: disc;
+}
+
+.prose-page li {
+  margin-bottom: var(--space-2);
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1) var(--space-4);
+  margin-top: var(--space-7);
+  padding: var(--space-5) var(--space-4);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  text-align: center;
+}
+
+.site-footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  color: var(--ink);
+  text-decoration: underline;
 }
