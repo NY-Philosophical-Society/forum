@@ -138,6 +138,7 @@ excluded from `GET /api/search` user results or `GET /api/users?search=`.
 | POST | `/api/verification/start` | `requireAuth` | — |
 | GET | `/api/verification/status` | `requireAuth` | — |
 | POST | `/api/verification/mock-complete/:sessionId` | **—** | — · dev only |
+| POST | `/api/verification/webhook` | provider signature | — · provider only |
 
 ### `/api/tags`, `/api/threads`, `/api/posts`, `/api/uploads` · [detail](api/content.md)
 
@@ -471,6 +472,9 @@ interface VerificationProvider {
   createSession(input: { userId: string; email: string }): Promise<{
     providerSessionId: string; verificationUrl: string; status: VerificationStatus;
   }>;
+  parseWebhook?(rawBody: Buffer, headers: Record<string, string | undefined>):
+    Promise<{ provider: string; eventId: string; providerSessionId: string;
+      result: "verified" | "rejected" } | null>;
 }
 ```
 
@@ -483,17 +487,17 @@ real vendor reports, so swapping providers changes nothing downstream.
 approval or rejection. **It performs no identity check whatsoever.**
 
 **Real path:** `VERIFICATION_PROVIDER=stripe` + `STRIPE_SECRET_KEY` +
-`STRIPE_WEBHOOK_SECRET`; implement `StripeVerificationProvider` using
-`stripe.identity.verificationSessions.create()` and verify
+`STRIPE_WEBHOOK_SECRET`; the branch includes a `StripeVerificationProvider`
+that creates hosted sessions and verifies
 `identity.verification_session.verified` / `.requires_input` webhooks with
-`stripe.webhooks.constructEvent`. Persona and Veriff have a near-identical
-create-session + webhook shape. Any value other than `stub` currently throws
-at import.
+`stripe.webhooks.constructEvent`. The normalized event enters the same
+idempotent database transition used by local tests. Persona and Veriff have a
+near-identical create-session + webhook shape, but are not configured.
 
-**Refusal:** `POST /api/verification/mock-complete/:sessionId` 403s whenever
-`verificationProvider.name !== "stub"`. **`POST /api/verification/webhook`
-does not exist yet** — it is the route the vendor should call, with signature
-verification, and it must land before the mock route is exposed anywhere real.
+**Refusal:** `POST /api/verification/mock-complete/:sessionId` is local-only and
+403s in production or whenever `verificationProvider.name !== "stub"`.
+`POST /api/verification/webhook` fails closed when Stripe is not configured,
+rejects missing or invalid signatures, and never stores raw identity payloads.
 
 ### `push-provider.ts` — push notifications
 
@@ -628,7 +632,7 @@ decision before launch.
 | **SQLite** | `schema.prisma` datasource | Postgres. A single file can't be shared between instances or survive a container restart. Change the provider, re-generate migrations, re-check every `contains` filter (SQLite `LIKE` is case-insensitive for ASCII; Postgres `LIKE` is not — use `mode: "insensitive"`). |
 | **In-memory rate limiting** | `lib/rate-limit.ts` | Correct on **one** instance only; also no `trust proxy`. Shared store or platform limiting. |
 | **Local-disk uploads** | `src/server/storage-provider.ts` | Development only. Production uses the public `forum-images` Supabase Storage bucket. |
-| **Stub identity verification** | `lib/verification-provider.ts` | A real vendor **and** a signature-verifying `POST /api/verification/webhook`. The current `mock-complete` route is unauthenticated. **No identity in this prototype has ever been checked.** |
+| **Identity verification** | `src/server/verification-provider.ts` | Stripe Identity adapter and signature-verifying `POST /api/verification/webhook` are implemented but inactive until the club configures a provider. The local `mock-complete` route is for development only; no live identity check has been performed. |
 | **Dev-mode OAuth mock** | `POST /api/auth/oauth/dev-mock` | Real Google/Apple credentials. The route refuses to run once they exist — keep that guard or delete the route. |
 | **`WISDOMKEY`** | `POST /api/auth/redeem-code` | The payment placeholder. A standing, unlimited-use, unrate-limited code that grants `isSupporter` — swap it for a real donation/subscription API check before membership means anything. |
 | **Log-only push** | `lib/push-provider.ts` | APNs + FCM credentials in an Expo project. The Expo path is written; nothing has been delivered to a device. |

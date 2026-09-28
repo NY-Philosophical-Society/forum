@@ -1,0 +1,16 @@
+# Local verification and runtime state must never be packaged for hosting.
+.verification/
+tmp/
+output/
+supabase/
+apps/web/uploads/
+
+# Local credentials and agent-only context are not application inputs.
+**/.env
+**/.env.local
+**/.env.production
+.agents/
+.claude/
+.codex/
+AGENTS.md
+CLAUDE.md

@@ -1,0 +1,80 @@
+name: Review checks
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  web-and-shared:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54421
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-not-a-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:client --workspace=apps/web
+      - run: npm test --workspace=packages/shared
+      - run: npm run build --workspace=apps/web
+
+  api-and-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SUPABASE_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate --workspace=apps/web
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.109.0
+      - name: Start isolated local Supabase
+        run: |
+          printf '[]\n' > supabase/signing_keys.json
+          supabase gen signing-key --algorithm ES256 --append
+          supabase start
+          supabase status -o json | node -e '
+            const fs = require("node:fs");
+            let input = "";
+            process.stdin.on("data", chunk => { input += chunk; });
+            process.stdin.on("end", () => {
+              const status = JSON.parse(input);
+              for (const key of ["API_URL", "DB_URL", "PUBLISHABLE_KEY", "SECRET_KEY"]) {
+                const value = status[key];
+                if (typeof value !== "string" || !value || value.includes("\n")) {
+                  throw new Error(`Supabase status is missing a valid ${key}`);
+                }
+                fs.appendFileSync(process.env.GITHUB_ENV, `${key}=${value}\n`);
+              }
+            });
+          '
+      - run: npx playwright install --with-deps chromium
+      - name: API integration and browser journey
+        run: |
+          export SUPABASE_URL="$API_URL"
+          export SUPABASE_PUBLISHABLE_KEY="$PUBLISHABLE_KEY"
+          export SUPABASE_SECRET_KEY="$SECRET_KEY"
+          export DATABASE_URL="$DB_URL"
+          export DIRECT_DATABASE_URL="$DB_URL"
+          npm run test:api:ci --workspace=apps/web
+          node scripts/run-browser-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure
+          path: apps/web/test-results/
+          retention-days: 7

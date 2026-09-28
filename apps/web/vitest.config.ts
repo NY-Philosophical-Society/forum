@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/server/**/*.test.ts"],
     globalSetup: "./src/server/test/global-setup.ts",
     setupFiles: ["./src/server/test/setup.ts"],
     // One shared throwaway Postgres database; files run one at a time (each in
