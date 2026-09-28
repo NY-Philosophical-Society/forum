@@ -35,6 +35,8 @@ export interface PublicUser {
   canMessage: boolean;
   role: "user" | "admin";
   isSupporter: boolean;
+  /** Verified club membership, distinct from donation-backed forum access. */
+  isSocietyMember: boolean;
   createdAt: string;
 }
 
@@ -70,6 +72,7 @@ export interface DataExport {
     avatarUrl: string | null;
     verificationStatus: string;
     isSupporter: boolean;
+    isSocietyMember: boolean;
     createdAt: string;
   };
   threads: { id: string; title: string; body: string; createdAt: string }[];
@@ -106,6 +109,8 @@ export interface ChapterRef {
 export interface ThreadSummary {
   id: string;
   title: string;
+  /** Member-supplied topic; distinct from curated, filterable tags. */
+  topicLabel?: string | null;
   author: PublicUser;
   createdAt: string;
   /** Set only for chapter threads — responses carrying it are already access-checked. */
@@ -350,6 +355,7 @@ export interface AdminUserSummary {
   verificationStatus: VerificationStatus;
   role: "user" | "admin";
   isSupporter: boolean;
+  isSocietyMember: boolean;
   bannedAt: string | null;
   deletedAt: string | null;
   createdAt: string;

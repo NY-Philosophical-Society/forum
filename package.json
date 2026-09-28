@@ -2,11 +2,18 @@
   "name": "nyps-forum",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": ">=22"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
+    "verify": "node scripts/verify.mjs",
+    "verify:auth-http": "node scripts/verify-auth-http.mjs",
+    "verify:forum-http": "node scripts/verify-forum-http.mjs",
+    "verify:directory-http": "node scripts/verify-directory-http.mjs",
     "test": "npm run test --workspaces --if-present",
     "dev:web": "npm run dev --workspace=apps/web",
     "dev:mobile": "npm run start --workspace=apps/mobile",

@@ -180,6 +180,10 @@ site_url = "http://localhost:3000"
 additional_redirect_urls = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  "http://localhost:3000/showcase",
+  "http://127.0.0.1:3000/showcase",
+  "http://localhost:3100/showcase",
+  "http://127.0.0.1:3100/showcase",
   "nypsforum://auth-callback",
   "env(WEB_DEV_URL)",
 ]

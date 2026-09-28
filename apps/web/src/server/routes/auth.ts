@@ -40,13 +40,15 @@ authRouter.get("/account", requireAuth, async (req, res) => {
 
 /**
  * Supporter access is meant to eventually come from a real donation/journal
- * subscription check via an API connection to that system. Until that
- * integration exists, WISDOMKEY is a standing (never-expiring, unlimited-use)
- * code anyone can redeem — a deliberate placeholder, not a real access
- * control. Swap this out for the real check before treating supporter status
- * as gating anything meaningful.
+ * subscription check via an API connection to that system. The original
+ * WISDOMKEY is an unlimited-use fixture for local development and tests only.
+ * Production must fail closed until an actual membership source is connected.
  */
 authRouter.post("/redeem-code", requireAuth, async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(503).json({ error: "Membership code redemption is not available yet. Contact the club about membership access." });
+  }
+
   const parsed = redeemCodeSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -56,9 +58,25 @@ authRouter.post("/redeem-code", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "That code isn't valid." });
   }
 
-  const user = await prisma.user.update({
-    where: { id: req.user!.id },
-    data: { isSupporter: true, supporterSince: req.user!.isSupporter ? undefined : new Date() },
+  const user = await prisma.$transaction(async (tx) => {
+    await tx.accessGrant.upsert({
+      where: { kind_source_sourceRef: {
+        kind: "forum_supporter", source: "fixture", sourceRef: req.user!.id,
+      } },
+      create: {
+        userId: req.user!.id,
+        kind: "forum_supporter",
+        source: "fixture",
+        sourceRef: req.user!.id,
+        decision: "allow",
+        reason: "Local test code; not verified donation proof",
+      },
+      update: {},
+    });
+    return tx.user.update({
+      where: { id: req.user!.id },
+      data: { isSupporter: true, supporterSince: req.user!.isSupporter ? undefined : new Date() },
+    });
   });
 
   res.json({ user: toPublicUser(user) });

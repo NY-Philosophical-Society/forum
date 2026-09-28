@@ -14,6 +14,7 @@ export type TRequestUser = {
   verificationStatus: string;
   role: string;
   isSupporter: boolean;
+  isSocietyMember: boolean;
   directoryVisible: boolean;
   directoryBio: string | null;
   openToPartners: boolean;
@@ -27,6 +28,8 @@ export type TApiRequest = {
   params: Record<string, string>;
   query: Record<string, string | string[] | undefined>;
   body: unknown;
+  /** Exact request bytes for provider signature verification. Never log. */
+  rawBody: Buffer;
   user?: TRequestUser;
   authClaims?: import("./supabase").TSupabaseClaims;
   source: NextRequest;
@@ -118,8 +121,10 @@ function queryFrom(url: URL): TApiRequest["query"] {
   return query;
 }
 
-async function readBoundedBody(request: NextRequest): Promise<unknown> {
-  if (request.method === "GET" || request.method === "HEAD") return undefined;
+async function readBoundedBody(request: NextRequest): Promise<{ body: unknown; rawBody: Buffer }> {
+  if (request.method === "GET" || request.method === "HEAD") {
+    return { body: undefined, rawBody: Buffer.alloc(0) };
+  }
 
   const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim() ?? "";
   const isRawImage = contentType.startsWith("image/");
@@ -129,7 +134,7 @@ async function readBoundedBody(request: NextRequest): Promise<unknown> {
     throw new HttpError(413, "Request body is too large.");
   }
 
-  if (!request.body) return undefined;
+  if (!request.body) return { body: undefined, rawBody: Buffer.alloc(0) };
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -145,10 +150,12 @@ async function readBoundedBody(request: NextRequest): Promise<unknown> {
   }
 
   const bytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
-  if (isRawImage) return bytes;
-  if (bytes.length === 0 || contentType !== "application/json") return undefined;
+  if (isRawImage) return { body: bytes, rawBody: bytes };
+  if (bytes.length === 0 || contentType !== "application/json") {
+    return { body: undefined, rawBody: bytes };
+  }
   try {
-    return JSON.parse(bytes.toString("utf8"));
+    return { body: JSON.parse(bytes.toString("utf8")), rawBody: bytes };
   } catch {
     throw new HttpError(400, "Malformed JSON request body.");
   }
@@ -228,13 +235,15 @@ export class ApiApplication {
         route.parameterNames.map((name, index) => [name, decodeURIComponent(match?.[index + 1] ?? "")]),
       );
       const headers = Object.fromEntries(source.headers.entries());
+      const parsedBody = await readBoundedBody(source);
       const request: TApiRequest = {
         method: source.method,
         path,
         headers,
         params,
         query: queryFrom(url),
-        body: await readBoundedBody(source),
+        body: parsedBody.body,
+        rawBody: parsedBody.rawBody,
         source,
       };
       const response = new ApiResponse();

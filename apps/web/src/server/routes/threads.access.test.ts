@@ -86,6 +86,30 @@ describe("write access tiers", () => {
     postId = await createPost(author, threadId, "Top-level reply to like.");
   });
 
+  it("persists a member-supplied topic without adding it to curated tags", async () => {
+    const created = await request(app).post("/api/threads")
+      .set("Authorization", `Bearer ${author.token}`)
+      .send({ title: "Can luck change responsibility?", body: LONG_BODY, topicLabel: "Moral luck and responsibility", tagIds: [] });
+    expect(created.status).toBe(201);
+    const detail = await request(app).get(`/api/threads/${created.body.thread.id}`)
+      .set("Authorization", `Bearer ${author.token}`);
+    expect(detail.body.thread.topicLabel).toBe("Moral luck and responsibility");
+    expect(detail.body.thread.tags).toEqual([]);
+    const feed = await request(app).get("/api/threads?sort=new")
+      .set("Authorization", `Bearer ${author.token}`);
+    expect(feed.body.threads.find((item: { id: string }) => item.id === created.body.thread.id)?.topicLabel).toBe("Moral luck and responsibility");
+    const search = await request(app).get("/api/search?q=Moral%20luck%20and%20responsibility&type=threads")
+      .set("Authorization", `Bearer ${author.token}`);
+    expect(search.body.threads.items.some((item: { id: string }) => item.id === created.body.thread.id)).toBe(true);
+    const edited = await request(app).patch(`/api/threads/${created.body.thread.id}`)
+      .set("Authorization", `Bearer ${author.token}`)
+      .send({ topicLabel: "A revised topic" });
+    expect(edited.status).toBe(200);
+    const revised = await request(app).get(`/api/threads/${created.body.thread.id}`)
+      .set("Authorization", `Bearer ${author.token}`);
+    expect(revised.body.thread.topicLabel).toBe("A revised topic");
+  });
+
   it("rejects all writes from anonymous requests with 401", async () => {
     const attempts = [
       request(app).post("/api/threads").send({ title: "Anon thread", body: "x", tagIds: [] }),

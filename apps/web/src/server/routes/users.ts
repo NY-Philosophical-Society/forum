@@ -5,6 +5,7 @@ import {
   banUserSchema,
   deleteAccountSchema,
   setSupporterSchema,
+  setSocietyMemberSchema,
   setUserRoleSchema,
   unbanUserSchema,
   updateProfileSchema,
@@ -18,6 +19,7 @@ import { isFreshlyAuthenticated, supabaseAdmin } from "../supabase";
 import { adminLimiter, authLimiter, writeLimiter } from "../rate-limit";
 import { logModeration } from "../moderation-log";
 import { notify } from "../notifications";
+import { setManualAccess } from "../access-grants";
 
 export const usersRouter = Router();
 
@@ -82,6 +84,7 @@ usersRouter.get("/:id/profile", optionalAuth, async (req, res) => {
     threads: threads.map((t) => ({
       id: t.id,
       title: t.title,
+      topicLabel: t.topicLabel,
       author: toPublicUser(profileUser),
       createdAt: t.createdAt.toISOString(),
       kind: t.kind as "discussion" | "event",
@@ -298,6 +301,7 @@ usersRouter.delete("/me", requireAuth, authLimiter, async (req, res) => {
       bio: null,
       verificationStatus: "UNVERIFIED",
       isSupporter: false,
+      isSocietyMember: false,
       role: "user",
       directoryVisible: false,
       directoryBio: null,
@@ -347,11 +351,13 @@ usersRouter.get("/me/export", requireAuth, async (req, res) => {
       avatarUrl: req.user!.avatarUrl,
       verificationStatus: req.user!.verificationStatus,
       isSupporter: req.user!.isSupporter,
+      isSocietyMember: req.user!.isSocietyMember,
       createdAt: req.user!.createdAt.toISOString(),
     },
     threads: threads.map((t) => ({
       id: t.id,
       title: t.title,
+      topicLabel: t.topicLabel,
       body: t.body,
       createdAt: t.createdAt.toISOString(),
     })),
@@ -544,8 +550,9 @@ usersRouter.post("/:id/role", requireAuth, requireAdmin, adminLimiter, async (re
 
 /**
  * Grant or revoke supporter status by hand. The Society needs this for people
- * who donate outside whatever payment integration eventually exists — the
- * WISDOMKEY code path stays as it is.
+ * who donate outside whatever payment integration eventually exists. Every
+ * change is reasoned and written to the moderation log. The shared placeholder
+ * code is disabled in production and is not an alternative proof of payment.
  */
 usersRouter.post("/:id/supporter", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
   const parsed = setSupporterSchema.safeParse(req.body ?? {});
@@ -557,22 +564,29 @@ usersRouter.post("/:id/supporter", requireAuth, requireAdmin, adminLimiter, asyn
   const target = await prisma.user.findUnique({ where: { id: req.params.id } });
   if (!target || target.deletedAt) return res.status(404).json({ error: "User not found" });
 
-  const user = await prisma.user.update({
-    where: { id: target.id },
-    data: {
-      isSupporter,
-      // Keep the original date on a re-grant; clear it when revoking.
-      supporterSince: isSupporter ? target.supporterSince ?? new Date() : null,
-    },
-  });
-  await logModeration({
+  const user = await setManualAccess({
+    userId: target.id,
+    kind: "forum_supporter",
+    allow: isSupporter,
     actorId: req.user!.id,
-    action: isSupporter ? "supporter_granted" : "supporter_revoked",
-    targetType: "user",
-    targetId: user.id,
-    targetLabel: user.displayName,
     reason,
   });
 
+  res.json({ user: toPublicUser(user) });
+});
+
+/** Formal club membership is a separate staff-verified decision. */
+usersRouter.post("/:id/society-membership", requireAuth, requireAdmin, adminLimiter, async (req, res) => {
+  const parsed = setSocietyMemberSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target || target.deletedAt) return res.status(404).json({ error: "User not found" });
+  const user = await setManualAccess({
+    userId: target.id,
+    kind: "society_member",
+    allow: parsed.data.isSocietyMember,
+    actorId: req.user!.id,
+    reason: parsed.data.reason,
+  });
   res.json({ user: toPublicUser(user) });
 });

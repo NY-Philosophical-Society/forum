@@ -90,6 +90,7 @@ adminRouter.get("/users", async (req, res) => {
     verificationStatus: u.verificationStatus as AdminUserSummary["verificationStatus"],
     role: u.role as AdminUserSummary["role"],
     isSupporter: u.isSupporter,
+    isSocietyMember: u.isSocietyMember,
     bannedAt: u.bannedAt?.toISOString() ?? null,
     deletedAt: u.deletedAt?.toISOString() ?? null,
     createdAt: u.createdAt.toISOString(),

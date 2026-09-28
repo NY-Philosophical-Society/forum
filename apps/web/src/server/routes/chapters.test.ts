@@ -137,6 +137,43 @@ describe("chapter routes — tier gates", () => {
     expect(log).not.toBeNull();
   });
 
+  it("revoking supporter access closes direct chapter links without deleting membership history", async () => {
+    const { admin, insider, slug, threadId, chapterId } = await setupChapter();
+    const save = await request(app)
+      .post("/api/bookmarks")
+      .set("Authorization", `Bearer ${insider.token}`)
+      .send({ threadId });
+    expect(save.status).toBe(201);
+
+    const revoke = await request(app)
+      .post(`/api/users/${insider.id}/supporter`)
+      .set("Authorization", `Bearer ${admin.token}`)
+      .send({ isSupporter: false, reason: "Local test: donation reversed" });
+    expect(revoke.status).toBe(200);
+    expect((await prisma.chapterMembership.findUniqueOrThrow({
+      where: { chapterId_userId: { chapterId, userId: insider.id } },
+    })).state).toBe("active");
+
+    const chapter = await request(app)
+      .get(`/api/chapters/${slug}/threads`)
+      .set("Authorization", `Bearer ${insider.token}`);
+    expect(chapter.status).toBe(403);
+    const detail = await request(app)
+      .get(`/api/threads/${threadId}`)
+      .set("Authorization", `Bearer ${insider.token}`);
+    expect(detail.status).toBe(404);
+    const bookmark = await request(app)
+      .get("/api/bookmarks")
+      .set("Authorization", `Bearer ${insider.token}`);
+    expect(bookmark.body.threads.map((thread: { id: string }) => thread.id)).not.toContain(threadId);
+
+    const create = await request(app)
+      .post("/api/threads")
+      .set("Authorization", `Bearer ${insider.token}`)
+      .send({ title: "Not entitled", body: "Cannot post to the old chapter.", chapterId, tagIds: [] });
+    expect(create.status).toBe(404);
+  });
+
   it("removal closes the chapter again and a member can leave on their own", async () => {
     const { admin, insider, slug, threadId } = await setupChapter();
 

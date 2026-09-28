@@ -47,6 +47,7 @@ bookmarksRouter.get("/", requireAuth, async (req, res) => {
   const threads: ThreadSummary[] = bookmarks.map(({ thread: t }) => ({
     id: t.id,
     title: t.title,
+    topicLabel: t.topicLabel,
     author: toPublicUser(t.author),
     createdAt: t.createdAt.toISOString(),
     kind: t.kind as "discussion" | "event",

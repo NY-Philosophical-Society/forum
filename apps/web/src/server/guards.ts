@@ -16,6 +16,7 @@ function toRequestUser(user: DbUser): TRequestUser {
     verificationStatus: user.verificationStatus,
     role: user.role,
     isSupporter: user.isSupporter,
+    isSocietyMember: user.isSocietyMember,
     directoryVisible: user.directoryVisible,
     directoryBio: user.directoryBio,
     openToPartners: user.openToPartners,

@@ -3,8 +3,9 @@ import { prisma } from "./db";
 /**
  * Every chapter-visibility rule in the API goes through this module. The
  * invariant: chapter content is readable only by that chapter's *active*
- * members and admins — a pending request grants nothing, and losing the
- * membership loses the access. Enforced server-side on every route that can
+ * supporters with active chapter membership and admins — a pending request
+ * grants nothing, and losing either entitlement loses access. Enforced
+ * server-side on every route that can
  * return thread content (feed, detail, replies, likes, search, bookmarks,
  * notifications, profiles), never by UI hiding alone.
  */
@@ -12,11 +13,12 @@ import { prisma } from "./db";
 interface Viewer {
   id: string;
   role: string;
+  isSupporter: boolean;
 }
 
 export async function isActiveChapterMember(userId: string, chapterId: string): Promise<boolean> {
   const membership = await prisma.chapterMembership.findFirst({
-    where: { userId, chapterId, state: "active" },
+    where: { userId, chapterId, state: "active", user: { isSupporter: true } },
     select: { id: true },
   });
   return Boolean(membership);
@@ -31,6 +33,7 @@ export async function canViewThread(
   if (!viewer) return false;
   // Admins bypass member gating — moderating must not require donating.
   if (viewer.role === "admin") return true;
+  if (!viewer.isSupporter) return false;
   return isActiveChapterMember(viewer.id, thread.chapterId);
 }
 
@@ -43,7 +46,7 @@ export async function canViewThread(
  */
 export function visibleThreadWhere(viewer: Viewer | undefined) {
   if (viewer?.role === "admin") return {};
-  if (!viewer) return { chapterId: null };
+  if (!viewer?.isSupporter) return { chapterId: null };
   return {
     OR: [
       { chapterId: null },

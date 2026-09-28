@@ -45,7 +45,7 @@ export async function searchThreads(
   const where = {
     deletedAt: null,
     chapterId: null,
-    OR: [{ title: containsInsensitive(q) }, { body: containsInsensitive(q) }],
+    OR: [{ title: containsInsensitive(q) }, { body: containsInsensitive(q) }, { topicLabel: containsInsensitive(q) }],
   };
   const [threads, total] = await Promise.all([
     prisma.thread.findMany({
