@@ -223,6 +223,24 @@ describe("event threads", () => {
     expect(eventIds).not.toContain(discussionId);
   });
 
+  it("pages upcoming events nearest-first and keeps past events separate", async () => {
+    const admin = await signupAdmin();
+    const day = 24 * 60 * 60 * 1000;
+    const base = Date.now();
+    const soon = await createEventThread(admin, { title: "Soon", eventDate: new Date(base + 3 * day).toISOString() });
+    const later = await createEventThread(admin, { title: "Later", eventDate: new Date(base + 6 * day).toISOString() });
+    const past = await createEventThread(admin, { title: "Past", eventDate: new Date(base - 3 * day).toISOString() });
+    const first = await request(app).get("/api/threads?kind=event&period=upcoming&limit=1");
+    const second = await request(app).get("/api/threads?kind=event&period=upcoming&limit=1&offset=1");
+    const old = await request(app).get("/api/threads?kind=event&period=past&limit=100");
+    expect(first.status).toBe(200);
+    expect(first.body.threads.map((t: { id: string }) => t.id)).toEqual([soon]);
+    expect(first.body.hasMore).toBe(true);
+    expect(second.body.threads.map((t: { id: string }) => t.id)).toEqual([later]);
+    expect(old.body.threads.map((t: { id: string }) => t.id)).toContain(past);
+    expect(old.body.threads.map((t: { id: string }) => t.id)).not.toContain(soon);
+  });
+
   it("code redemption sets the was-there marker; admin marking and removal work and are logged", async () => {
     const admin = await signupAdmin();
     const threadId = await createEventThread(admin, { eventCode: "agora-2026" });

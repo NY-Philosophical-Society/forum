@@ -14,7 +14,7 @@ const contentTypes: Record<string, string> = {
   ".webp": "image/webp",
 };
 
-type TRouteContext = { params: { path: string[] } };
+type TRouteContext = { params: Promise<{ path: string[] }> };
 
 async function serveUpload(
   request: NextRequest,
@@ -24,7 +24,7 @@ async function serveUpload(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const relativePath = params.path.join("/");
+  const relativePath = (await params).path.join("/");
   const filePath = path.resolve(LOCAL_UPLOADS_DIR, relativePath);
   const root = path.resolve(LOCAL_UPLOADS_DIR) + path.sep;
   if (!filePath.startsWith(root)) {

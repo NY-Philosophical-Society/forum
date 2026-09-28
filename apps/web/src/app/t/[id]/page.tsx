@@ -52,6 +52,7 @@ export default function ThreadPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const [editTagIds, setEditTagIds] = useState<string[]>([]);
+  const [editTopicLabel, setEditTopicLabel] = useState("");
   const [allTags, setAllTags] = useState<TagWithCount[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -134,6 +135,7 @@ export default function ThreadPage() {
     setEditTitle(thread.title);
     setEditBody(thread.body);
     setEditTagIds(thread.tags.map((t) => t.id));
+    setEditTopicLabel(thread.topicLabel ?? "");
     setEditingThread(true);
     setActionError(null);
     if (!allTags) {
@@ -149,7 +151,7 @@ export default function ThreadPage() {
     try {
       await api.patch(
         `/api/threads/${id}`,
-        { title: editTitle, body: editBody, tagIds: editTagIds },
+        { title: editTitle, body: editBody, topicLabel: editTopicLabel.trim() || null, tagIds: editTagIds },
         token,
       );
       setEditingThread(false);
@@ -353,13 +355,14 @@ export default function ThreadPage() {
         )}
       </div>
 
-      {(thread.tags.length > 0 || thread.chapter) && (
+      {(thread.tags.length > 0 || thread.chapter || thread.topicLabel) && (
         <div className="row wrap" style={{ marginBottom: "1rem" }}>
           {thread.chapter && (
             <Link href={`/c/${thread.chapter.slug}`} className="tag-static chapter-tag">
               {thread.chapter.name} chapter
             </Link>
           )}
+          {thread.topicLabel && <span className="tag-static">{thread.topicLabel}</span>}
           {thread.tags.map((tag) => (
             <span className="tag-static" key={tag.id}>
               {tag.name}
@@ -385,6 +388,10 @@ export default function ThreadPage() {
           <label>
             Text
             <MarkdownEditor value={editBody} onChange={setEditBody} minHeight="200px" required />
+          </label>
+          <label>
+            Your topic <span className="meta" style={{ fontWeight: 400 }}>(optional)</span>
+            <input value={editTopicLabel} onChange={(e) => setEditTopicLabel(e.target.value)} maxLength={80} />
           </label>
           <label>
             Tags
@@ -466,8 +473,8 @@ export default function ThreadPage() {
               : "Join this discussion"}
           </p>
           <p className="meta">
-            NYPS Forum is free to join — read the full discussion, like posts, and reply once
-            you've verified your identity.
+            NYPS Forum is free to join — create an account to read the full discussion,
+            like posts, and reply.
           </p>
           <div className="row" style={{ marginTop: "1rem" }}>
             <a href="/signup">

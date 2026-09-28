@@ -33,6 +33,8 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
   // the grouping — so an event isn't listed twice on one page.
   const kindParam = req.query.kind as string | undefined;
   const kind = kindParam === "event" ? "event" : kindParam === "all" ? undefined : "discussion";
+  const eventPeriod = kind === "event" && (req.query.period === "upcoming" || req.query.period === "past")
+    ? req.query.period : null;
   const viewerId = req.user?.id;
   const limit = Math.min(Number(req.query.limit) || DEFAULT_FEED_LIMIT, 100);
   const offset = Math.max(Number(req.query.offset) || 0, 0);
@@ -43,6 +45,7 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
     deletedAt: null,
     chapterId: null,
     ...(kind ? { kind } : {}),
+    ...(eventPeriod ? { eventDate: eventPeriod === "upcoming" ? { gte: new Date() } : { lt: new Date() } } : {}),
     ...(tagSlug ? { tags: { some: { slug: tagSlug } } } : {}),
   };
 
@@ -58,11 +61,12 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
       // Postgres sorts NULLs FIRST on DESC (the opposite of SQLite), which
       // silently inverts this into "unpinned threads first".
       orderBy: [
-        { pinnedAt: { sort: "desc", nulls: "last" } },
+        // A dated calendar must not let pins hide the next event behind older ones.
+        ...(eventPeriod ? [] : [{ pinnedAt: { sort: "desc" as const, nulls: "last" as const } }]),
         // The events listing orders by the event's date (newest event first;
         // clients split upcoming/past) — hot/new make little sense there.
         ...(kind === "event"
-          ? [{ eventDate: "desc" as const }]
+          ? [{ eventDate: eventPeriod === "upcoming" ? "asc" as const : "desc" as const }]
           : [sort === "new" ? { createdAt: "desc" as const } : { hotScore: "desc" as const }]),
       ],
       skip: offset,
@@ -82,6 +86,7 @@ threadsRouter.get("/", optionalAuth, async (req, res) => {
     threads: threads.map((t) => ({
       id: t.id,
       title: t.title,
+      topicLabel: t.topicLabel,
       author: toPublicUser(t.author),
       createdAt: t.createdAt.toISOString(),
       kind: t.kind as "discussion" | "event",
@@ -206,6 +211,7 @@ threadsRouter.get("/:id", optionalAuth, async (req, res) => {
     thread: {
       id: thread.id,
       title: threadDeleted ? "[deleted]" : thread.title,
+      topicLabel: threadDeleted ? null : thread.topicLabel,
       body,
       previewOnly: isAnonymous,
       deleted: threadDeleted,
@@ -278,7 +284,7 @@ threadsRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, 
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.issues[0].message });
   }
-  const { title, body, tagIds, chapterId, kind, eventDate, eventCode } = parsed.data;
+  const { title, body, topicLabel, tagIds, chapterId, kind, eventDate, eventCode } = parsed.data;
 
   // Event threads are admin-created only — one per club event, with its date.
   // The event fields are meaningless on a discussion and rejected there so a
@@ -319,6 +325,7 @@ threadsRouter.post("/", requireAuth, requireVerified, writeLimiter, async (req, 
     data: {
       title,
       body,
+      topicLabel: topicLabel ?? null,
       authorId: req.user!.id,
       createdAt,
       chapterId: chapterId ?? null,
@@ -372,7 +379,7 @@ threadsRouter.patch("/:id", requireAuth, writeLimiter, async (req, res) => {
     return res.status(403).json({ error: "This thread is locked" });
   }
 
-  const { title, body, tagIds } = parsed.data;
+  const { title, body, topicLabel, tagIds } = parsed.data;
   if (tagIds && tagIds.length > 0) {
     const count = await prisma.tag.count({ where: { id: { in: tagIds } } });
     if (count !== tagIds.length) {
@@ -385,6 +392,7 @@ threadsRouter.patch("/:id", requireAuth, writeLimiter, async (req, res) => {
     data: {
       ...(title !== undefined ? { title } : {}),
       ...(body !== undefined ? { body } : {}),
+      ...(topicLabel !== undefined ? { topicLabel } : {}),
       ...(tagIds !== undefined ? { tags: { set: tagIds.map((id) => ({ id })) } } : {}),
       editedAt: new Date(),
     },

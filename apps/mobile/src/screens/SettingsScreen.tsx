@@ -271,23 +271,28 @@ export function SettingsScreen() {
 
       {user && (
         <View style={styles.section}>
-          <Text style={styles.h2}>Membership</Text>
+          <Text style={styles.h2}>Forum access and Society membership</Text>
+          {user.isSocietyMember && (
+            <Text style={styles.success}>Formal Society membership confirmed by the club.</Text>
+          )}
           {user.isSupporter || redeemed ? (
             <Text style={styles.success}>
-              You&apos;re a member of the Society — thank you for sustaining its events and
-              journal. Chapters, the member directory, and event discussions are open to you.
+              Forum supporter access is active. You can request chapters, use the opt-in
+              directory, and join event discussions. This does not confirm formal membership.
             </Text>
+          ) : !__DEV__ ? (
+            <Text style={styles.meta}>Online donation access is not connected yet. Contact the club about forum supporter access.</Text>
           ) : (
             <>
               <Text style={styles.meta}>
-                Membership opens the member spaces — chapters, the directory, posting in event
-                threads. Have a code from a donation or journal subscription? Redeem it here.
+                Forum supporter access opens chapters, the directory, and event discussions.
+                This local test code is not proof of a donation or formal membership.
               </Text>
               <TextInput
                 style={styles.input}
                 value={code}
                 onChangeText={setCode}
-                placeholder="Membership code"
+                placeholder="Local test code"
                 placeholderTextColor={colors.muted}
                 autoCapitalize="characters"
               />

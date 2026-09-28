@@ -339,24 +339,40 @@ In production `verificationUrl` is the vendor's own hosted capture page.
 
 ## POST /api/verification/mock-complete/:sessionId
 
-**Auth: none — anonymous** · dev only
+**Auth: none — local development only**
 
 Body: `{ approve?: boolean }`, read straight off `req.body` (**not** zod-parsed).
 Anything falsy rejects.
 
 **200** `{ "status": "VERIFIED" }` or `{ "status": "REJECTED" }`.
 
-Errors: `403 { "error": "Mock completion is only available with the stub provider" }`
-when `verificationProvider.name !== "stub"` ·
+Errors: `403 { "error": "Mock completion is available only in local development" }`
+when the environment is not local or `verificationProvider.name !== "stub"` ·
 `404 { "error": "Verification session not found" }`.
 
-Side effects: writes the new status onto both the `VerificationSession` and the
-`User`.
+Side effects: sends a normalized verification event through the same durable,
+idempotent processor used by provider webhooks. The processor records the event,
+updates the `VerificationSession` and `User`, and prevents an older session from
+overwriting a newer one.
 
-> **This route stands in for the vendor's webhook and is unauthenticated.**
-> Anyone holding a session id can mark that user `VERIFIED`. It is safe only
-> because the stub provider is the sole configured provider. When you implement
-> a real provider, replace this with `POST /api/verification/webhook` doing
-> `stripe.webhooks.constructEvent` (or the equivalent) signature verification —
-> and make sure the stub route stops resolving, exactly as the `name !== "stub"`
-> guard already does.
+> This route is only a local simulator. Production providers call
+> `/api/verification/webhook`; that route verifies the exact provider payload
+> before applying a normalized event.
+
+---
+
+## POST /api/verification/webhook
+
+**Auth:** provider signature in the raw request body; no user session required.
+
+Body: the provider's signed event payload. The Stripe adapter verifies the exact
+raw bytes with `STRIPE_IDENTITY_WEBHOOK_SECRET`, then normalizes supported
+`identity.verification_session.*` events before sending them to the idempotent
+event processor. Unknown event types are acknowledged without changing access.
+
+**200** `{ "received": true, "outcome": "applied" | "duplicate" }` for a
+recognized event, or `{ "received": true }` for an ignored event.
+
+Errors: `503` when the provider is not configured, `400` for a missing or invalid
+signature, and `500` for a transient persistence failure. Raw provider payloads
+and identity documents are not stored.

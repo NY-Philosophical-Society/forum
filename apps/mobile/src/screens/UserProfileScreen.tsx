@@ -121,9 +121,14 @@ export function UserProfileScreen({ route }: Props) {
               <Text style={styles.supporterText}>SUPPORTER</Text>
             </View>
           )}
+          {user.isSocietyMember && (
+            <View style={styles.supporterBadge}>
+              <Text style={styles.supporterText}>SOCIETY MEMBER</Text>
+            </View>
+          )}
         </View>
         <Text style={styles.meta}>
-          Member since {formatDate(user.createdAt, dateFormat)} · {profile.threadCount}{" "}
+          Joined forum {formatDate(user.createdAt, dateFormat)} · {profile.threadCount}{" "}
           {profile.threadCount === 1 ? "thread" : "threads"} · {profile.replyCount}{" "}
           {profile.replyCount === 1 ? "reply" : "replies"}
         </Text>

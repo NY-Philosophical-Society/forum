@@ -39,6 +39,9 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export const createThreadSchema = z.object({
   title: z.string().min(4).max(200),
   body: z.string().min(1).max(20000),
+  // A member's own topic is displayed on this thread, not added to the
+  // shared filter taxonomy without moderation.
+  topicLabel: z.string().trim().min(2).max(80).optional(),
   tagIds: z.array(z.string()).max(5).optional().default([]),
   // A thread belongs to the main feed (null/absent) or exactly one chapter —
   // never both. The API checks active chapter membership server-side.
@@ -57,6 +60,7 @@ export type CreateThreadInput = z.infer<typeof createThreadSchema>;
 export const updateThreadSchema = z.object({
   title: z.string().min(4).max(200).optional(),
   body: z.string().min(1).max(20000).optional(),
+  topicLabel: z.union([z.string().trim().min(2).max(80), z.null()]).optional(),
   tagIds: z.array(z.string()).max(5).optional(),
 });
 export type UpdateThreadInput = z.infer<typeof updateThreadSchema>;
@@ -232,6 +236,12 @@ export const setSupporterSchema = z.object({
 });
 export type SetSupporterInput = z.infer<typeof setSupporterSchema>;
 
+export const setSocietyMemberSchema = z.object({
+  isSocietyMember: z.boolean(),
+  reason: moderationReason,
+});
+export type SetSocietyMemberInput = z.infer<typeof setSocietyMemberSchema>;
+
 /** Admin deletion of someone else's content — the reason is recorded, not shown to readers. */
 export const adminDeleteSchema = z.object({ reason: moderationReason });
 export type AdminDeleteInput = z.infer<typeof adminDeleteSchema>;
@@ -278,6 +288,8 @@ export const ModerationAction = {
   ROLE_REVOKED: "role_revoked",
   SUPPORTER_GRANTED: "supporter_granted",
   SUPPORTER_REVOKED: "supporter_revoked",
+  SOCIETY_MEMBER_GRANTED: "society_member_granted",
+  SOCIETY_MEMBER_REVOKED: "society_member_revoked",
 } as const;
 export type ModerationAction = (typeof ModerationAction)[keyof typeof ModerationAction];
 
@@ -302,6 +314,8 @@ export const MODERATION_ACTION_LABELS: Record<ModerationAction, string> = {
   role_revoked: "Demoted to member",
   supporter_granted: "Granted supporter",
   supporter_revoked: "Revoked supporter",
+  society_member_granted: "Confirmed Society membership",
+  society_member_revoked: "Revoked Society membership",
 };
 
 /** Actions that take something away — the UI renders these in --danger. */
@@ -310,6 +324,7 @@ export const DESTRUCTIVE_MODERATION_ACTIONS: ModerationAction[] = [
   "user_banned",
   "role_revoked",
   "supporter_revoked",
+  "society_member_revoked",
   "chapter_member_removed",
 ];
 

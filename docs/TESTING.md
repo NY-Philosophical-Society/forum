@@ -2,16 +2,63 @@
 
 The test suite is Vitest with a Web Request/Response route harness. Tests live next to what they test:
 server tests in `apps/web/src/server/**/*.test.ts`, shared-package tests in
-`packages/shared/src/**/*.test.ts`.
+`packages/shared/src/**/*.test.ts`. One Playwright browser journey lives in
+`apps/web/e2e/`.
 
 ## Running
+
+For the showcase upgrade, use [CONNECTION-VERIFICATION.md](CONNECTION-VERIFICATION.md)
+for the original-suite inventory, failure matrix, and sequential connection gates.
+
+Evidence runs from the repo root: `npm run verify -- shared`,
+`npm run verify -- client`, and `npm run verify -- api`. Each creates a
+timestamped `.verification/` directory with source fingerprint and per-test
+results, excluding credentials, payloads, and raw console output.
+
+The browser transport, auth-state, and showcase forum contract suites run without Supabase:
+`npm run test:client --workspace=apps/web`. The original server suite is
+`npm run test:api --workspace=apps/web`. The web `npm test` command runs both.
+Client fault-injection results do not prove browser UI or provider integration.
+
+`.github/workflows/review.yml` runs client and shared checks, a build, and a
+separate local-Supabase job for the API suite and one browser journey. CI
+generates its own signing key and synthetic users; the API suite and browser
+journey each migrate a disposable database and refuse non-loopback endpoints.
+The browser journey exercises two account signups, a draft preserved while
+opening guidelines, posting, reload persistence, and visibility to a second
+account. It does not prove hosted Google login, payments, external notification
+delivery, or the club-owned Vercel deployment. A green CI badge is not a
+production sign-off.
+`apps/web` declares Rolldown's Linux x64 binding as an optional dependency so
+the lockfile includes the runner's native test binary when generated on macOS.
+
+After building and starting the app against local services, the synthetic HTTP
+journeys are `npm run verify:auth-http -- http://127.0.0.1:3000` and
+`npm run verify:forum-http -- http://127.0.0.1:3000`. Both refuse non-loopback
+Auth, database, or app endpoints, persist only sanitized check metadata, and
+remove the exact synthetic records they create.
+
+To run the browser journey locally, install Chromium with
+`npx playwright install chromium`, load `apps/web/.env.local` into the shell,
+then run `node scripts/run-browser-smoke.mjs` from the repo root. It builds and
+starts the web app against a fresh `nyps_browser_test_*` database, then drops
+that database even if the test fails. Direct Playwright invocation refuses any
+other database. Only synthetic Auth accounts remain in
+the local Supabase stack.
+
+Web dev/build/start run through `scripts/run-web.mjs`. When
+`apps/web/.env.local` exists, its project-specific values override ambient
+shell variables. This prevents a developer's global hosted Supabase settings
+from silently replacing the repository's local Auth and database endpoints.
+The isolated browser runner explicitly bypasses that override so its temporary
+database URL cannot be replaced by a developer's usual local database URL.
 
 ```bash
 # Everything (from the repo root):
 npm test
 
 # Just the web/server suite:
-cd apps/web && npm test        # or: npx vitest run
+cd apps/web && npm run test:api
 cd apps/web && npm run test:watch
 
 # Just the shared package:
@@ -83,4 +130,5 @@ accounts per run from one IP, and the resulting 429 surfaces as a confusing
   prove the 429 path still fires.
 - `src/server/api-app.ts` owns route registration; the Next catch-all route and
   tests both invoke it. `/health` and local `/uploads/*` have dedicated Next
-  route handlers and focused boundary tests.
+  route handlers. The browser journey calls `/health` over HTTP rather than
+  invoking its handler directly.

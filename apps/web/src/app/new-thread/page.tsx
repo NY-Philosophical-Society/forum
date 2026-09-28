@@ -20,6 +20,7 @@ function NewThreadForm() {
   const [chapter, setChapter] = useState<ChapterSummary | null>(null);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [topicLabel, setTopicLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -74,6 +75,7 @@ function NewThreadForm() {
         {
           title,
           body,
+          ...(topicLabel.trim() ? { topicLabel: topicLabel.trim() } : {}),
           tagIds: selectedTagIds,
           ...(chapter ? { chapterId: chapter.id } : {}),
           ...(isEvent
@@ -113,7 +115,7 @@ function NewThreadForm() {
                 <span className="pref-label">This is an event thread</span>
                 <span className="meta">
                   One per club event: collects questions before the date, carries the topics,
-                  recording, and transcript after. Anyone may read it; posting is member-only.
+                  recording, and transcript after. Anyone may read it; posting requires forum supporter access.
                 </span>
               </span>
               <input type="checkbox" checked={isEvent} onChange={(e) => setIsEvent(e.target.checked)} />
@@ -151,6 +153,11 @@ function NewThreadForm() {
             placeholder="Frame it as a question worth arguing about"
             required
           />
+        </label>
+        <label>
+          Describe your topic <span className="meta" style={{ fontWeight: 400 }}>(optional)</span>
+          <input value={topicLabel} onChange={(e) => setTopicLabel(e.target.value)} maxLength={80} placeholder="A topic in your own words" />
+          <span className="field-hint">Shown on your discussion. Shared filter tags are chosen below.</span>
         </label>
         <label>
           Opening post

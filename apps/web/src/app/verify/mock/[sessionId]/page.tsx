@@ -27,6 +27,17 @@ export default function MockVerificationPage() {
     }
   }
 
+  if (process.env.NODE_ENV === "production") {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <h1 className="auth-title">Verification unavailable</h1>
+          <p className="auth-subtitle">This test flow is not available online. Contact the club for help with verification.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-card">

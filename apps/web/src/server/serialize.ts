@@ -9,6 +9,7 @@ interface UserLike {
   verificationStatus: string;
   role: string;
   isSupporter: boolean;
+  isSocietyMember: boolean;
   createdAt: Date;
 }
 
@@ -27,6 +28,7 @@ export const DELETED_AUTHOR: PublicUser = {
   canMessage: false,
   role: "user",
   isSupporter: false,
+  isSocietyMember: false,
   createdAt: new Date(0).toISOString(),
 };
 
@@ -42,6 +44,7 @@ export function toPublicUser(user: UserLike): PublicUser {
     canMessage: user.verificationStatus === "VERIFIED",
     role: user.role as PublicUser["role"],
     isSupporter: user.isSupporter,
+    isSocietyMember: user.isSocietyMember,
     createdAt: user.createdAt.toISOString(),
   };
 }

@@ -199,6 +199,7 @@ chaptersRouter.get("/:slug/threads", requireAuth, requireMember, async (req, res
   const items: ThreadSummary[] = threads.map((t) => ({
     id: t.id,
     title: t.title,
+    topicLabel: t.topicLabel,
     author: toPublicUser(t.author),
     createdAt: t.createdAt.toISOString(),
     chapter: { id: chapter.id, slug: chapter.slug, name: chapter.name },

@@ -1,18 +1,25 @@
-# NYPS Forum (prototype)
+# NYPS Forum
 
-> **Start here: [`docs/PROJECT.md`](docs/PROJECT.md)** — current state, decisions made,
-> and every open question. Everything else in `docs/` is reference or history.
+> **Reviewer start:** This branch upgrades the existing forum, retaining its
+> Next.js API, Supabase Auth/Postgres/Storage, Prisma schema, and shared web/mobile
+> contracts. Read [project decisions](docs/PROJECT.md),
+> [integration status](docs/SHOWCASE-INTEGRATION.md), and
+> [test evidence](docs/TESTING.md). The separate Vercel visual preview uses
+> labeled illustrative content; hosted signup and posting are not yet verified.
 
 A real-name discussion feed for philosophical discussion — Reddit-style single feed (no boards),
 like-only engagement (no downvotes), optional tags, and DMs — one backend, a Next.js web app, and
 an Expo (React Native) iOS/Android app.
 
 **Posting currently runs on the honor system, not a completed ID check** — see
-"Access tiers" in [`docs/PROJECT.md`](docs/PROJECT.md). Real ID verification is built and can be
-made mandatory again with a single environment variable whenever the club is ready for it.
+"Access tiers" in [`docs/PROJECT.md`](docs/PROJECT.md). A signed provider
+webhook is implemented, but real identity checks require club-approved provider
+credentials and hosted verification.
 
-**This is a working local prototype, not a production deployment.** See "What's stubbed / what's
-missing before launch" below before you show this to real users.
+**This is a locally verified upgrade, not a production deployment.** The hosted
+review build demonstrates presentation only; its API and signup routes are
+disabled. It must not be used as evidence of connected accounts or live forum
+data. See "What's stubbed / what's missing before launch" below.
 
 > **Taking over the backend?** Start at **[`docs/API.md`](docs/API.md)** — the full API contract
 > walked out of the running implementation: every endpoint with its auth tier, request/response
@@ -39,19 +46,21 @@ missing before launch" below before you show this to real users.
 - **One deployable web application, one additional client.** `apps/web` contains both the
   Next.js UI and its same-origin REST route handlers; `apps/mobile` (Expo/React Native) remains
   an HTTP client. Both share types and validation through `packages/shared`.
-- **Identity verification is delegated, not built.** Parsing government IDs from ~190 countries,
+- **Identity verification is delegated to a specialist.** Parsing government IDs from ~190 countries,
   detecting forged documents, and matching a live selfie to a photo ID is a specialized,
   adversarial problem — not something to hand-roll. `apps/web/src/server/verification-provider.ts`
   defines a small provider interface; the rest of the app only ever asks "is this user
   UNVERIFIED / PENDING / VERIFIED / REJECTED?" and never touches documents directly. Locally this
   runs against a stub provider so the whole product can be built and tested without a live vendor
-  account. See "Going to production" below for wiring up a real provider (Stripe Identity /
-  Persona / Veriff).
+  account. The Stripe Identity adapter and signed webhook are implemented but remain inactive
+  until the club chooses a provider and supplies server-only credentials. See "Going to production"
+  below for the hosted setup.
 - **Sign up is deliberately easy; verification is deliberately separate.** Creating an account
-  (email/password, Google, or Apple) never requires ID verification — that's only needed to post,
-  reply, like, or DM. This is enforced server-side (`requireVerified` in
-  `apps/web/src/server/guards.ts`), not just in the UI. See "Read access" below for how *reading*
-  is gated differently — that's a distinct question from verification.
+  (email/password, Google, or Apple) never requires ID verification. Reading and general forum
+  participation remain open under the current honor-system policy; direct messaging still uses
+  the verified-profile rule. The stricter `REQUIRE_ID_VERIFICATION=true` setting can restore
+  verification gates for writes when the club chooses. These rules are enforced server-side,
+  not just in the UI.
 - **Supabase Auth is the identity provider.** Email/password and Google/Apple sign-in are all
   Supabase's; this API stores no password hash and signs no token of its own. It verifies the
   incoming Supabase JWT against the project's JWKS (`apps/web/src/server/supabase.ts`) and looks up the
@@ -118,23 +127,39 @@ docs/
   API-CHANGES.md    dated log of everything added to the API since
   BACKEND-OPTIONS.md hosting comparison and recommendation
   DESIGN_SYSTEM.md  the binding visual system (palette, type, flat design)
-  MEMBERSHIP.md     membership/chapters product decisions
+  PROJECT.md        current product decisions and open questions
+  SHOWCASE-INTEGRATION.md migration map, review-mode boundary, and open gaps
   TESTING.md        how the test suite isolates itself and what it covers
 ```
 
+## Review boundary
+
+The separate Vercel showcase can run with `NEXT_PUBLIC_SHOWCASE_REVIEW_MODE=true`.
+That build is an interactive, labeled presentation with illustrative people and
+discussions held in browser memory. Middleware rejects `/api/*` and redirects
+non-showcase pages; Events links to the club's current Luma calendar rather
+than stale copied dates. Never enable this flag on the club's real forum.
+
+A connected hosted preview needs a club-approved **non-production** Supabase
+project, authorized migrations and synthetic accounts, and pooled/direct
+Postgres URLs in Vercel's server-only environment. Hosted signup, posting,
+profiles, permissions, and failure paths must be tested before real-user
+launch. This repository does not contain those secrets or approval.
+
 ## Running it locally
 
-Requires Node 20+, the [Supabase CLI](https://supabase.com/docs/guides/local-development), and
+Requires Node 22+, the [Supabase CLI](https://supabase.com/docs/guides/local-development), and
 Docker running. From the repo root:
 
 ```bash
-npm install
+npm ci
 ```
 
 **Supabase** (first time only — the database and the auth server both live here):
 
 ```bash
-supabase gen signing-key --algorithm ES256   # writes supabase/signing_keys.json, gitignored
+printf '[]\n' > supabase/signing_keys.json  # initialize the ignored local key file
+supabase gen signing-key --algorithm ES256 --append
 supabase start
 ```
 
@@ -183,30 +208,31 @@ way on every platform:
   unreachable without an account first.
 - **Either way, any account (even unverified) reads in full.** The preview wall and the mobile
   login gate are both about *having an account at all*, not about identity verification — an
-  unverified user reads exactly like a verified one. Verification only gates the write actions
-  below.
+  unverified user reads exactly like a verified one. Under the current honor-system
+  policy, identity verification gates starting direct messages, not general-forum posting.
 
 ## The verification flow, end to end
 
 1. Sign up with your real name, email, password. Account starts `UNVERIFIED`.
-2. Any signed-up user, verified or not, can **read** everything (see "Read access" above), but
-   posting a thread, replying, liking, or sending a DM returns 403 until verification completes
-   (`requireVerified` middleware, `apps/web/src/server/guards.ts`).
+2. Any signed-up user can read and participate in the general forum. Starting a
+   direct message requires a verified profile. `REQUIRE_ID_VERIFICATION=true`
+   can restore stricter write gates after a real provider is configured.
 3. `/verify` calls `POST /api/verification/start`, which asks the configured
    `VerificationProvider` for a session and hosted verification URL, and flips the user to
    `PENDING`.
-4. In production, that URL is the vendor's own hosted page (ID photo + selfie capture, document
-   authenticity check, liveness check). Locally, it's `/verify/mock/:sessionId` — a page that
-   just lets you simulate "approved" or "rejected", standing in for the vendor's webhook call.
-5. Once `VERIFIED`, the user can post, reply, like, and DM other users under their real name.
+4. A real provider would return a hosted verification URL and send a signed
+   result to the webhook. Locally, `/verify/mock/:sessionId` simulates that
+   result; this route cannot approve users in production.
+5. `VERIFIED` unlocks initiating direct messages. It does not imply a donation
+   or formal Society membership.
 
 ## Sign-in options
 
 Email/password, Google, and Apple all produce the exact same kind of account. Supabase issues the
 session in every case; Google/Apple sign-in is just a faster way to create or return to that
 account, not a separate system, and doesn't skip identity verification. A user who signs up via
-Google is just as `UNVERIFIED` as one who used a password, and faces the same wall the first time
-they try to post — because that wall reads our `User` row, not the token.
+Google is just as `UNVERIFIED` as one who used a password; that status is
+separate from permission to post in the general forum.
 
 A Supabase user has **no forum account until their first authenticated request**. The API creates
 that row from the token's claims (`resolveUser` in `apps/web/src/server/guards.ts`), which is why
@@ -229,13 +255,13 @@ link would otherwise see the anonymous preview wall while signed in.
 
 Five things need real decisions before this goes live — flagged here rather than guessed at:
 
-1. **Identity verification vendor.** Create a Stripe Identity (or Persona / Veriff) account,
-   set `VERIFICATION_PROVIDER=stripe` + `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` in
-   `apps/web/.env.local`, and implement `StripeVerificationProvider` in
-   `apps/web/src/server/verification-provider.ts` (the file has the exact API calls and webhook
-   events to use in its top comment). Point the vendor's webhook at
-   `POST /api/verification/webhook` (not yet implemented — the stub's `/mock-complete` route is
-   not safe to expose in production; it has no signature verification).
+1. **Identity verification vendor.** The Stripe Identity adapter and signed,
+   replay-safe webhook are implemented. Complete Stripe Identity onboarding,
+   place `VERIFICATION_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, and
+   `STRIPE_WEBHOOK_SECRET` in the hosted environment's secret manager, and
+   register the two documented events at `POST /api/verification/webhook`.
+   Keep the stub's `/mock-complete` route for local development only; it is
+   disabled in production.
 2. **Google / Apple OAuth credentials.** These are configured **in Supabase now**, not here — the
    apps never see a provider secret. In [Google Cloud Console](https://console.cloud.google.com)
    → APIs & Services → Credentials create a "Web application" OAuth client, and in
@@ -280,11 +306,12 @@ Five things need real decisions before this goes live — flagged here rather th
 
 ## What's stubbed / what's missing before launch
 
-- Verification is a local mock — **no real identity is ever checked.** Do not treat any account
-  in this prototype as verified in the real sense.
-- Google/Apple sign-in is also a local mock until you add real credentials — the "Continue with
-  Google/Apple" buttons currently create an account from whatever name/email you type in, no
-  actual Google/Apple involved.
+- The signed verification endpoint and Stripe Identity adapter exist, but no real
+  provider is enabled for this deployment. The local mock is disabled online;
+  do not treat a local test approval as an identity check.
+- Google and Apple buttons use Supabase OAuth; the club must configure and test
+  each real provider in the approved Supabase project. No app-owned OAuth
+  credentials should be committed to this repository.
 - The web preview wall truncates by character count only (`apps/web/src/server/routes/threads.ts`) — it
   doesn't try to cut at a sentence/word boundary, so the teaser can end mid-word.
 - **No admin bootstrap.** The *first* admin still has to be promoted by setting `role: "admin"`
@@ -294,11 +321,11 @@ Five things need real decisions before this goes live — flagged here rather th
 - **Mobile moderation is the report queue only.** Member administration, content management,
   chapter administration, event-thread creation/attendee marking, and the moderation log are
   web-only.
-- **Membership is live, but the unlock is still `WISDOMKEY`.** Redeeming it makes an account a
-  Member, which opens chapters (member-only sub-forums with server-enforced visibility), the
-  opt-in member directory with reading-partner matching, and posting in event threads — see
-  `docs/MEMBERSHIP.md` for the decisions and `docs/API-CHANGES.md` for the endpoints. Reading is
-  never gated. Swap the code for a real donation/subscription check before this means anything.
+- **Donation automation is not live.** A shared placeholder code cannot grant
+  production access. Staff can manually grant or revoke supporter access with
+  an audit reason; a real donation source, eligibility rule, and refund handling
+  still need club approval. Supporter access and formal Society membership are
+  distinct; see `docs/PROJECT.md` and `docs/API-CHANGES.md`.
 - **Mobile is behind web.** Reporting, blocking, pagination, password reset, thread locking,
   supporter redemption, and the admin report list exist on web only. Closed by
   `docs/prompts/01-foundation.md`.

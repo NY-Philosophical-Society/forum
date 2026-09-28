@@ -1,5 +1,5 @@
 import request from "../test/request";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { app } from "../app";
 import { prisma } from "../db";
 import { signup, TestUser } from "../test/helpers";
@@ -12,6 +12,19 @@ async function redeem(user: TestUser, code: string) {
 }
 
 describe("POST /api/auth/redeem-code (WISDOMKEY)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("fails closed in production without changing supporter status", async () => {
+    const user = await signup("production-membership-guard");
+    vi.stubEnv("NODE_ENV", "production");
+    const res = await redeem(user, "WISDOMKEY");
+    expect(res.status).toBe(503);
+    expect(res.body.error).toMatch(/not available yet/i);
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(row.isSupporter).toBe(false);
+    expect(row.supporterSince).toBeNull();
+  });
+
   it("grants supporter status for the correct code and persists it", async () => {
     const user = await signup("supporter");
     const res = await redeem(user, "WISDOMKEY");

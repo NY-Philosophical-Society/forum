@@ -319,7 +319,7 @@ function AddMember({ slug, onAdded }: { slug: string; onAdded: () => void }) {
           <span className="row">
             <Avatar name={u.displayName} src={u.avatarUrl} size={24} />
             <span>{u.displayName}</span>
-            {!u.isSupporter && <span className="meta">not a Society member</span>}
+            {!u.isSupporter && <span className="meta">no forum supporter access</span>}
           </span>
           <button className="btn-sm" disabled={busy} onClick={() => add(u.id)}>
             Add

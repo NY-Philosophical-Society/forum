@@ -33,7 +33,10 @@ beforeAll(async () => {
   await prisma.chapterMembership.deleteMany();
   await prisma.chapter.deleteMany();
   await prisma.tag.deleteMany();
+  await prisma.identityVerificationEvent.deleteMany();
   await prisma.verificationSession.deleteMany();
+  await prisma.donationEvent.deleteMany();
+  await prisma.accessGrant.deleteMany();
   await prisma.user.deleteMany();
 });
 

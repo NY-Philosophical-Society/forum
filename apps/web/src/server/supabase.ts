@@ -92,7 +92,15 @@ export async function verifySupabaseToken(token: string): Promise<TSupabaseClaim
       typeof metadata?.display_name === "string" ? metadata.display_name : null;
 
     return { sub, email, displayName, issuedAt: payload.iat ?? 0 };
-  } catch {
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      const code = error && typeof error === "object" && "code" in error && typeof error.code === "string"
+        ? error.code
+        : error instanceof Error ? error.name : "unknown";
+      // Never log the JWT or claims. The error category is enough to diagnose
+      // local issuer, key, expiry, and connectivity failures.
+      console.warn(`[auth] Supabase token verification failed (${code})`);
+    }
     // Expired, wrong issuer/audience, unknown key, tampered — all read the
     // same to callers: not a valid session.
     return null;

@@ -42,6 +42,8 @@ model User {
   // this forum is gated as a member perk.
   isSupporter         Boolean   @default(false)
   supporterSince      DateTime?
+  // Formal Society membership is recorded separately from forum donor access.
+  isSocietyMember     Boolean   @default(false)
   // Member directory is strictly opt-in and member-only: a user appears only
   // while directoryVisible AND isSupporter both hold, so lapsed members drop
   // out automatically without losing their saved settings.
@@ -59,6 +61,7 @@ model User {
   createdAt           DateTime  @default(now())
 
   verificationSessions VerificationSession[]
+  verificationEvents   IdentityVerificationEvent[]
   threads              Thread[]
   posts                Post[]
   threadLikes          ThreadLike[]
@@ -79,6 +82,45 @@ model User {
   bookmarks             Bookmark[]
   chapterMemberships    ChapterMembership[]
   eventAttendance       EventAttendee[]
+  accessGrants          AccessGrant[]
+}
+
+// The durable source of forum access and formal membership. A manual decision
+// overrides donation grants; provider grants never confer Society membership.
+// Existing isSupporter is retained as a derived field for legacy access gates.
+model AccessGrant {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String   // forum_supporter | society_member
+  source    String   // manual | legacy | provider identifier
+  sourceRef String   // user id for manual/legacy; donation id for provider
+  decision  String   // allow | deny
+  reason    String?
+  actorId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([kind, source, sourceRef])
+  @@index([userId, kind, decision])
+}
+
+// Accepted events have already passed a provider-specific signature check.
+// No public donation endpoint exists until the club selects its provider.
+model DonationEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  eventId     String
+  donationId  String
+  eventType   String   // settled | reversed
+  userId      String
+  amountMinor Int
+  currency    String
+  createdAt   DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([provider, donationId])
 }
 
 // A member-only sub-forum for one local group (the NYC chapter, ...). Not a
@@ -126,6 +168,27 @@ model VerificationSession {
   updatedAt          DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id])
+
+  @@unique([provider, providerSessionId])
+  @@index([userId, createdAt])
+}
+
+// Minimal, idempotent record of a result already authenticated by a provider
+// adapter. Raw webhook bodies, documents, selfies, and extracted PII do not
+// belong in the forum database.
+model IdentityVerificationEvent {
+  id                String   @id @default(cuid())
+  provider          String
+  eventId           String
+  providerSessionId String
+  userId            String
+  result            String   // verified | rejected
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([provider, eventId])
+  @@index([provider, providerSessionId])
 }
 
 // Optional labels on a thread (Ethics, Metaphysics, ...). Not boards — every
@@ -146,6 +209,7 @@ model Thread {
   authorId   String
   title      String
   body       String
+  topicLabel String?  @db.VarChar(80)
   // Recomputed and stored whenever a like/reply changes it (see
   // lib/ranking.ts) so the feed can ORDER BY this column directly instead of
   // fetching every thread and sorting in JS.

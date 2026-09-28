@@ -11,6 +11,7 @@ import {
   type ThreadSummary,
 } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
+import { CLUB_CALENDAR_URL } from "~/lib/club-links";
 import { useAuth } from "~/lib/auth-context";
 import { useSettings } from "~/lib/settings-context";
 import { ThreadCard } from "./thread-card";
@@ -54,34 +55,35 @@ function ChapterSwitcher() {
   );
 }
 
-/** The Events grouping: upcoming first, then the freshest afterlives. */
+/** Only upcoming dated forum events belong on the front page. */
 function EventsStrip() {
   const { token } = useAuth();
   const { dateFormat } = useSettings();
   const [events, setEvents] = useState<ThreadSummary[] | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     api
-      .get<ThreadFeedResponse>(`/api/threads?kind=event&limit=${EVENTS_STRIP_COUNT}`, token)
+      .get<ThreadFeedResponse>(`/api/threads?kind=event&period=upcoming&limit=${EVENTS_STRIP_COUNT}`, token)
       .then((res) => setEvents(res.threads))
-      .catch(() => {});
+      .catch(() => setError(true));
   }, [token]);
 
-  if (!events || events.length === 0) return null;
-  const now = Date.now();
+  if (!events && !error) return null;
 
   return (
     <section className="events-strip">
       <div className="row between">
-        <span className="eyebrow">Events</span>
+        <span className="eyebrow">Upcoming forum events</span>
+        <a href={CLUB_CALENDAR_URL} target="_blank" rel="noopener noreferrer" className="meta">Full club calendar ↗</a>
       </div>
       <div className="events-row">
-        {events.map((t) => {
-          const upcoming = t.eventDate ? Date.parse(t.eventDate) > now : false;
+        {error && <p className="meta" role="alert">Forum events could not load. Check the club calendar for current dates and registration.</p>}
+        {!error && events?.length === 0 && <p className="meta">No upcoming event is posted here. Check the club calendar for current dates and registration.</p>}
+        {!error && events?.map((t) => {
           return (
             <Link className="event-card" href={`/t/${t.id}`} key={t.id}>
               <span className="event-card-date">
-                {upcoming ? "Upcoming · " : ""}
                 {t.eventDate ? formatDate(t.eventDate, dateFormat) : ""}
               </span>
               <span className="event-card-title">{t.title}</span>

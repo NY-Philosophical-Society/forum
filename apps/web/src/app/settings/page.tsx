@@ -94,22 +94,28 @@ export default function SettingsPage() {
 
       {user && (
         <div className="card settings-section">
-          <h3>Membership</h3>
+          <h3>Forum access and Society membership</h3>
+          {user.isSocietyMember && (
+            <p className="toast">Your formal Society membership has been confirmed by the club.</p>
+          )}
           {user.isSupporter || redeemed ? (
             <p className="toast" style={{ marginBottom: 0 }}>
-              You&apos;re a member of the Society — thank you for sustaining its events and
-              journal. Chapters, the member directory, and event discussions are open to you.
+              Your forum supporter access is active. You can request to join chapters, use the
+              opt-in directory, and join event discussions. This status does not by itself confirm
+              formal Society membership.
             </p>
+          ) : process.env.NODE_ENV === "production" ? (
+            <p className="meta">Online donation access is not connected yet. Contact the club about forum supporter access.</p>
           ) : (
             <>
               <p className="meta">
-                Membership opens the <Link href="/membership" className="inline-link">member
-                spaces</Link> — chapters, the directory, posting in event threads. Have a code
-                from a donation or journal subscription? Redeem it here.
+                Forum supporter access opens <Link href="/membership" className="inline-link">supporter
+                spaces</Link> — chapters, the directory, and event discussions. This local test
+                code is not proof of a donation or formal membership.
               </p>
               <form onSubmit={redeemCode}>
                 <label>
-                  Membership code
+                  Local test code
                   <input value={code} onChange={(e) => setCode(e.target.value)} required />
                 </label>
                 {redeemError && <p className="error">{redeemError}</p>}

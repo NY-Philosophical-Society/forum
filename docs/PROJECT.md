@@ -1,7 +1,9 @@
 # The Forum — state of play
 
 **The single source of truth for where this project is and what's undecided.**
-Updated 2026-08-05.
+Architecture snapshot updated 2026-08-05; showcase-branch decisions updated
+2026-09-22. Current verification status is in
+[the release-readiness report](runs/2026-09-22-release-readiness.md).
 
 Everything else in `docs/` is either a reference (`API.md`, `DESIGN_SYSTEM.md`,
 `TESTING.md`) or a record of a completed run (`runs/`). If a decision matters,
@@ -29,7 +31,7 @@ Supabase CLI.
 
 ## 2. Current state — what actually works
 
-Everything below is built, tested, and running locally. **172 API tests pass.**
+Everything below is built, tested, and running locally. **193 API tests pass.**
 (Down from 184: the ~20 tests covering password hashing, our own JWTs, and the
 OAuth mock went with the code they tested, and five new ones cover lazy account
 creation, forged-token rejection, re-authentication before deletion, and
@@ -46,9 +48,12 @@ Image uploads with server-side validation and EXIF stripping.
 ### Accounts
 Email signup, Google and Apple sign-in, and password reset — all Supabase Auth
 since 2026-07-31; the API stores no password and signs no token. ID
-verification stays ours, behind a provider interface with a local stub. Profile pages
-with photos, bios, avatars. Account management: password, email, data export,
-and deletion that anonymises rather than orphans.
+verification stays ours behind a provider interface: local development uses a
+stub, while the Stripe Identity adapter and signed, idempotent webhook path are
+built but remain inactive until the club supplies an onboarded Stripe account
+and server-side keys. Profile pages with photos, bios, avatars. Account
+management: password, email, data export, and deletion that anonymises rather
+than orphans.
 
 ### Membership
 Chapters — member-only sub-forums with join requests and admin approval,
@@ -124,6 +129,25 @@ directly on the signup screen. `docs/API.md` documents the toggle.
    store keyed by Vercel's client-IP header; serverless instances do not share
    counters. It needs a shared store before scaling.
 5. **Region is fixed at project creation** — `us-east-1` for New York.
+6. **Hosted preview sandbox — action item for the club.** The live GitHub
+   branches document the local Supabase stack and one hosted Supabase project,
+   but that hosted project is labeled **live**, not preview or staging. Do not
+   apply migrations, reset data, or seed test accounts there. Ask the club to
+   either provision a separate empty Supabase project for the shareable preview,
+   or explicitly identify an existing project as non-production and authorize
+   its use. We need developer access, permission to apply migrations and seed
+   synthetic data, and its project URL, publishable key, server secret, pooled
+   runtime database URL, and direct migration URL. Secrets must be delivered
+   through the approved secret manager and configured only in Vercel's Preview
+   environment—not committed to Git or pasted into chat.
+7. **Framework security upgrade — release blocker, not an endpoint blocker.**
+   The 2026-09-22 production dependency audit found the current Next.js 14
+   line affected by a critical advisory set. npm offers no non-breaking fix;
+   its automated remediation moves to Next.js 16. The safe Sharp patch was
+   applied, but the framework upgrade needs its own migration and regression
+   pass before a public production launch. Expo/mobile transitive advisories
+   also need a separate dependency review; do not use `npm audit fix --force`
+   across the monorepo because its proposed changes include breaking versions.
 
 **Not open:** whether to use RLS for application authorization. Next's server
 route layer is the only database client, so policies would duplicate guards.
@@ -156,9 +180,38 @@ highest pull all cost human time every cycle. An unmet guarantee is worse than
 no guarantee.
 
 ### Other strategy questions
-1. **Donation tiers.** Currently one flag (`isSupporter`). A Reader / Member /
-   Patron ladder would capture supporters who'd give more than the median.
-   Undecided.
+1. **Donation-based forum access — proposal raised 2026-09-22.** One completed
+   donation could grant supporter-only forum access without a recurring renewal
+   requirement. This is not an approved rule for formal Society membership.
+   The agreed architecture has three distinct states: free forum account,
+   forum supporter access, and staff-confirmed formal Society membership.
+   The latter is never inferred from a donation. Staff can grant or block
+   supporter access and confirm or revoke formal membership with a required
+   audit reason. The local branch now records these decisions separately and
+   has an internal, provider-neutral donation event processor with duplicate
+   and reversal handling. No public payment endpoint or provider adapter is
+   enabled, so automatic access cannot yet be claimed or used live.
+   The free account retains full main-forum reading and general posting;
+   supporter access adds private spaces, not a paywall on the main feed. The
+   current `isSupporter` flag remains the existing access-gate mirror, not
+   proof of formal membership. The original shared code is a local-only test
+   shortcut on the showcase branch, not donation proof.
+   Donation thresholds, whether gifts accumulate toward a tier, higher-tier
+   benefits, refund/reversal rules, and the authoritative donation platform
+   remain **undecided**. No donation provider is connected. Do not activate a
+   new tier or claim payment verification until provider signature checks,
+   account matching, and the server-side access path pass end-to-end tests.
+   **Interim pilot path:** the admin screen can grant or block supporter access
+   and records a required reason in the moderation log.
+   A club administrator must first confirm the donation in the club's own
+   records; the forum does not verify it. Reuse this path for a small,
+   staff-operated pilot. It does not implement automatic donor signup or
+   higher tiers. Existing supporter flags are preserved by the new migration
+   as *unverified legacy access*; staff must review them before hosted rollout.
+   **Questions for the club meeting:** Would a donation grant only forum
+   supporter access or formal Society membership too? Which system records
+   donations, and can its administrator provide a supported API or webhook
+   plus a staging path?
 2. **Verification timing.** Verify at signup, or at first post? At first post
    means paying the vendor (~$1–2/check) only for people who actually
    contribute. Not yet implemented either way.
@@ -238,5 +291,6 @@ In the order they block things:
 2. **Owner picks which undecided perks to commit to** (§5) — this determines
    the next build queue.
 3. **Owner runs `xcode-select`** so mobile can finally be seen.
-4. **Donation tiers and verification timing** — needed before launch, not
-   before more building.
+4. **Donation platform, minimum gift, and tier benefits** — one-time forum
+   access is proposed; club policy and exact entitlement rules remain open.
+   Identity verification remains a separate optional policy decision.
