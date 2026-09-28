@@ -6,20 +6,18 @@ import { useAuth } from "~/lib/auth-context";
 /**
  * The single membership page a non-member meets wherever a member space
  * begins — chapters, the directory. Deliberately a pitch, not an error page:
- * reading the forum stays free forever; membership buys the rooms where
- * members find each other.
+ * reading the forum stays free; supporter access opens private spaces.
+ * Formal Society membership is a separate club-verified status.
  */
 export function MembershipPitch() {
   const { user } = useAuth();
 
   return (
     <div className="pitch">
-      <span className="eyebrow">Membership</span>
-      <h1 className="pitch-title">The rooms where members find each other</h1>
+      <h1 className="pitch-title">Forum supporter access</h1>
       <p className="pitch-dek">
-        The forum is free — reading, writing, arguing, all of it, forever. Membership sustains
-        the Society&apos;s events and journal, and opens the spaces built around the people in the
-        room.
+        The main forum stays free to read and join with an account. Supporter access opens
+        private community spaces. Formal Society membership is confirmed separately by the club.
       </p>
 
       <div className="pitch-tick" aria-hidden />
@@ -33,9 +31,9 @@ export function MembershipPitch() {
           </span>
         </li>
         <li>
-          <span className="perk-name">The member directory</span>
+          <span className="perk-name">The supporter directory</span>
           <span className="perk-desc">
-            Opt-in and members-only: photo, name, chapter, interests. The scarce good is finding
+            Opt-in and supporter-only: photo, name, chapter, interests. The scarce good is finding
             the other serious people.
           </span>
         </li>
@@ -50,17 +48,19 @@ export function MembershipPitch() {
           <span className="perk-name">The conversation after every event</span>
           <span className="perk-desc">
             Event threads collect questions before the evening and carry the topics, recording,
-            and transcript after. Anyone may read; members carry the conversation on with the
+            and transcript after. Anyone may read; supporters carry the conversation on with the
             people who were there.
           </span>
         </li>
       </ul>
 
       <div className="card pitch-cta">
-        {user ? (
+        {user && process.env.NODE_ENV === "production" ? (
+          <p style={{ margin: 0 }}>Already eligible for supporter access? Contact the club to confirm it.</p>
+        ) : user ? (
           <>
             <p style={{ margin: 0 }}>
-              Have a membership code from a donation or journal subscription?
+              Have a local test code for supporter access?
             </p>
             <Link href="/settings">
               <button style={{ marginTop: "0.75rem" }}>Redeem it in Settings</button>
@@ -68,7 +68,7 @@ export function MembershipPitch() {
           </>
         ) : (
           <>
-            <p style={{ margin: 0 }}>Start with a free account — membership can come later.</p>
+            <p style={{ margin: 0 }}>Start with a free account — supporter access can come later.</p>
             <div className="row" style={{ marginTop: "0.75rem" }}>
               <Link href="/signup">
                 <button>Sign up free</button>
@@ -81,7 +81,7 @@ export function MembershipPitch() {
         )}
       </div>
       <p className="meta" style={{ marginTop: "1rem" }}>
-        Membership never gates reading. The public feed and archive stay open to everyone.
+        Supporter access never gates reading. The public feed and archive stay open to everyone.
       </p>
     </div>
   );

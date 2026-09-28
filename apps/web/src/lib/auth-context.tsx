@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { PublicUser } from "@nyps-forum/shared";
 import { api } from "./api";
+import { classifyAccountLoadError, createLatestRequestGate, oauthRedirectUrl, type AuthLoadError } from "./auth-state";
 import { supabase } from "./supabase";
 
 /**
@@ -17,10 +18,14 @@ import { supabase } from "./supabase";
  */
 interface AuthContextValue {
   user: PublicUser | null;
+  sessionUserId: string | null;
+  email: string | null;
   token: string | null;
   loading: boolean;
+  error: AuthLoadError | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, displayName: string) => Promise<void>;
+  signup: (email: string, password: string, displayName: string) => Promise<{ confirmationRequired: boolean }>;
+  loginWithOAuth: (provider: "google" | "apple", redirectPath?: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -29,21 +34,33 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<AuthLoadError | null>(null);
+  const requestGate = useRef(createLatestRequestGate());
 
   const loadUser = useCallback(async (activeToken: string | null) => {
     if (!activeToken) {
+      requestGate.current.invalidate();
       setUser(null);
+      setError(null);
+      setLoading(false);
       return;
     }
+    const ticket = requestGate.current.next();
     try {
-      const res = await api.get<{ user: PublicUser }>("/api/auth/me", activeToken);
+      const res = await api.get<{ user: PublicUser }>("/api/auth/me", activeToken, { signal: ticket.signal });
+      if (!ticket.isCurrent()) return;
       setUser(res.user);
-    } catch {
-      // A valid Supabase session whose forum account is banned or deleted:
-      // signed in as far as Supabase is concerned, but not a member here.
+      setError(null);
+    } catch (loadError) {
+      if (!ticket.isCurrent()) return;
       setUser(null);
+      setError(classifyAccountLoadError(loadError));
+    } finally {
+      if (ticket.isCurrent()) setLoading(false);
     }
   }, []);
 
@@ -53,10 +70,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // both start-up and later changes.
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       const nextToken = session?.access_token ?? null;
+      const nextUserId = session?.user.id ?? null;
+      setSessionUserId(nextUserId);
+      setEmail(session?.user.email ?? null);
       setToken(nextToken);
-      void loadUser(nextToken).finally(() => setLoading(false));
+      setError(null);
+      setUser((current) => current?.id === nextUserId ? current : null);
+      setLoading(Boolean(nextToken));
+      void loadUser(nextToken);
     });
-    return () => data.subscription.unsubscribe();
+    return () => {
+      requestGate.current.invalidate();
+      data.subscription.unsubscribe();
+    };
   }, [loadUser]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -65,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signup = useCallback(async (email: string, password: string, displayName: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       // The API reads this when it creates the forum account on the first
@@ -74,20 +100,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       options: { data: { display_name: displayName } },
     });
     if (error) throw new Error(error.message);
+    return { confirmationRequired: !data.session };
+  }, []);
+
+  const loginWithOAuth = useCallback(async (
+    provider: "google" | "apple",
+    redirectPath = "/",
+  ) => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: oauthRedirectUrl(redirectPath, window.location.origin) },
+    });
+    if (error) throw new Error(error.message);
   }, []);
 
   const logout = useCallback(async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) throw new Error(error.message);
   }, []);
 
   const refreshUser = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
+    setLoading(Boolean(data.session?.access_token));
+    setError(null);
     await loadUser(data.session?.access_token ?? null);
   }, [loadUser]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, token, loading, login, signup, logout, refreshUser }),
-    [user, token, loading, login, signup, logout, refreshUser],
+    () => ({ user, sessionUserId, email, token, loading, error, login, signup, loginWithOAuth, logout, refreshUser }),
+    [user, sessionUserId, email, token, loading, error, login, signup, loginWithOAuth, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

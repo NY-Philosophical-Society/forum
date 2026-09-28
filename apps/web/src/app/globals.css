@@ -841,6 +841,16 @@ textarea {
   background: var(--paper);
 }
 
+.password-field { position: relative; display: block; }
+.password-field input { width: 100%; padding-right: 4.5rem; }
+.password-field button { position: absolute; top: 50%; right: .65rem; transform: translateY(-50%); border: 0; background: transparent; color: var(--accent); cursor: pointer; font-size: var(--text-sm); font-weight: 600; }
+
+.avatar-crop-editor { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-5); margin-top: var(--space-5); padding-top: var(--space-5); border-top: 1px solid var(--border); }
+.avatar-crop-preview { display: grid; place-items: center; width: min(220px, 100%); aspect-ratio: 1; object-fit: cover; border-radius: 50%; background: var(--paper); color: var(--muted); }
+.avatar-crop-controls { display: grid; flex: 1 1 220px; gap: var(--space-3); }
+.avatar-crop-controls label { display: grid; gap: var(--space-2); }
+.avatar-crop-controls input[type="range"] { width: 100%; }
+
 .auth-card button[type="submit"] {
   width: 100%;
   justify-content: center;

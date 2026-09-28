@@ -52,6 +52,7 @@ export function ProfileMenu() {
             <div className="row wrap" style={{ marginTop: "0.35rem" }}>
               <StatusBadge status={user.verificationStatus} />
               {user.isSupporter && <span className="badge badge-supporter">supporter</span>}
+              {user.isSocietyMember && <span className="badge badge-supporter">Society member</span>}
             </div>
           </div>
           <Link href={`/u/${user.id}`} onClick={() => setOpen(false)}>

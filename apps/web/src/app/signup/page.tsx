@@ -13,16 +13,25 @@ export default function SignupPage() {
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setMessage(null);
+    if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     setSubmitting(true);
     try {
-      await signup(email, password, `${firstName.trim()} ${lastName.trim()}`.trim());
-      router.push("/");
+      const result = await signup(email, password, `${firstName.trim()} ${lastName.trim()}`.trim());
+      if (result.confirmationRequired) {
+        setMessage("Check your email to confirm your account, then log in.");
+      } else {
+        router.push("/");
+      }
     } catch (err: any) {
       setError(err.message ?? "Signup failed");
     } finally {
@@ -74,27 +83,23 @@ export default function SignupPage() {
           </label>
           <label>
             Password
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={8}
-              required
-            />
+            <span className="password-field"><input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete="new-password" aria-label="Password" required/><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? "Hide" : "Show"}</button></span>
+          </label>
+          <label>
+            Confirm password
+            <input type={showPassword ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" required/>
           </label>
           {error && <p className="error">{error}</p>}
+          {message && <p className="success" role="status">{message}</p>}
           <button type="submit" disabled={submitting}>
             {submitting ? "Creating account..." : "Create account"}
           </button>
         </form>
 
         <p className="auth-footer">
-          We ask for your real name because we think philosophy is better when people stand behind
-          their words. A name you'd say out loud in a seminar room changes how you argue and how
-          you listen — it's harder to be cruel, and easier to be taken seriously. For now that
-          runs on the honor system: we trust the name you give us, and you can post as soon as you
-          sign up. If you'd like your identity confirmed rather than simply asserted, a one-time ID
-          verification is built in and available any time from your account.
+          Use the name you would share at a club discussion. An account lets you participate in
+          the public forum; verified identity, supporter access, and Society membership are
+          separate statuses and are not granted by signing up.
         </p>
       </div>
     </div>

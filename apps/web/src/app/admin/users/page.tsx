@@ -183,6 +183,7 @@ function UserRow({
           <StatusBadge status={member.verificationStatus} />
           {member.role === "admin" && <span className="badge badge-supporter">admin</span>}
           {member.isSupporter && <span className="badge badge-supporter">supporter</span>}
+          {member.isSocietyMember && <span className="badge badge-supporter">Society member</span>}
           {member.bannedAt && <span className="badge badge-rejected">banned</span>}
           {gone && <span className="badge badge-unverified">deleted</span>}
         </div>
@@ -235,7 +236,7 @@ function UserRow({
             <ConfirmAction
               label="Revoke supporter"
               title={`Revoke ${member.displayName}'s supporter status`}
-              description="They lose supporter-only access. They can still redeem a code again."
+              description="Blocks supporter-only access, even if an automatic donation grant exists. Chapter approval stays on record."
               confirmLabel="Revoke supporter"
               danger
               onConfirm={(reason) =>
@@ -247,11 +248,37 @@ function UserRow({
             <ConfirmAction
               label="Grant supporter"
               title={`Grant ${member.displayName} supporter status`}
-              description="For donations made outside the eventual payment integration."
+              description="Use after staff confirms eligibility. This manual decision takes precedence over donation events."
               confirmLabel="Grant supporter"
               reasonPlaceholder="e.g. cheque received at the November meeting"
               onConfirm={(reason) =>
                 api.post(`/api/users/${member.id}/supporter`, { isSupporter: true, reason }, token)
+              }
+              onDone={onChanged}
+            />
+          )}
+
+          {member.isSocietyMember ? (
+            <ConfirmAction
+              label="Revoke Society membership"
+              title={`Revoke ${member.displayName}'s formal Society membership`}
+              description="Removes the formal membership status. Forum supporter access is handled separately."
+              confirmLabel="Revoke Society membership"
+              danger
+              onConfirm={(reason) =>
+                api.post(`/api/users/${member.id}/society-membership`, { isSocietyMember: false, reason }, token)
+              }
+              onDone={onChanged}
+            />
+          ) : (
+            <ConfirmAction
+              label="Confirm Society membership"
+              title={`Confirm ${member.displayName}'s formal Society membership`}
+              description="Use only after checking the club's membership records. This does not verify a donation or change forum supporter access."
+              confirmLabel="Confirm Society membership"
+              reasonPlaceholder="e.g. confirmed against club membership register"
+              onConfirm={(reason) =>
+                api.post(`/api/users/${member.id}/society-membership`, { isSocietyMember: true, reason }, token)
               }
               onDone={onChanged}
             />

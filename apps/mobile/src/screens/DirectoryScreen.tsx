@@ -74,17 +74,16 @@ export function DirectoryScreen({ navigation }: Props) {
       <View style={[styles.container, { padding: spacing.lg }]}>
         <View style={styles.door}>
           <Text style={styles.doorMark}>❦</Text>
-          <Text style={styles.doorTitle}>A member space</Text>
+          <Text style={styles.doorTitle}>A supporter space</Text>
           <Text style={[styles.meta, { textAlign: "center" }]}>
-            The directory is where members choose to be findable — photo, name, chapter,
-            interests. It opens with membership; reading the forum stays free.
+            The directory is where supporters choose to be findable — photo, name, chapter,
+            interests. It requires forum supporter access; reading the forum stays free.
           </Text>
-          <Pressable
-            style={styles.button}
-            onPress={() => navigation.navigate("Settings")}
-          >
-            <Text style={styles.buttonText}>Redeem a membership code in Settings</Text>
-          </Pressable>
+          {__DEV__ ? (
+            <Pressable style={styles.button} onPress={() => navigation.navigate("Settings")}>
+              <Text style={styles.buttonText}>Enter a local test code in Settings</Text>
+            </Pressable>
+          ) : <Text style={styles.meta}>Contact the club to confirm supporter access.</Text>}
         </View>
       </View>
     );

@@ -56,6 +56,8 @@ export default function VerifyPage() {
             You&apos;re ID-verified — a stronger confirmation than the honor system alone, and it
             shows next to your name.
           </p>
+        ) : process.env.NODE_ENV === "production" ? (
+          <p className="prose">Online identity verification is not available yet. The forum uses your account name on the honor system; contact the club if you need help with an existing verification.</p>
         ) : (
           <>
             <p className="prose" style={{ fontSize: "var(--text-base)", marginBottom: "1rem" }}>

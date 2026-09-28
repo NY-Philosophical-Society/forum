@@ -504,8 +504,8 @@ export function ThreadScreen({ route, navigation }: Props) {
             </>
           ) : memberGated ? (
             <Text style={styles.notice}>
-              Posting in event threads is for members of the Society — redeem a membership code in
-              Settings. Reading stays free.
+              Posting in event threads requires forum supporter access. Reading stays free.
+              Contact the club to confirm access.
             </Text>
           ) : (
             <Text style={styles.notice}>

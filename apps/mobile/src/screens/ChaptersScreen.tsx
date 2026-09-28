@@ -62,32 +62,29 @@ export function ChaptersScreen({ navigation }: Props) {
     // The membership pitch — what the rooms are, and where the key lives.
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ padding: spacing.lg }}>
-        <Text style={styles.pitchKicker}>MEMBERSHIP</Text>
-        <Text style={styles.pitchTitle}>The rooms where members find each other</Text>
+        <Text style={styles.pitchTitle}>Forum supporter access</Text>
         <Text style={styles.pitchDek}>
-          The forum is free — reading, writing, arguing, all of it, forever. Membership sustains
-          the Society&apos;s events and journal, and opens the spaces built around the people in
-          the room.
+          The main forum stays free. Supporter access opens private community spaces;
+          formal Society membership is confirmed separately by the club.
         </Text>
         {[
           ["Chapters", "Private local sub-forums — the NYC chapter plans its meetups and talks among itself."],
-          ["The member directory", "Opt-in and members-only: photo, name, chapter, interests."],
+          ["The supporter directory", "Opt-in and supporter-only: photo, name, chapter, interests."],
           ["Reading partners", "Flag yourself open to a reading partner, filter for others who did, DM from there."],
-          ["Every event's afterthread", "Questions before, recording and transcript after. Reading is open; members carry it on."],
+          ["Every event's afterthread", "Questions before, recording and transcript after. Reading is open; supporters carry it on."],
         ].map(([name, desc]) => (
           <View key={name} style={styles.perk}>
             <Text style={styles.perkName}>{name}</Text>
             <Text style={styles.perkDesc}>{desc}</Text>
           </View>
         ))}
-        <Pressable
-          style={styles.button}
-          onPress={() => tabNavigation.navigate("ProfileTab", { screen: "Settings" })}
-        >
-          <Text style={styles.buttonText}>Redeem a membership code in Settings</Text>
-        </Pressable>
+        {__DEV__ ? (
+          <Pressable style={styles.button} onPress={() => tabNavigation.navigate("ProfileTab", { screen: "Settings" })}>
+            <Text style={styles.buttonText}>Enter a local test code in Settings</Text>
+          </Pressable>
+        ) : <Text style={styles.meta}>Contact the club to confirm supporter access.</Text>}
         <Text style={styles.meta}>
-          Membership never gates reading. The public feed stays open to everyone.
+          Supporter access never gates reading. The public feed stays open to everyone.
         </Text>
       </ScrollView>
     );

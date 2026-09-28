@@ -99,9 +99,10 @@ export default function UserProfilePage() {
           <div className="row wrap">
             <StatusBadge status={user.verificationStatus} />
             {user.isSupporter && <span className="badge badge-supporter">supporter</span>}
+            {user.isSocietyMember && <span className="badge badge-supporter">Society member</span>}
           </div>
           <p className="meta" style={{ marginTop: "0.5rem" }}>
-            Member since {formatDate(user.createdAt, dateFormat)} · {profile.threadCount}{" "}
+            Joined forum {formatDate(user.createdAt, dateFormat)} · {profile.threadCount}{" "}
             {profile.threadCount === 1 ? "thread" : "threads"} · {profile.replyCount}{" "}
             {profile.replyCount === 1 ? "reply" : "replies"}
           </p>

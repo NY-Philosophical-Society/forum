@@ -53,8 +53,9 @@ export function ThreadCard({
         </Link>
         <p className="meta">· {formatDate(t.createdAt, dateFormat)}</p>
       </div>
-      {t.tags.length > 0 && (
+      {(t.topicLabel || t.tags.length > 0) && (
         <div className="row wrap" style={{ marginTop: "0.75rem" }}>
+          {t.topicLabel && <span className="tag-static">{t.topicLabel}</span>}
           {t.tags.map((tag) => (
             <span className="tag-static" key={tag.id}>
               {tag.name}

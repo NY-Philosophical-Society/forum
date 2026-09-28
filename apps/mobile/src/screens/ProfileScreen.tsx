@@ -76,6 +76,11 @@ export function ProfileScreen({ navigation }: Props) {
               <Text style={styles.supporterText}>SUPPORTER</Text>
             </View>
           )}
+          {user.isSocietyMember && (
+            <View style={styles.supporterBadge}>
+              <Text style={styles.supporterText}>SOCIETY MEMBER</Text>
+            </View>
+          )}
         </View>
       </View>
 

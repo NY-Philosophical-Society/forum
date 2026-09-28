@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { BIO_MAX_LENGTH, type PublicUser } from "@nyps-forum/shared";
 import { api } from "~/lib/api";
-import { prepareAvatar } from "~/lib/avatar-image";
+import { prepareAvatar, type AvatarCrop } from "~/lib/avatar-image";
 import { useAuth } from "~/lib/auth-context";
 import { Avatar } from "../../ui";
 
@@ -16,6 +16,9 @@ export default function EditProfilePage() {
   const [seeded, setSeeded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [crop, setCrop] = useState<AvatarCrop>({ zoom: 1, x: 0.5, y: 0.5 });
+  const [cropPreview, setCropPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -27,6 +30,19 @@ export default function EditProfilePage() {
       setSeeded(true);
     }
   }, [user, seeded]);
+
+  useEffect(() => {
+    if (!cropFile) { setCropPreview(null); return; }
+    setCropPreview(null);
+    let active = true;
+    let url: string | null = null;
+    prepareAvatar(cropFile, crop).then((blob) => {
+      if (!active) return;
+      url = URL.createObjectURL(blob);
+      setCropPreview(url);
+    }).catch(() => { if (active) setError("Could not preview that photo."); });
+    return () => { active = false; if (url) URL.revokeObjectURL(url); };
+  }, [cropFile, crop]);
 
   if (loading) return null;
   if (!user) {
@@ -42,13 +58,25 @@ export default function EditProfilePage() {
   async function pickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = "";
-    if (!file || !token) return;
+    if (!file) return;
+    setError(null);
+    if (!(["image/jpeg", "image/png", "image/webp"].includes(file.type)) || file.size > 4 * 1024 * 1024) {
+      setError("Choose a JPEG, PNG, or WebP image under 4 MB.");
+      return;
+    }
+    setCrop({ zoom: 1, x: 0.5, y: 0.5 });
+    setCropFile(file);
+  }
+
+  async function uploadPhoto() {
+    if (!cropFile || !token) return;
     setError(null);
     setUploading(true);
     try {
-      const blob = await prepareAvatar(file);
+      const blob = await prepareAvatar(cropFile, crop);
       await api.upload<{ user: PublicUser }>("/api/users/me/avatar", blob, token);
       await refreshUser();
+      setCropFile(null);
     } catch (err: any) {
       setError(err.message ?? "Could not upload that photo");
     } finally {
@@ -129,6 +157,15 @@ export default function EditProfilePage() {
           style={{ display: "none" }}
           onChange={pickPhoto}
         />
+        {cropFile && <div className="avatar-crop-editor">
+          {cropPreview ? <img src={cropPreview} alt="Preview of your cropped profile photo" className="avatar-crop-preview" /> : <div className="avatar-crop-preview" role="status">Preparing preview…</div>}
+          <div className="avatar-crop-controls">
+            <label>Zoom <input type="range" min="1" max="3" step="0.05" value={crop.zoom} onChange={(e) => setCrop((current) => ({ ...current, zoom: Number(e.target.value) }))}/></label>
+            <label>Move left or right <input type="range" min="0" max="1" step="0.01" value={crop.x} onChange={(e) => setCrop((current) => ({ ...current, x: Number(e.target.value) }))}/></label>
+            <label>Move up or down <input type="range" min="0" max="1" step="0.01" value={crop.y} onChange={(e) => setCrop((current) => ({ ...current, y: Number(e.target.value) }))}/></label>
+            <div className="row" style={{ gap: ".6rem" }}><button type="button" onClick={() => void uploadPhoto()} disabled={uploading || !cropPreview}>{uploading ? "Saving…" : "Save photo"}</button><button type="button" className="secondary" onClick={() => setCropFile(null)} disabled={uploading}>Cancel</button></div>
+          </div>
+        </div>}
       </div>
 
       <form onSubmit={save}>

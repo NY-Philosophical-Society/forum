@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "~/lib/supabase";
+import { useAuth } from "~/lib/auth-context";
 
 /**
  * Google and Apple sign-in, handled entirely by Supabase.
@@ -14,30 +14,38 @@ import { supabase } from "~/lib/supabase";
  * in supabase/config.toml (locally) or in the project's dashboard.
  */
 export function OAuthButtons() {
+  const { loginWithOAuth } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
   async function signInWith(provider: "google" | "apple") {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
+    setError(null);
+    try {
       // Keep the trailing slash so this exactly matches the production root
       // registered in Supabase's redirect URL allow list.
-      options: { redirectTo: new URL("/", window.location.href).toString() },
-    });
-    if (error) setError(error.message);
+      await loginWithOAuth(provider, "/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to start sign-in");
+    }
   }
 
   return (
     <div>
       {error && <p className="error">{error}</p>}
 
-      <button type="button" className="oauth-button" onClick={() => signInWith("google")}>
-        Continue with Google
-      </button>
-      <button type="button" className="oauth-button" onClick={() => signInWith("apple")}>
-        Continue with Apple
-      </button>
+      {process.env.NEXT_PUBLIC_GOOGLE_SIGN_IN_ENABLED === "true" && (
+        <button type="button" className="oauth-button" onClick={() => signInWith("google")}>
+          Continue with Google
+        </button>
+      )}
+      {process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED === "true" && (
+        <button type="button" className="oauth-button" onClick={() => signInWith("apple")}>
+          Continue with Apple
+        </button>
+      )}
 
-      <div className="auth-divider">or continue with email</div>
+      {(process.env.NEXT_PUBLIC_GOOGLE_SIGN_IN_ENABLED === "true" || process.env.NEXT_PUBLIC_APPLE_SIGN_IN_ENABLED === "true") && (
+        <div className="auth-divider">or continue with email</div>
+      )}
     </div>
   );
 }

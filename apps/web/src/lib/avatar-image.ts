@@ -1,5 +1,5 @@
 /**
- * Client-side avatar preparation: center-crop to square, resize, and
+ * Client-side avatar preparation: user-positioned square crop, resize, and
  * re-encode as JPEG so multi-megabyte originals never leave the browser.
  * This is a courtesy pass — the server independently validates format,
  * dimensions, and size, and strips metadata (canvas re-encoding already
@@ -9,11 +9,21 @@
 const OUTPUT_SIZE = 512;
 const OUTPUT_QUALITY = 0.85;
 
-export async function prepareAvatar(file: File): Promise<Blob> {
+export type AvatarCrop = { zoom: number; x: number; y: number };
+
+export function avatarCropRect(width: number, height: number, crop: AvatarCrop) {
+  const zoom = Math.min(3, Math.max(1, crop.zoom));
+  const side = Math.min(width, height) / zoom;
+  return {
+    side,
+    x: (width - side) * Math.min(1, Math.max(0, crop.x)),
+    y: (height - side) * Math.min(1, Math.max(0, crop.y)),
+  };
+}
+
+export async function prepareAvatar(file: File, crop: AvatarCrop = { zoom: 1, x: 0.5, y: 0.5 }): Promise<Blob> {
   const bitmap = await loadImage(file);
-  const side = Math.min(bitmap.width, bitmap.height);
-  const sx = (bitmap.width - side) / 2;
-  const sy = (bitmap.height - side) / 2;
+  const { side, x, y } = avatarCropRect(bitmap.width, bitmap.height, crop);
 
   const canvas = document.createElement("canvas");
   const target = Math.min(side, OUTPUT_SIZE);
@@ -21,7 +31,7 @@ export async function prepareAvatar(file: File): Promise<Blob> {
   canvas.height = target;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Could not process the image in this browser");
-  ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, target, target);
+  ctx.drawImage(bitmap, x, y, side, side, 0, 0, target, target);
 
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, "image/jpeg", OUTPUT_QUALITY),
